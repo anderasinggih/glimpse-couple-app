@@ -151,25 +151,27 @@ struct FlashCameraView: View {
     
     // NEW: Robust image processing (Crop + Mirror check)
     private func processCapturedImage(_ image: UIImage?) -> UIImage? {
-        guard let image = image else { return nil }
+        guard let image = image, let cgImage = image.cgImage else { return nil }
         
-        // 1. Flip if it's the front camera to match the preview
+        // 1. Correct Orientation and Mirroring
         var finalImage = image
         if model.isUsingFrontCamera {
-            if let cgImage = image.cgImage {
-                finalImage = UIImage(cgImage: cgImage, scale: image.scale, orientation: .leftMirrored)
-            }
+            finalImage = UIImage(cgImage: cgImage, scale: image.scale, orientation: .leftMirrored)
         }
         
-        // 2. Crop to Square
-        let imageSize = finalImage.size
-        let side = min(imageSize.width, imageSize.height)
-        let x = (imageSize.width - side) / 2
-        let y = (imageSize.height - side) / 2
+        // 2. Crop to Square using PIXELS (CGImage dimensions)
+        let width = CGFloat(cgImage.width)
+        let height = CGFloat(cgImage.height)
+        let side = min(width, height)
+        
+        let x = (width - side) / 2
+        let y = (height - side) / 2
         let cropRect = CGRect(x: x, y: y, width: side, height: side)
         
-        guard let cgImage = finalImage.cgImage?.cropping(to: cropRect) else { return finalImage }
-        return UIImage(cgImage: cgImage, scale: finalImage.scale, orientation: finalImage.imageOrientation)
+        guard let croppedCgImage = cgImage.cropping(to: cropRect) else { return finalImage }
+        
+        // IMPORTANT: Maintain original orientation after cropping
+        return UIImage(cgImage: croppedCgImage, scale: image.scale, orientation: finalImage.imageOrientation)
     }
     
     private func uploadPhoto(_ image: UIImage) {
