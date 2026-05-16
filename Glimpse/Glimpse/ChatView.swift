@@ -210,12 +210,6 @@ struct ChatView: View {
         .padding(.bottom, 10)
         .background(.ultraThinMaterial)
         .ignoresSafeArea(edges: .top)
-        .overlay(
-            VStack {
-                Spacer()
-                Divider().background(Color.white.opacity(0.08))
-            }
-        )
     }
     
     // FLOATING MESSAGE INPUT BAR (Fully floating, glassmorphic, no outer border block)
@@ -272,25 +266,25 @@ struct ChatView: View {
             
             VStack(alignment: .trailing, spacing: 4) {
                 Text(msg.message)
-                    .font(.system(size: 15))
+                    .font(.system(size: 13.5))
                     .foregroundColor(isMe ? .deepVelvet : .white)
                     .multilineTextAlignment(.leading)
                 
                 if !timeStr.isEmpty {
                     Text(timeStr)
-                        .font(.system(size: 9, weight: .medium))
+                        .font(.system(size: 8.5, weight: .medium))
                         .foregroundColor(isMe ? .deepVelvet.opacity(0.6) : .white.opacity(0.4))
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
             .background(bubbleBackground(isMe: isMe))
-            .clipShape(RoundedCorner(radius: 18, corners: corners))
+            .clipShape(RoundedCorner(radius: 15, corners: corners))
             .overlay(
-                RoundedCorner(radius: 18, corners: corners)
+                RoundedCorner(radius: 15, corners: corners)
                     .stroke(isMe ? Color.clear : Color.white.opacity(0.05), lineWidth: 1)
             )
-            .shadow(color: isMe ? Color.electricPurple.opacity(0.2) : Color.clear, radius: 8, y: 4)
+            .shadow(color: isMe ? Color.electricPurple.opacity(0.15) : Color.clear, radius: 6, y: 3)
             
             if !isMe {
                 Spacer()
