@@ -50,10 +50,8 @@ struct FullPartnerMapView: View {
                         } label: {
                             Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
                                 .font(.system(size: 20, weight: .bold))
-                                .foregroundColor(.electricPurple)
-                                .padding(12)
                         }
-                        .buttonStyle(LiquidButtonStyle())
+                        .buttonStyle(.glass)
                     }
                     .padding(.trailing, 16)
                     .padding(.top, 10)
@@ -71,10 +69,8 @@ struct FullPartnerMapView: View {
                     } label: {
                         Image(systemName: "location.fill")
                             .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(.electricPurple)
-                            .padding(14)
                     }
-                    .buttonStyle(LiquidButtonStyle())
+                    .buttonStyle(.glass)
                     .padding(.trailing, 16)
                     .padding(.bottom, 10)
                 }

@@ -104,18 +104,49 @@ struct LiquidGlassModifier: ViewModifier {
     }
 }
 
-struct LiquidButtonStyle: ButtonStyle {
+struct GlassButtonStyle: ButtonStyle {
+    @Environment(\.tint) private var tint
+    
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.82 : 1.0)
-            .scaleEffect(y: configuration.isPressed ? 0.9 : 1.0) // Squishy/Kenyal vertical compress
-            .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.4, blendDuration: 0), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.85 : 1.0)
+            .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
             .background(
-                Circle()
+                Capsule()
                     .fill(.ultraThinMaterial)
             )
-            .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+            .foregroundColor(tint ?? .electricPurple)
+            .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
+}
+
+struct GlassProminentButtonStyle: ButtonStyle {
+    @Environment(\.tint) private var tint
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.85 : 1.0)
+            .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(
+                Capsule()
+                    .fill((tint ?? .electricPurple).opacity(0.2))
+                    .background(.ultraThinMaterial)
+            )
+            .foregroundColor(tint ?? .electricPurple)
+            .shadow(color: (tint ?? .electricPurple).opacity(0.2), radius: 10, x: 0, y: 4)
+    }
+}
+
+extension ButtonStyle where Self == GlassButtonStyle {
+    static var glass: GlassButtonStyle { GlassButtonStyle() }
+}
+
+extension ButtonStyle where Self == GlassProminentButtonStyle {
+    static var glassProminent: GlassProminentButtonStyle { GlassProminentButtonStyle() }
 }
 
 extension View {
