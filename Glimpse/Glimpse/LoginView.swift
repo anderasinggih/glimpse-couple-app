@@ -16,9 +16,9 @@ struct LoginView: View {
                     Image(systemName: "heart.fill")
                         .font(.system(size: 64))
                         .foregroundStyle(
-                            LinearGradient(colors: [.electricPurple, .activeCyan], startPoint: .topLeading, endPoint: .bottomTrailing)
+                            LinearGradient(colors: [Color.electricPurple, Color.activeCyan], startPoint: .topLeading, endPoint: .bottomTrailing)
                         )
-                        .shadow(color: .electricPurple.opacity(0.5), radius: 20)
+                        .shadow(color: Color.electricPurple.opacity(0.5), radius: 20)
                     
                     Text("Glimpse")
                         .font(.system(size: 34, weight: .bold, design: .rounded))
@@ -69,7 +69,7 @@ struct LoginView: View {
                     .padding(.vertical, 16)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.electricPurple)
+                .tint(Color.electricPurple)
                 .clipShape(Capsule())
                 .padding(.horizontal)
                 .disabled(isLoading || email.isEmpty || password.isEmpty)
@@ -126,7 +126,7 @@ struct CustomNativeField: View {
         HStack(spacing: 16) {
             Image(systemName: icon)
                 .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.electricPurple)
+                .foregroundStyle(Color.electricPurple)
                 .font(.system(size: 20))
                 .frame(width: 24)
             

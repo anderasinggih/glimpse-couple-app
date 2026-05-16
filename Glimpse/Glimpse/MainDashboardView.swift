@@ -73,7 +73,7 @@ struct MainDashboardView: View {
     private var headerView: some View {
         HStack(spacing: 8) {
             Image(systemName: "heart.fill")
-                .foregroundColor(.electricPurple)
+                .foregroundColor(Color.electricPurple)
                 .font(.system(size: 24))
             
             Text("Glimpse")

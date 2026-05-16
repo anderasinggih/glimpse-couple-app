@@ -10,7 +10,7 @@ struct AnniversaryTimerView: View {
         VStack(spacing: 8) {
             Label("OUR JOURNEY", systemImage: "infinity")
                 .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundStyle(.electricPurple)
+                .foregroundStyle(Color.electricPurple)
                 .kerning(1.5)
             
             Text(timeElapsed)

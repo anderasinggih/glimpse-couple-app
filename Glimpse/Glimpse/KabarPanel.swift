@@ -39,10 +39,10 @@ struct KabarPanel: View {
                 } label: {
                     Image(systemName: "paperplane.fill")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.white)
                         .frame(width: 48, height: 48)
                         .background(
-                            LinearGradient(colors: [.electricPurple, .activeCyan], startPoint: .topLeading, endPoint: .bottomTrailing)
+                            LinearGradient(colors: [Color.electricPurple, Color.activeCyan], startPoint: .topLeading, endPoint: .bottomTrailing)
                         )
                         .clipShape(Circle())
                         .shadow(color: .electricPurple.opacity(0.3), radius: 10)
@@ -68,9 +68,9 @@ struct KabarPanel: View {
                 .padding(.vertical, 14)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.electricPurple)
+            .tint(Color.electricPurple)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .shadow(color: .electricPurple.opacity(0.2), radius: 15, y: 5)
+            .shadow(color: Color.electricPurple.opacity(0.2), radius: 15, y: 5)
         }
         .padding(20)
         .background(.ultraThinMaterial)

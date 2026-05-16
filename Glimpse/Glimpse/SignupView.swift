@@ -67,7 +67,7 @@ struct SignupView: View {
                     .padding(.vertical, 16)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.electricPurple)
+                .tint(Color.electricPurple)
                 .clipShape(Capsule())
                 .padding(.horizontal)
                 .disabled(isLoading || name.isEmpty || email.isEmpty || password.isEmpty)
