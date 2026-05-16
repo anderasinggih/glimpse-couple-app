@@ -370,11 +370,11 @@ struct EditProfileView: View {
                 .onChange(of: selectedItem) {
                     Task {
                         isProcessingImage = true
+                        defer { isProcessingImage = false }
                         if let data = try? await selectedItem?.loadTransferable(type: Data.self), 
                            let image = UIImage(data: data) {
                             selectedImage = image
                         }
-                        isProcessingImage = false
                     }
                 }
                 
