@@ -35,14 +35,13 @@ struct FullPartnerMapView: View {
         }
         .safeAreaInset(edge: .bottom) {
             VStack(alignment: .leading, spacing: 12) {
-                // Satellite Switcher: Floating above the card on the left
+                // Satellite Switcher: Floating above the card (Pure Native Approach)
                 Button("Map Style", systemImage: isSatellite ? "map.fill" : "globe.americas.fill") {
                     withAnimation { isSatellite.toggle() }
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.bordered)
                 .buttonBorderShape(.circle)
-                .controlSize(.large)
                 .padding(.leading, 20)
                 
                 // Bottom Info Card
