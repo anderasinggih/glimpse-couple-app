@@ -38,7 +38,7 @@ struct LoginView: View {
                         .padding(.horizontal)
                 }
                 
-                // Compact Glass Button
+                // Mini & Sleek Glass Button
                 Button {
                     if validate() {
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -50,19 +50,19 @@ struct LoginView: View {
                             ProgressView().tint(.white)
                         } else {
                             Text("Sign In")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(.system(size: 15, weight: .bold))
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
+                    .padding(.vertical, 12) // Smaller
                     .background(
-                        LinearGradient(colors: [Color.electricPurple, Color.royalPurple], startPoint: .leading, endPoint: .trailing)
+                        LinearGradient(colors: [Color.electricPurple, Color.royalPurple.opacity(0.9)], startPoint: .leading, endPoint: .trailing)
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .shadow(color: Color.electricPurple.opacity(0.3), radius: 10, y: 4)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: Color.electricPurple.opacity(0.2), radius: 8, y: 3)
                 }
                 .disabled(isLoading || email.isEmpty || password.isEmpty)
-                .padding(.horizontal)
+                .padding(.horizontal, 40) // More narrow
                 
                 Spacer()
                 

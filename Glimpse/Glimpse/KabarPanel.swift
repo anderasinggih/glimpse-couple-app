@@ -44,27 +44,27 @@ struct KabarPanel: View {
                 .disabled(statusText.isEmpty)
             }
             
-            // Glass Flash Button (Compact)
+            // Glass Flash Button (Mini & Sleek)
             Button {
                 showCamera = true
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     if isUploading {
                         ProgressView().tint(.white)
                     } else {
                         Image(systemName: "camera.fill")
-                            .font(.system(size: 12))
+                            .font(.system(size: 10))
                         Text("Flash Moment")
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(size: 12, weight: .bold))
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
+                .padding(.vertical, 10) // Tighter
                 .background(
-                    LinearGradient(colors: [Color.electricPurple, Color.royalPurple], startPoint: .leading, endPoint: .trailing)
+                    LinearGradient(colors: [Color.electricPurple, Color.royalPurple.opacity(0.8)], startPoint: .leading, endPoint: .trailing)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .shadow(color: Color.electricPurple.opacity(0.2), radius: 8, y: 4)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .shadow(color: Color.electricPurple.opacity(0.15), radius: 6, y: 3)
             }
         }
         .padding(14)
