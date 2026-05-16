@@ -49,9 +49,9 @@ struct ProfileView: View {
                             .padding(.top, 20)
                         }
                         
-                        // 2. Relationship Settings
+                        // 2. Relationship Section
                         VStack(alignment: .leading, spacing: 10) {
-                            sectionLabel("Relationship")
+                            sectionLabel(auth.partner != nil ? "Relationship (shared settings)" : "Get started")
                             
                             if let partner = auth.partner {
                                 CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: "Paired", color: .red)
