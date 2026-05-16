@@ -260,6 +260,12 @@ class GlimpseCameraModel: NSObject, AVCapturePhotoCaptureDelegate {
     func capturePhoto(completion: @escaping (UIImage?) -> Void) {
         self.completion = completion
         let settings = AVCapturePhotoSettings()
+        
+        // Prioritize speed to avoid motion blur
+        if output.availablePhotoQualityPrioritizationModes.contains(.speed) {
+            settings.photoQualityPrioritization = .speed
+        }
+        
         sessionQueue.async { self.output.capturePhoto(with: settings, delegate: self) }
     }
     
