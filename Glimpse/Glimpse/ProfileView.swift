@@ -158,15 +158,6 @@ struct ProfileView: View {
                 }
             }
         }
-        .overlay(alignment: .top) {
-            // Top Safe Area Blur Filter
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .mask(LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom))
-                .frame(height: 60)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-        }
         .sheet(isPresented: $isShowingEditProfile) {
             EditProfileView(auth: auth)
                 .presentationDetents([.medium])
