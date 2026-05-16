@@ -24,10 +24,11 @@ struct FullPartnerMapView: View {
             .mapStyle(.standard(emphasis: .muted))
             .ignoresSafeArea()
             
-            // Branding Overlay
+            BrandingHeader()
+                .zIndex(10)
+            
+            // UI Overlay
             VStack(spacing: 0) {
-                BrandingHeader()
-                
                 Spacer()
                 
                 // Bottom Info Card

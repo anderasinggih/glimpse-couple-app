@@ -49,9 +49,8 @@ struct FlashCameraView: View {
                 .offset(y: -10)
                 
                 // LAYER 3: UI Overlays
-                headerSection
+                BrandingHeader()
                     .zIndex(10)
-                    .frame(maxHeight: .infinity, alignment: .top)
                 
                 VStack {
                     Spacer()
