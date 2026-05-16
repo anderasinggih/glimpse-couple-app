@@ -13,150 +13,148 @@ struct ProfileView: View {
     
     var body: some View {
         ZStack(alignment: .top) {
-            // Background
+            // LAYER 1: Background (Exactly like Dashboard)
             Color.deepVelvet.ignoresSafeArea()
             iOS26Background().opacity(0.4)
             
-            VStack(spacing: 0) {
-                // Branding Header (Clean, Floating)
-                headerView
-                    .padding(.top, 10)
-                    .zIndex(10)
-                
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 24) {
-                        // 1. Profile Summary (Dynamic Header)
-                        if let user = auth.currentUser {
-                            VStack(spacing: 16) {
-                                if let partner = auth.partner {
-                                    // PAIRED AVATARS
-                                    ZStack {
-                                        // Partner Photo (Bottom-Right)
-                                        avatarImage(url: partner.profile_photo_url)
-                                            .offset(x: 25, y: 10)
-                                            .scaleEffect(0.9)
-                                        
-                                        // Your Photo (Top-Left)
-                                        avatarImage(url: user.profile_photo_url)
-                                            .overlay(Circle().stroke(Color.deepVelvet, lineWidth: 4))
-                                            .offset(x: -20)
-                                        
-                                        // Central Love Icon
-                                        Image(systemName: "heart.fill")
-                                            .font(.system(size: 16))
-                                            .foregroundColor(.red)
-                                            .padding(6)
-                                            .background(Color.white)
-                                            .clipShape(Circle())
-                                            .shadow(radius: 5)
-                                            .offset(x: 10, y: 0)
-                                    }
-                                    .padding(.horizontal, 30)
-                                } else {
-                                    // SINGLE AVATAR
-                                    avatarImage(url: user.profile_photo_url)
-                                }
-                                
-                                VStack(spacing: 4) {
-                                    if let partner = auth.partner {
-                                        Text("\(user.name) & \(partner.name)")
-                                            .font(.system(size: 22, weight: .bold, design: .rounded))
-                                            .foregroundColor(.white)
-                                    } else {
-                                        Text(user.name)
-                                            .font(.system(size: 22, weight: .bold, design: .rounded))
-                                            .foregroundColor(.white)
-                                    }
-                                    
-                                    Text(user.email)
-                                        .font(.system(size: 13))
-                                        .foregroundColor(.white.opacity(0.5))
-                                }
-                            }
-                            .padding(.top, 20)
-                        }
-                        
-                        // 2. Relationship Section
-                        VStack(alignment: .leading, spacing: 10) {
-                            sectionLabel(auth.partner != nil ? "Relationship (shared settings)" : "Get started")
-                            
+            // LAYER 2: Scroll Content (Scrolls behind header)
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 24) {
+                    Spacer(minLength: 95) // Space for floating header
+                    
+                    // 1. Profile Summary (Dynamic Header)
+                    if let user = auth.currentUser {
+                        VStack(spacing: 16) {
                             if let partner = auth.partner {
-                                CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: "Paired", color: .red)
-                                
-                                Button {
-                                    isShowingEditAnniversary = true
-                                } label: {
-                                    CompactMenuRow(icon: "calendar", title: "Anniversary date", value: formattedDate(auth.anniversaryDate ?? Date()), color: .electricPurple)
+                                // PAIRED AVATARS
+                                ZStack {
+                                    avatarImage(url: partner.profile_photo_url)
+                                        .offset(x: 25, y: 10)
+                                        .scaleEffect(0.9)
+                                    
+                                    avatarImage(url: user.profile_photo_url)
+                                        .overlay(Circle().stroke(Color.deepVelvet, lineWidth: 4))
+                                        .offset(x: -20)
+                                    
+                                    Image(systemName: "heart.fill")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.red)
+                                        .padding(6)
+                                        .background(Color.white)
+                                        .clipShape(Circle())
+                                        .shadow(radius: 5)
+                                        .offset(x: 10, y: 0)
                                 }
+                                .padding(.horizontal, 30)
                             } else {
-                                inviteCard
+                                avatarImage(url: user.profile_photo_url)
+                            }
+                            
+                            VStack(spacing: 4) {
+                                if let partner = auth.partner {
+                                    Text("\(user.name) & \(partner.name)")
+                                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                                        .foregroundColor(.white)
+                                } else {
+                                    Text(user.name)
+                                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                                        .foregroundColor(.white)
+                                }
+                                
+                                Text(user.email)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.white.opacity(0.5))
                             }
                         }
-                        .padding(.horizontal)
-                        
-                        // 3. Account Settings
-                        VStack(alignment: .leading, spacing: 10) {
-                            sectionLabel("Account settings")
-                            
-                            Button {
-                                isShowingEditProfile = true
-                            } label: {
-                                CompactMenuRow(icon: "person.text.rectangle.fill", title: "Edit profile info", value: "Name, Email, Photo", color: .activeCyan)
-                            }
-                            
-                            Button {
-                                isShowingChangePassword = true
-                            } label: {
-                                CompactMenuRow(icon: "lock.fill", title: "Change password", value: "Security", color: .orange)
-                            }
-                        }
-                        .padding(.horizontal)
-                        
-                        // 4. App & Privacy
-                        VStack(alignment: .leading, spacing: 10) {
-                            sectionLabel("App & privacy")
-                            
-                            Button {
-                                notificationsEnabled.toggle()
-                            } label: {
-                                CompactMenuRow(icon: "bell.fill", title: "Push notifications", value: notificationsEnabled ? "On" : "Off", color: .activeCyan)
-                            }
-                            
-                            Button {
-                                openAppSettings()
-                            } label: {
-                                CompactMenuRow(icon: "location.viewfinder", title: "Location sharing", value: locationStatus(), color: .green)
-                            }
-                            
-                            Link(destination: URL(string: "https://glimpse-app.com/privacy")!) {
-                                CompactMenuRow(icon: "shield.fill", title: "Privacy policy", value: "View", color: .secondary)
-                            }
-                        }
-                        .padding(.horizontal)
-                        
-                        // 5. Logout (Delete Account Removed)
-                        Button {
-                            auth.logout()
-                        } label: {
-                            HStack {
-                                Image(systemName: "rectangle.portrait.and.arrow.right")
-                                    .font(.system(size: 14))
-                                Text("Logout from account")
-                                    .font(.system(size: 14, weight: .bold))
-                            }
-                            .foregroundColor(.red)
-                            .padding(.vertical, 12)
-                            .frame(maxWidth: .infinity)
-                            .background(Color.red.opacity(0.1))
-                            .cornerRadius(12)
-                        }
-                        .padding(.horizontal)
-                        .padding(.top, 10)
-                        
-                        Spacer(minLength: 100)
+                        .padding(.top, 20)
                     }
+                    
+                    // 2. Relationship Section
+                    VStack(alignment: .leading, spacing: 10) {
+                        sectionLabel(auth.partner != nil ? "Relationship (shared settings)" : "Get started")
+                        
+                        if let partner = auth.partner {
+                            CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: "Paired", color: .red)
+                            
+                            Button {
+                                isShowingEditAnniversary = true
+                            } label: {
+                                CompactMenuRow(icon: "calendar", title: "Anniversary date", value: formattedDate(auth.anniversaryDate ?? Date()), color: .electricPurple)
+                            }
+                        } else {
+                            inviteCard
+                        }
+                    }
+                    .padding(.horizontal)
+                    
+                    // 3. Account Settings
+                    VStack(alignment: .leading, spacing: 10) {
+                        sectionLabel("Account settings")
+                        
+                        Button {
+                            isShowingEditProfile = true
+                        } label: {
+                            CompactMenuRow(icon: "person.text.rectangle.fill", title: "Edit profile info", value: "Name, Email, Photo", color: .activeCyan)
+                        }
+                        
+                        Button {
+                            isShowingChangePassword = true
+                        } label: {
+                            CompactMenuRow(icon: "lock.fill", title: "Change password", value: "Security", color: .orange)
+                        }
+                    }
+                    .padding(.horizontal)
+                    
+                    // 4. App & Privacy
+                    VStack(alignment: .leading, spacing: 10) {
+                        sectionLabel("App & privacy")
+                        
+                        Button {
+                            notificationsEnabled.toggle()
+                        } label: {
+                            CompactMenuRow(icon: "bell.fill", title: "Push notifications", value: notificationsEnabled ? "On" : "Off", color: .activeCyan)
+                        }
+                        
+                        Button {
+                            openAppSettings()
+                        } label: {
+                            CompactMenuRow(icon: "location.viewfinder", title: "Location sharing", value: locationStatus(), color: .green)
+                        }
+                        
+                        Link(destination: URL(string: "https://glimpse-app.com/privacy")!) {
+                            CompactMenuRow(icon: "shield.fill", title: "Privacy policy", value: "View", color: .secondary)
+                        }
+                    }
+                    .padding(.horizontal)
+                    
+                    // 5. Logout
+                    Button {
+                        auth.logout()
+                    } label: {
+                        HStack {
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                                .font(.system(size: 14))
+                            Text("Logout from account")
+                                .font(.system(size: 14, weight: .bold))
+                        }
+                        .foregroundColor(.red)
+                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(12)
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 10)
+                    
+                    Spacer(minLength: 120)
                 }
             }
+            .ignoresSafeArea(.container, edges: .top)
+            
+            // LAYER 3: Floating Header (Identical to Dashboard)
+            headerView
+                .padding(.top, 10)
+                .zIndex(10)
         }
         .sheet(isPresented: $isShowingEditProfile) {
             EditProfileView(auth: auth)
@@ -204,7 +202,7 @@ struct ProfileView: View {
         .overlay(Circle().stroke(Color.electricPurple, lineWidth: 2))
         .shadow(color: .electricPurple.opacity(0.2), radius: 10)
     }
-
+    
     private func sectionLabel(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 13, weight: .medium))
