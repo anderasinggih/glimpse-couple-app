@@ -36,18 +36,20 @@ struct FullPartnerMapView: View {
             VStack(spacing: 0) {
                 BrandingHeader()
                 
+                // Satellite toggle - positioned BELOW safe area / status bar
                 HStack {
                     Spacer()
-                    // Map Style Toggle (plain iOS default button)
                     Button {
                         withAnimation(.spring()) {
                             isSatellite.toggle()
                         }
                     } label: {
                         Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
+                            .font(.system(size: 22, weight: .semibold))
+                            .frame(width: 44, height: 44)
                     }
-                    .padding(.trailing, 20)
-                    .padding(.top, 10)
+                    .padding(.trailing, 16)
+                    .padding(.top, 8)
                 }
                 
                 Spacer()
