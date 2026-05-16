@@ -81,7 +81,6 @@ struct MainDashboardView: View {
             
             // Floating Header
             headerView
-                .padding(.top, 10)
         }
     }
     

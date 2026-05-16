@@ -119,5 +119,6 @@ struct BrandingHeader: View {
             Spacer()
         }
         .padding(.horizontal, 20)
+        .padding(.top, 10) // Locked Top Padding
     }
 }

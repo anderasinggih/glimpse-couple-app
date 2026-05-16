@@ -27,7 +27,6 @@ struct FullPartnerMapView: View {
             // Branding Overlay
             VStack(spacing: 0) {
                 BrandingHeader()
-                    .padding(.top, 10)
                 
                 Spacer()
                 

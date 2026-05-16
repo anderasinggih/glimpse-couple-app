@@ -12,54 +12,49 @@ struct FlashCameraView: View {
             let screenWidth = geometry.size.width
             let frameSize = screenWidth - 25
             
-            ZStack(alignment: .top) {
+            ZStack {
                 // LAYER 1: Background
                 Color.deepVelvet.ignoresSafeArea()
                 iOS26Background().opacity(0.4)
                 
                 // LAYER 2: The Camera Frame (Absolute Center)
-                VStack {
-                    Spacer()
-                    ZStack {
-                        if model.permissionStatus == .authorized {
-                            if model.isInitialized {
-                                CameraPreview(session: model.session)
+                ZStack {
+                    if model.permissionStatus == .authorized {
+                        if model.isInitialized {
+                            CameraPreview(session: model.session)
+                                .frame(width: frameSize, height: frameSize)
+                                .opacity(capturedImage == nil ? 1 : 0)
+                            
+                            if let image = capturedImage {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
                                     .frame(width: frameSize, height: frameSize)
-                                    .opacity(capturedImage == nil ? 1 : 0)
-                                
-                                if let image = capturedImage {
-                                    Image(uiImage: image)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: frameSize, height: frameSize)
-                                }
-                            } else {
-                                loadingFrame(size: frameSize)
                             }
                         } else {
-                            permissionView(size: frameSize)
+                            loadingFrame(size: frameSize)
                         }
+                    } else {
+                        permissionView(size: frameSize)
                     }
-                    .frame(width: frameSize, height: frameSize)
-                    .background(Color.black)
-                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 28, style: .continuous)
-                            .stroke(LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
-                    )
-                    .shadow(color: .electricPurple.opacity(0.2), radius: 30)
-                    Spacer()
                 }
-                .frame(maxWidth: .infinity)
+                .frame(width: frameSize, height: frameSize)
+                .background(Color.black)
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .stroke(LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
+                )
+                .shadow(color: .electricPurple.opacity(0.2), radius: 30)
                 .offset(y: -10)
                 
                 // LAYER 3: UI Overlays
+                headerSection
+                    .zIndex(10)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                
                 VStack {
-                    headerSection
-                        .padding(.top, 10)
-                    
                     Spacer()
-                    
                     footerSection
                         .padding(.bottom, 20)
                 }

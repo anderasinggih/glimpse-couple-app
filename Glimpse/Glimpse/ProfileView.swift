@@ -166,7 +166,6 @@ struct ProfileView: View {
             
             // LAYER 3: Floating Header (With Dynamic Opacity)
             headerView
-                .padding(.top, 10)
                 .opacity(headerOpacity)
                 .animation(.easeInOut, value: headerOpacity)
                 .zIndex(10)
