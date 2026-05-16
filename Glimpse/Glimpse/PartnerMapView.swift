@@ -85,7 +85,7 @@ struct PartnerOverlayCard: View {
                 
                 Spacer()
                 
-                BatteryIndicator(level: user.battery_level)
+                BatteryIndicator(level: user.battery_level ?? 0)
             }
             
             HStack(spacing: 8) {
