@@ -41,26 +41,24 @@ struct FullPartnerMapView: View {
                 // Bottom Controls (Satellite & Location buttons above the card)
                 VStack(spacing: 12) {
                     HStack {
-                        // Satellite Switcher (Native Style)
-                        Button {
+                        // Satellite Switcher (Pure Native Style)
+                        Button("Map Style", systemImage: isSatellite ? "map.fill" : "globe.americas.fill") {
                             withAnimation { isSatellite.toggle() }
-                        } label: {
-                            Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
                         }
+                        .labelStyle(.iconOnly)
                         .buttonStyle(.bordered)
                         .buttonBorderShape(.circle)
                         .controlSize(.large)
                         
                         Spacer()
                         
-                        // Location Button (Native Style)
-                        Button {
+                        // Location Button (Pure Native Style)
+                        Button("My Location", systemImage: "location.fill") {
                             withAnimation {
                                 position = .userLocation(fallback: .automatic)
                             }
-                        } label: {
-                            Image(systemName: "location.fill")
                         }
+                        .labelStyle(.iconOnly)
                         .buttonStyle(.bordered)
                         .buttonBorderShape(.circle)
                         .controlSize(.large)
