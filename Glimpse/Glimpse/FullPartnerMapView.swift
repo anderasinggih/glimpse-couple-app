@@ -44,7 +44,7 @@ struct FullPartnerMapView: View {
                     
                     // Floating Native-style Controls (Bottom Right)
                     VStack(spacing: 12) {
-                        // 1. Map Style Switcher (Native Look)
+                        // 1. Map Style Switcher (Native Look - TOP)
                         Button {
                             withAnimation { isSatellite.toggle() }
                         } label: {
@@ -55,9 +55,8 @@ struct FullPartnerMapView: View {
                         .buttonStyle(.bordered)
                         .buttonBorderShape(.circle)
                         .controlSize(.large)
-                        .tint(.white.opacity(0.1)) // Pure Native Glass feel
                         
-                        // 2. Native Location Button
+                        // 2. Native Location Button (BOTTOM)
                         MapUserLocationButton()
                     }
                     .padding(.trailing, 16)
