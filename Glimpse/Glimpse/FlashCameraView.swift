@@ -71,8 +71,20 @@ struct FlashCameraView: View {
         ZStack {
             BrandingHeader()
             
-            HStack {
+            HStack(spacing: 12) {
                 Spacer()
+                
+                // Flash Toggle
+                Button { model.toggleFlash() } label: {
+                    Image(systemName: model.flashMode == .on ? "bolt.fill" : "bolt.slash.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(model.flashMode == .on ? .yellow : .white)
+                        .padding(10)
+                        .background(.ultraThinMaterial)
+                        .clipShape(Circle())
+                }
+                
+                // Camera Switch
                 Button { model.switchCamera() } label: {
                     Image(systemName: "camera.rotate")
                         .font(.system(size: 20, weight: .bold))
@@ -81,8 +93,8 @@ struct FlashCameraView: View {
                         .background(.ultraThinMaterial)
                         .clipShape(Circle())
                 }
-                .padding(.trailing, 20)
             }
+            .padding(.trailing, 20)
         }
     }
     
@@ -195,6 +207,8 @@ class GlimpseCameraModel: NSObject, AVCapturePhotoCaptureDelegate {
     var permissionStatus: AVAuthorizationStatus = .notDetermined
     var isUsingFrontCamera = true // Tracking for flipping logic
     
+    var flashMode: AVCaptureDevice.FlashMode = .off
+    
     private let output = AVCapturePhotoOutput()
     private var completion: ((UIImage?) -> Void)?
     private let sessionQueue = DispatchQueue(label: "com.glimpse.camera.sessionQueue")
@@ -257,13 +271,20 @@ class GlimpseCameraModel: NSObject, AVCapturePhotoCaptureDelegate {
         }
     }
     
+    func toggleFlash() {
+        flashMode = (flashMode == .on) ? .off : .on
+    }
+    
     func capturePhoto(completion: @escaping (UIImage?) -> Void) {
         self.completion = completion
         let settings = AVCapturePhotoSettings()
         
-        // Prioritize speed to avoid motion blur
-        if output.availablePhotoQualityPrioritizationModes.contains(.speed) {
-            settings.photoQualityPrioritization = .speed
+        // Fix: Use speed prioritization to avoid motion blur
+        settings.photoQualityPrioritization = .speed
+        
+        // Add Flash Support
+        if output.supportedFlashModes.contains(flashMode) {
+            settings.flashMode = flashMode
         }
         
         sessionQueue.async { self.output.capturePhoto(with: settings, delegate: self) }
