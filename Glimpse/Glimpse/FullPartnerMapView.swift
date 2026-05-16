@@ -17,7 +17,8 @@ struct FullPartnerMapView: View {
     }
     
     var body: some View {
-        NavigationStack {
+        ZStack(alignment: .top) {
+            // Full Screen Map
             Map(position: $position) {
                 Annotation(user.name, coordinate: user.coordinate) {
                     PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline)
@@ -26,33 +27,47 @@ struct FullPartnerMapView: View {
             .mapStyle(isSatellite ? .hybrid(elevation: .realistic) : .standard(emphasis: .muted))
             .mapControls {
                 MapCompass()
-                MapUserLocationButton()
                 MapScaleView()
             }
             .ignoresSafeArea()
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "heart.fill")
-                            .foregroundColor(.electricPurple)
-                        Text("Glimpse")
-                            .font(.system(.headline, design: .rounded))
-                            .fontWeight(.bold)
-                    }
-                }
+            
+            // UI Overlay Layer
+            VStack(spacing: 0) {
+                // Top Branding (No blur background)
+                BrandingHeader()
                 
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Style", systemImage: isSatellite ? "map.fill" : "globe.americas.fill") {
-                        withAnimation { isSatellite.toggle() }
+                Spacer()
+                
+                // Bottom Controls (Satellite & Location buttons above the card)
+                VStack(spacing: 12) {
+                    HStack {
+                        // Satellite Switcher (Native Style)
+                        Button(systemImage: isSatellite ? "map.fill" : "globe.americas.fill") {
+                            withAnimation { isSatellite.toggle() }
+                        }
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.circle)
+                        .controlSize(.large)
+                        
+                        Spacer()
+                        
+                        // Location Button (Native Style)
+                        Button(systemImage: "location.fill") {
+                            withAnimation {
+                                position = .userLocation(fallback: .automatic)
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.circle)
+                        .controlSize(.large)
                     }
-                }
-            }
-            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .safeAreaInset(edge: .bottom) {
-                PartnerOverlayCard(user: user)
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 20)
+                    
+                    // Bottom Info Card
+                    PartnerOverlayCard(user: user)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 30)
+                }
             }
         }
     }
