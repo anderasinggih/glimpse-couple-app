@@ -26,62 +26,32 @@ struct FullPartnerMapView: View {
             }
             .mapStyle(isSatellite ? .hybrid(elevation: .realistic) : .standard(emphasis: .muted))
             .mapControls {
-                // Keep only essential system controls that don't overlap
+                MapCompass()
+                MapUserLocationButton()
                 MapScaleView()
             }
             .ignoresSafeArea()
             
-            // Branding Overlay
+            // Branding & Style Switcher
             VStack(spacing: 0) {
                 BrandingHeader()
                 
                 HStack {
                     Spacer()
-                    // Top Right: Compass & Map Style (Liquid Glass)
-                    VStack(spacing: 12) {
-                        // System Compass (Custom placement)
-                        MapCompass()
-                            .mapControlVisibility(.visible)
-                        
-                        Button {
-                            withAnimation(.spring()) {
-                                isSatellite.toggle()
-                            }
-                        } label: {
-                            Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
-                                .font(.system(size: 20, weight: .bold))
-                                .foregroundColor(.electricPurple)
-                        }
-                        .buttonStyle(.bordered)
-                        .buttonBorderShape(.circle)
-                        .controlSize(.large)
-                        .tint(.white.opacity(0.1))
-                    }
-                    .padding(.trailing, 16)
-                    .padding(.top, 10)
-                }
-                
-                Spacer()
-                
-                // Bottom Right: Location Button (Moved down for better reachability)
-                HStack {
-                    Spacer()
+                    // Native Bordered Button for Style
                     Button {
-                        withAnimation {
-                            position = .userLocation(fallback: .automatic)
-                        }
+                        withAnimation { isSatellite.toggle() }
                     } label: {
-                        Image(systemName: "location.fill")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(.electricPurple)
+                        Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
                     }
                     .buttonStyle(.bordered)
                     .buttonBorderShape(.circle)
                     .controlSize(.large)
                     .tint(.white.opacity(0.1))
-                    .padding(.trailing, 16)
-                    .padding(.bottom, 10)
+                    .padding(.trailing, 10)
                 }
+                
+                Spacer()
                 
                 // Bottom Info Card
                 PartnerOverlayCard(user: user)

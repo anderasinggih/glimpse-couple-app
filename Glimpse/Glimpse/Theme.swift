@@ -51,19 +51,6 @@ extension Color {
     }
 }
 
-struct GlassmorphicModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .background(.ultraThinMaterial)
-            .cornerRadius(28)
-            .overlay(
-                RoundedRectangle(cornerRadius: 28)
-                    .stroke(
-                        LinearGradient(colors: [.white.opacity(0.3), .clear, .white.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        lineWidth: 0.5
-                    )
-            )
-            .shadow(color: Color.black.opacity(0.1), radius: 15, x: 0, y: 8)
     }
 }
 
