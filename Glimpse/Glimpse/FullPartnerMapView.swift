@@ -17,7 +17,7 @@ struct FullPartnerMapView: View {
     }
     
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
+        ZStack(alignment: .top) {
             // Full Screen Map
             Map(position: $position) {
                 Annotation(user.name, coordinate: user.coordinate) {
@@ -26,46 +26,54 @@ struct FullPartnerMapView: View {
             }
             .mapStyle(isSatellite ? .hybrid(elevation: .realistic) : .standard(emphasis: .muted))
             .mapControls {
-                // System compass stays top-right by default, or we can hide it
                 MapCompass()
                 MapScaleView()
             }
             .ignoresSafeArea()
             
-            // UI Overlay Layer
+            // Branding & Controls Overlay
             VStack(spacing: 0) {
-                // Top: Branding
                 BrandingHeader()
+                
+                HStack {
+                    Spacer()
+                    // Map Style Switcher
+                    Button {
+                        withAnimation { isSatellite.toggle() }
+                    } label: {
+                        Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
+                    }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
+                    .tint(.white.opacity(0.1))
+                    .padding(.trailing, 10)
+                }
                 
                 Spacer()
                 
-                // Bottom Area: Controls & Info Card
-                VStack(alignment: .trailing, spacing: 16) {
-                    
-                    // Floating Native-style Controls (Bottom Right)
-                    VStack(spacing: 12) {
-                        // 1. Map Style Switcher (Native Look - TOP)
-                        Button {
-                            withAnimation { isSatellite.toggle() }
-                        } label: {
-                            Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(.electricPurple)
+                // Location Button: Floating above the card on the right
+                HStack {
+                    Spacer()
+                    Button {
+                        withAnimation {
+                            position = .userLocation(fallback: .automatic)
                         }
-                        .buttonStyle(.bordered)
-                        .buttonBorderShape(.circle)
-                        .controlSize(.large)
-                        
-                        // 2. Native Location Button (BOTTOM)
-                        MapUserLocationButton()
+                    } label: {
+                        Image(systemName: "location.fill")
                     }
-                    .padding(.trailing, 16)
-                    
-                    // Bottom Partner Card
-                    PartnerOverlayCard(user: user)
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 30)
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
+                    .tint(.white.opacity(0.1))
                 }
+                .padding(.trailing, 20)
+                .padding(.bottom, 12) // Gap above the card
+                
+                // Bottom Info Card
+                PartnerOverlayCard(user: user)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 30)
             }
         }
     }
