@@ -68,8 +68,7 @@ struct KabarPanel: View {
             }
         }
         .padding(16)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .glassmorphic()
         .sheet(isPresented: $showCamera) {
             CameraPlaceholderView(isUploading: $isUploading)
         }

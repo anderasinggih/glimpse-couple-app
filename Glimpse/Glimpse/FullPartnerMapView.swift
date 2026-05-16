@@ -17,45 +17,45 @@ struct FullPartnerMapView: View {
     }
     
     var body: some View {
-        NavigationStack {
-            ZStack(alignment: .top) {
-                Map(position: $position) {
-                    Annotation(user.name, coordinate: user.coordinate) {
-                        PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline)
-                    }
+        ZStack(alignment: .top) {
+            // Full Screen Map
+            Map(position: $position) {
+                Annotation(user.name, coordinate: user.coordinate) {
+                    PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline)
                 }
-                .mapStyle(isSatellite ? .hybrid(elevation: .realistic) : .standard(emphasis: .muted))
+            }
+            .mapStyle(isSatellite ? .hybrid(elevation: .realistic) : .standard(emphasis: .muted))
             .mapControls {
+                MapCompass()
                 MapUserLocationButton()
                 MapScaleView()
             }
             .ignoresSafeArea()
-            .safeAreaInset(edge: .top) {
-                VStack(spacing: 10) {
-                    BrandingHeader()
-                    
-                    HStack(spacing: 12) {
-                        Spacer()
-                        
-                        // Compass and Satellite side-by-side
-                        MapCompass()
-                        
-                        Button {
-                            withAnimation { isSatellite.toggle() }
-                        } label: {
-                            Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
+            
+            // Branding Overlay
+            VStack(spacing: 0) {
+                BrandingHeader()
+                
+                HStack {
+                    Spacer()
+                    // Map Style Toggle (plain iOS default button)
+                    Button {
+                        withAnimation(.spring()) {
+                            isSatellite.toggle()
                         }
-                        .buttonStyle(.bordered)
-                        .buttonBorderShape(.circle)
+                    } label: {
+                        Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
                     }
-                    .padding(.trailing, 16)
+                    .padding(.trailing, 20)
+                    .padding(.top, 10)
                 }
-            }
-            .safeAreaInset(edge: .bottom) {
+                
+                Spacer()
+                
+                // Bottom Info Card
                 PartnerOverlayCard(user: user)
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 20)
-            }
+                    .padding(.bottom, 30)
             }
         }
     }

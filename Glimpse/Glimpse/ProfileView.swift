@@ -248,8 +248,7 @@ struct ProfileView: View {
             }
         }
         .padding(15)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .glassmorphic()
     }
     
     private func shareInviteCode() {
@@ -579,8 +578,7 @@ struct CompactMenuRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .glassmorphic()
     }
 }
 
