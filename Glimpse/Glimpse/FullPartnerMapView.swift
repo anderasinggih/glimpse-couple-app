@@ -35,10 +35,10 @@ struct FullPartnerMapView: View {
                 }
                 .ignoresSafeArea()
                 // Automatically move map camera smoothly when partner's live coordinates change
-                .onChange(of: partner.coordinate) { _, newCoord in
+                .onChange(of: partner.last_updated) { _, _ in
                     withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
                         position = .region(MKCoordinateRegion(
-                            center: newCoord,
+                            center: partner.coordinate,
                             span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
                         ))
                     }
