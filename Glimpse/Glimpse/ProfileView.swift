@@ -374,7 +374,7 @@ struct EditProfileView: View {
                 }
                 .onChange(of: selectedItem) {
                     Task {
-                        if let data = try? await selectedItem?.loadData(type: Data.self), let image = UIImage(data: data) {
+                        if let data = try? await selectedItem?.loadTransferable(type: Data.self), let image = UIImage(data: data) {
                             selectedImage = image
                         }
                     }
