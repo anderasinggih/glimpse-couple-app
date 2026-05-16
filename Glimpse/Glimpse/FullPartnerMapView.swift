@@ -42,8 +42,10 @@ struct FullPartnerMapView: View {
                 VStack(spacing: 12) {
                     HStack {
                         // Satellite Switcher (Native Style)
-                        Button(systemImage: isSatellite ? "map.fill" : "globe.americas.fill") {
+                        Button {
                             withAnimation { isSatellite.toggle() }
+                        } label: {
+                            Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
                         }
                         .buttonStyle(.bordered)
                         .buttonBorderShape(.circle)
@@ -52,10 +54,12 @@ struct FullPartnerMapView: View {
                         Spacer()
                         
                         // Location Button (Native Style)
-                        Button(systemImage: "location.fill") {
+                        Button {
                             withAnimation {
                                 position = .userLocation(fallback: .automatic)
                             }
+                        } label: {
+                            Image(systemName: "location.fill")
                         }
                         .buttonStyle(.bordered)
                         .buttonBorderShape(.circle)
