@@ -11,4 +11,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/glimpse/state', [GlimpseController::class, 'getState']);
     Route::post('/glimpse/status', [GlimpseController::class, 'updateStatus']);
     Route::post('/glimpse/photo', [GlimpseController::class, 'uploadPhoto']);
+    Route::post('/glimpse/connect', [GlimpseController::class, 'connect']);
 });

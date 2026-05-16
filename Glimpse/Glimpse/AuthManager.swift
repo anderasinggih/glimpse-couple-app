@@ -6,6 +6,7 @@ class AuthManager {
     static let shared = AuthManager()
     
     var isAuthenticated = false
+    var currentUser: GlimpseUser?
     var partner: GlimpseUser?
     var anniversaryDate: Date?
     
@@ -39,10 +40,33 @@ class AuthManager {
         let decoder = JSONDecoder()
         if let stateResponse = try? decoder.decode(CoupleResponse.self, from: data) {
             DispatchQueue.main.async {
+                self.currentUser = stateResponse.user
                 self.partner = stateResponse.partner_data
                 self.anniversaryDate = stateResponse.anniversaryDate
             }
         }
+    }
+
+    func connectPartner(inviteCode: String) async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/connect") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let body = ["invite_code": inviteCode]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid invite code or already connected"])
+        }
+        
+        try await fetchState()
     }
     
     func login(email: String, password: String) async throws {

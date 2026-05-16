@@ -8,26 +8,56 @@ use App\Events\PartnerStateUpdated;
 
 class GlimpseController extends Controller
 {
-    public function sync(Request $request)
+    public function getState(Request $request)
     {
         $user = $request->user();
         
-        $user->update($request->only([
-            'latitude', 
-            'longitude', 
-            'location_name', 
-            'battery_level', 
-            'status_note'
-        ]));
-
+        // Find partner if in a couple
+        $partner = null;
         if ($user->couple_id) {
-            broadcast(new PartnerStateUpdated($user))->toOthers();
+            $partner = \App\Models\User::where('couple_id', $user->couple_id)
+                ->where('id', '!=', $user->id)
+                ->first();
         }
 
         return response()->json([
-            'user' => $user,
-            'partner' => $user->partner()
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'invite_code' => $user->invite_code,
+                'profile_photo_url' => $user->profile_photo_url ?? "https://ui-avatars.com/api/?name=" . urlencode($user->name),
+                'couple_id' => $user->couple_id
+            ],
+            'partner_data' => $partner,
+            'anniversary_start_date' => $user->couple_id ? "2023-10-20T00:00:00Z" : null // Mock for now
         ]);
+    }
+
+    public function connect(Request $request)
+    {
+        $request->validate(['invite_code' => 'required|string']);
+        $user = $request->user();
+        
+        $targetUser = \App\Models\User::where('invite_code', $request->invite_code)->first();
+        
+        if (!$targetUser) {
+            return response()->json(['message' => 'Invalid invite code'], 404);
+        }
+        
+        if ($targetUser->id === $user->id) {
+            return response()->json(['message' => 'You cannot invite yourself'], 400);
+        }
+
+        if ($targetUser->couple_id || $user->couple_id) {
+            return response()->json(['message' => 'User is already in a relationship'], 400);
+        }
+
+        $coupleId = rand(10000, 99999);
+        $user->update(['couple_id' => $coupleId]);
+        $targetUser->update(['couple_id' => $coupleId]);
+
+        return response()->json(['message' => 'Connected successfully!', 'couple_id' => $coupleId]);
     }
 
     public function uploadPhoto(Request $request)

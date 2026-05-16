@@ -23,6 +23,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'invite_code',
         'couple_id',
         'latitude',
         'longitude',
@@ -31,6 +32,14 @@ class User extends Authenticatable
         'battery_level',
         'latest_photo_url',
     ];
+
+    protected static function boot()
+    {
+        parent::boot();
+        static::creating(function ($user) {
+            $user->invite_code = strtoupper(bin2hex(random_bytes(4)));
+        });
+    }
 
     /**
      * The attributes that should be hidden for serialization.
