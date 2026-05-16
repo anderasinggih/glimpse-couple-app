@@ -7,6 +7,7 @@ struct ProfileView: View {
     @State private var inviteCodeInput = ""
     @State private var isShowingInviteAlert = false
     @State private var isShowingEditProfile = false
+    @State private var isShowingChangePassword = false
     @State private var isShowingEditAnniversary = false
     @State private var notificationsEnabled = true
     
@@ -23,43 +24,34 @@ struct ProfileView: View {
                 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 24) {
-                        // 1. Profile Summary (Compact & Clickable)
-                        Button {
-                            isShowingEditProfile = true
-                        } label: {
-                            if let user = auth.currentUser {
-                                VStack(spacing: 12) {
-                                    AsyncImage(url: URL(string: user.profile_photo_url)) { image in
-                                        image.resizable().aspectRatio(contentMode: .fill)
-                                    } placeholder: {
-                                        Circle().fill(Color.gray.opacity(0.3))
-                                    }
-                                    .frame(width: 80, height: 80)
-                                    .clipShape(Circle())
-                                    .overlay(Circle().stroke(Color.electricPurple, lineWidth: 2))
-                                    .shadow(color: .electricPurple.opacity(0.2), radius: 10)
-                                    
-                                    VStack(spacing: 2) {
-                                        HStack(spacing: 5) {
-                                            Text(user.name)
-                                                .font(.system(size: 20, weight: .bold, design: .rounded))
-                                                .foregroundColor(.white)
-                                            Image(systemName: "pencil")
-                                                .font(.system(size: 10))
-                                                .foregroundColor(.electricPurple)
-                                        }
-                                        Text(user.email)
-                                            .font(.system(size: 13))
-                                            .foregroundColor(.white.opacity(0.5))
-                                    }
+                        // 1. Profile Summary (Compact)
+                        if let user = auth.currentUser {
+                            VStack(spacing: 12) {
+                                AsyncImage(url: URL(string: user.profile_photo_url)) { image in
+                                    image.resizable().aspectRatio(contentMode: .fill)
+                                } placeholder: {
+                                    Circle().fill(Color.gray.opacity(0.3))
                                 }
-                                .padding(.top, 20)
+                                .frame(width: 80, height: 80)
+                                .clipShape(Circle())
+                                .overlay(Circle().stroke(Color.electricPurple, lineWidth: 2))
+                                .shadow(color: .electricPurple.opacity(0.2), radius: 10)
+                                
+                                VStack(spacing: 2) {
+                                    Text(user.name)
+                                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                                        .foregroundColor(.white)
+                                    Text(user.email)
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.white.opacity(0.5))
+                                }
                             }
+                            .padding(.top, 20)
                         }
                         
-                        // 2. Relationship Section
+                        // 2. Relationship Settings
                         VStack(alignment: .leading, spacing: 10) {
-                            sectionLabel("Relationship status")
+                            sectionLabel("Relationship")
                             
                             if let partner = auth.partner {
                                 CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: "Paired", color: .red)
@@ -75,7 +67,25 @@ struct ProfileView: View {
                         }
                         .padding(.horizontal)
                         
-                        // 3. Settings & Stats Section
+                        // 3. Account Settings (New Section)
+                        VStack(alignment: .leading, spacing: 10) {
+                            sectionLabel("Account settings")
+                            
+                            Button {
+                                isShowingEditProfile = true
+                            } label: {
+                                CompactMenuRow(icon: "person.text.rectangle.fill", title: "Edit profile info", value: "Name, Email", color: .activeCyan)
+                            }
+                            
+                            Button {
+                                isShowingChangePassword = true
+                            } label: {
+                                CompactMenuRow(icon: "lock.fill", title: "Change password", value: "Security", color: .orange)
+                            }
+                        }
+                        .padding(.horizontal)
+                        
+                        // 4. App & Privacy
                         VStack(alignment: .leading, spacing: 10) {
                             sectionLabel("App & privacy")
                             
@@ -97,21 +107,31 @@ struct ProfileView: View {
                         }
                         .padding(.horizontal)
                         
-                        // 4. Logout
-                        Button {
-                            auth.logout()
-                        } label: {
-                            HStack {
-                                Image(systemName: "rectangle.portrait.and.arrow.right")
-                                    .font(.system(size: 14))
-                                Text("Logout from account")
-                                    .font(.system(size: 14, weight: .bold))
+                        // 5. Logout & Danger Zone
+                        VStack(spacing: 12) {
+                            Button {
+                                auth.logout()
+                            } label: {
+                                HStack {
+                                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                                        .font(.system(size: 14))
+                                    Text("Logout from account")
+                                        .font(.system(size: 14, weight: .bold))
+                                }
+                                .foregroundColor(.red)
+                                .padding(.vertical, 12)
+                                .frame(maxWidth: .infinity)
+                                .background(Color.red.opacity(0.1))
+                                .cornerRadius(12)
                             }
-                            .foregroundColor(.red)
-                            .padding(.vertical, 12)
-                            .frame(maxWidth: .infinity)
-                            .background(Color.red.opacity(0.1))
-                            .cornerRadius(12)
+                            
+                            Button {
+                                // Action to delete account
+                            } label: {
+                                Text("Delete account")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.3))
+                            }
                         }
                         .padding(.horizontal)
                         .padding(.top, 10)
@@ -124,6 +144,10 @@ struct ProfileView: View {
         .sheet(isPresented: $isShowingEditProfile) {
             EditProfileView(auth: auth)
                 .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $isShowingChangePassword) {
+            ChangePasswordView(auth: auth)
+                .presentationDetents([.height(350)])
         }
         .sheet(isPresented: $isShowingEditAnniversary) {
             EditAnniversaryView(auth: auth)
@@ -240,6 +264,62 @@ struct ProfileView: View {
     }
 }
 
+struct ChangePasswordView: View {
+    @Bindable var auth: AuthManager
+    @State private var currentPassword = ""
+    @State private var newPassword = ""
+    @State private var confirmPassword = ""
+    @State private var isSaving = false
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        ZStack {
+            Color.deepVelvet.ignoresSafeArea()
+            
+            VStack(spacing: 20) {
+                Text("Change Password")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding(.top)
+                
+                VStack(spacing: 12) {
+                    SecureField("Current password", text: $currentPassword)
+                        .padding()
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(12)
+                    
+                    SecureField("New password", text: $newPassword)
+                        .padding()
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(12)
+                    
+                    SecureField("Confirm new password", text: $confirmPassword)
+                        .padding()
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(12)
+                }
+                .padding(.horizontal)
+                
+                Button {
+                    // Logic to change password
+                    dismiss()
+                } label: {
+                    Text("Update password")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.orange)
+                        .foregroundColor(.deepVelvet)
+                        .cornerRadius(16)
+                }
+                .padding(.horizontal)
+                
+                Spacer()
+            }
+        }
+    }
+}
+
 struct EditProfileView: View {
     @Bindable var auth: AuthManager
     @State private var name = ""
@@ -260,26 +340,36 @@ struct EditProfileView: View {
             Color.deepVelvet.ignoresSafeArea()
             
             VStack(spacing: 20) {
-                Text("Edit Profile")
+                Text("Edit Profile Info")
                     .font(.headline)
                     .foregroundColor(.white)
                     .padding(.top)
                 
                 PhotosPicker(selection: $selectedItem, matching: .images) {
-                    if let image = selectedImage {
-                        Image(uiImage: image)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
+                    ZStack {
+                        if let image = selectedImage {
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 80, height: 80)
+                                .clipShape(Circle())
+                        } else {
+                            AsyncImage(url: URL(string: auth.currentUser?.profile_photo_url ?? "")) { image in
+                                image.resizable().aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                Circle().fill(Color.gray.opacity(0.3))
+                            }
                             .frame(width: 80, height: 80)
                             .clipShape(Circle())
-                    } else {
-                        AsyncImage(url: URL(string: auth.currentUser?.profile_photo_url ?? "")) { image in
-                            image.resizable().aspectRatio(contentMode: .fill)
-                        } placeholder: {
-                            Circle().fill(Color.gray.opacity(0.3))
                         }
-                        .frame(width: 80, height: 80)
-                        .clipShape(Circle())
+                        
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white)
+                            .padding(6)
+                            .background(Color.electricPurple)
+                            .clipShape(Circle())
+                            .offset(x: 30, y: 30)
                     }
                 }
                 .onChange(of: selectedItem) { old, new in
@@ -366,7 +456,7 @@ struct EditAnniversaryView: View {
                 DatePicker("", selection: $date, displayedComponents: .date)
                     .datePickerStyle(.wheel)
                     .labelsHidden()
-                    .colorInvert() // For dark mode wheel visibility
+                    .colorInvert()
                     .colorMultiply(.white)
                 
                 Button {
