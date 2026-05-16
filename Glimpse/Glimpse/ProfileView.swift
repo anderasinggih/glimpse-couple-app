@@ -28,133 +28,134 @@ struct ProfileView: View {
                     .frame(height: 0)
                     
                     VStack(spacing: 24) {
-                    Spacer(minLength: 95) // Space for floating header
-                    
-                    // 1. Profile Summary (Dynamic Header)
-                    if let user = auth.currentUser {
-                        VStack(spacing: 16) {
-                            if let partner = auth.partner {
-                                // PAIRED AVATARS
-                                ZStack {
-                                    avatarImage(url: partner.profile_photo_url)
-                                        .offset(x: 25, y: 10)
-                                        .scaleEffect(0.9)
-                                    
-                                    avatarImage(url: user.profile_photo_url)
-                                        .overlay(Circle().stroke(Color.deepVelvet, lineWidth: 4))
-                                        .offset(x: -20)
-                                    
-                                    Image(systemName: "heart.fill")
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.red)
-                                        .padding(6)
-                                        .background(Color.white)
-                                        .clipShape(Circle())
-                                        .shadow(radius: 5)
-                                        .offset(x: 10, y: 0)
-                                }
-                                .padding(.horizontal, 30)
-                            } else {
-                                avatarImage(url: user.profile_photo_url)
-                            }
-                            
-                            VStack(spacing: 4) {
+                        Spacer(minLength: 95) // Space for floating header
+                        
+                        // 1. Profile Summary (Dynamic Header)
+                        if let user = auth.currentUser {
+                            VStack(spacing: 16) {
                                 if let partner = auth.partner {
-                                    Text("\(user.name) & \(partner.name)")
-                                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                                        .foregroundColor(.white)
+                                    // PAIRED AVATARS
+                                    ZStack {
+                                        avatarImage(url: partner.profile_photo_url)
+                                            .offset(x: 25, y: 10)
+                                            .scaleEffect(0.9)
+                                        
+                                        avatarImage(url: user.profile_photo_url)
+                                            .overlay(Circle().stroke(Color.deepVelvet, lineWidth: 4))
+                                            .offset(x: -20)
+                                        
+                                        Image(systemName: "heart.fill")
+                                            .font(.system(size: 16))
+                                            .foregroundColor(.red)
+                                            .padding(6)
+                                            .background(Color.white)
+                                            .clipShape(Circle())
+                                            .shadow(radius: 5)
+                                            .offset(x: 10, y: 0)
+                                    }
+                                    .padding(.horizontal, 30)
                                 } else {
-                                    Text(user.name)
-                                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                                        .foregroundColor(.white)
+                                    avatarImage(url: user.profile_photo_url)
                                 }
                                 
-                                Text(user.email)
-                                    .font(.system(size: 13))
-                                    .foregroundColor(.white.opacity(0.5))
+                                VStack(spacing: 4) {
+                                    if let partner = auth.partner {
+                                        Text("\(user.name) & \(partner.name)")
+                                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                                            .foregroundColor(.white)
+                                    } else {
+                                        Text(user.name)
+                                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                                            .foregroundColor(.white)
+                                    }
+                                    
+                                    Text(user.email)
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.white.opacity(0.5))
+                                }
+                            }
+                            .padding(.top, 20)
+                        }
+                        
+                        // 2. Relationship Section
+                        VStack(alignment: .leading, spacing: 10) {
+                            sectionLabel(auth.partner != nil ? "Relationship (shared settings)" : "Get started")
+                            
+                            if let partner = auth.partner {
+                                CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: "Paired", color: .red)
+                                
+                                Button {
+                                    isShowingEditAnniversary = true
+                                } label: {
+                                    CompactMenuRow(icon: "calendar", title: "Anniversary date", value: formattedDate(auth.anniversaryDate ?? Date()), color: .electricPurple)
+                                }
+                            } else {
+                                inviteCard
                             }
                         }
-                        .padding(.top, 20)
-                    }
-                    
-                    // 2. Relationship Section
-                    VStack(alignment: .leading, spacing: 10) {
-                        sectionLabel(auth.partner != nil ? "Relationship (shared settings)" : "Get started")
+                        .padding(.horizontal)
                         
-                        if let partner = auth.partner {
-                            CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: "Paired", color: .red)
+                        // 3. Account Settings
+                        VStack(alignment: .leading, spacing: 10) {
+                            sectionLabel("Account settings")
                             
                             Button {
-                                isShowingEditAnniversary = true
+                                isShowingEditProfile = true
                             } label: {
-                                CompactMenuRow(icon: "calendar", title: "Anniversary date", value: formattedDate(auth.anniversaryDate ?? Date()), color: .electricPurple)
+                                CompactMenuRow(icon: "person.text.rectangle.fill", title: "Edit profile info", value: "Name, Email, Photo", color: .activeCyan)
                             }
-                        } else {
-                            inviteCard
+                            
+                            Button {
+                                isShowingChangePassword = true
+                            } label: {
+                                CompactMenuRow(icon: "lock.fill", title: "Change password", value: "Security", color: .orange)
+                            }
                         }
-                    }
-                    .padding(.horizontal)
-                    
-                    // 3. Account Settings
-                    VStack(alignment: .leading, spacing: 10) {
-                        sectionLabel("Account settings")
+                        .padding(.horizontal)
                         
+                        // 4. App & Privacy
+                        VStack(alignment: .leading, spacing: 10) {
+                            sectionLabel("App & privacy")
+                            
+                            Button {
+                                notificationsEnabled.toggle()
+                            } label: {
+                                CompactMenuRow(icon: "bell.fill", title: "Push notifications", value: notificationsEnabled ? "On" : "Off", color: .activeCyan)
+                            }
+                            
+                            Button {
+                                openAppSettings()
+                            } label: {
+                                CompactMenuRow(icon: "location.viewfinder", title: "Location sharing", value: locationStatus(), color: .green)
+                            }
+                            
+                            Link(destination: URL(string: "https://glimpse-app.com/privacy")!) {
+                                CompactMenuRow(icon: "shield.fill", title: "Privacy policy", value: "View", color: .secondary)
+                            }
+                        }
+                        .padding(.horizontal)
+                        
+                        // 5. Logout
                         Button {
-                            isShowingEditProfile = true
+                            auth.logout()
                         } label: {
-                            CompactMenuRow(icon: "person.text.rectangle.fill", title: "Edit profile info", value: "Name, Email, Photo", color: .activeCyan)
+                            HStack {
+                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                                    .font(.system(size: 14))
+                                Text("Logout from account")
+                                    .font(.system(size: 14, weight: .bold))
+                            }
+                            .foregroundColor(.red)
+                            .padding(.vertical, 12)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(12)
                         }
+                        .padding(.horizontal)
+                        .padding(.top, 10)
                         
-                        Button {
-                            isShowingChangePassword = true
-                        } label: {
-                            CompactMenuRow(icon: "lock.fill", title: "Change password", value: "Security", color: .orange)
-                        }
+                        Spacer(minLength: 120)
                     }
-                    .padding(.horizontal)
-                    
-                    // 4. App & Privacy
-                    VStack(alignment: .leading, spacing: 10) {
-                        sectionLabel("App & privacy")
-                        
-                        Button {
-                            notificationsEnabled.toggle()
-                        } label: {
-                            CompactMenuRow(icon: "bell.fill", title: "Push notifications", value: notificationsEnabled ? "On" : "Off", color: .activeCyan)
-                        }
-                        
-                        Button {
-                            openAppSettings()
-                        } label: {
-                            CompactMenuRow(icon: "location.viewfinder", title: "Location sharing", value: locationStatus(), color: .green)
-                        }
-                        
-                        Link(destination: URL(string: "https://glimpse-app.com/privacy")!) {
-                            CompactMenuRow(icon: "shield.fill", title: "Privacy policy", value: "View", color: .secondary)
-                        }
-                    }
-                    .padding(.horizontal)
-                    
-                    // 5. Logout
-                    Button {
-                        auth.logout()
-                    } label: {
-                        HStack {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
-                                .font(.system(size: 14))
-                            Text("Logout from account")
-                                .font(.system(size: 14, weight: .bold))
-                        }
-                        .foregroundColor(.red)
-                        .padding(.vertical, 12)
-                        .frame(maxWidth: .infinity)
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(12)
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, 10)
-                    
-                    Spacer(minLength: 120)
                 }
             }
             .coordinateSpace(name: "scroll")
@@ -306,8 +307,6 @@ struct ProfileView: View {
     
     private var headerOpacity: Double {
         // Logo starts fading after 20px scroll, disappears at 60px
-        let threshold: CGFloat = -40
-        if scrollOffset >= 0 { return 1.0 }
         let opacity = 1.0 + (scrollOffset / 60.0)
         return max(0, min(1, opacity))
     }
