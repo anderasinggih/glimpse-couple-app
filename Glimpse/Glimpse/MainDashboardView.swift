@@ -2,15 +2,15 @@ import SwiftUI
 
 struct MainDashboardView: View {
     @State private var auth = AuthManager.shared
-    @State private var selectedTab = 0
     
     var body: some View {
-        ZStack(alignment: .top) {
+        @Bindable var bindableAuth = auth
+        return ZStack(alignment: .top) {
             // GLOBAL BACKGROUND to fill safe areas
             Color.deepVelvet.ignoresSafeArea()
             
             // Standard Native TabView
-            TabView(selection: $selectedTab) {
+            TabView(selection: $bindableAuth.selectedTab) {
                 // Tab 0: Dashboard
                 dashboardView
                     .tabItem {

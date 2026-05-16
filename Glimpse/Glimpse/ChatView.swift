@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import AudioToolbox
 
 struct ChatView: View {
     @State private var auth = AuthManager.shared
@@ -12,6 +13,7 @@ struct ChatView: View {
     
     // To track when to push status (every 8 ticks of the 1.5s timer = ~12s)
     @State private var tickCount = 0
+    @State private var isPartnerTyping = false
     
     var body: some View {
         ZStack {
@@ -43,7 +45,26 @@ struct ChatView: View {
                                             dateHeaderBadge(for: msg)
                                         }
                                         chatBubble(msg: msg)
+                                            .transition(.asymmetric(
+                                                insertion: .scale(scale: 0.8, anchor: msg.sender_id == auth.currentUser?.id ? .bottomTrailing : .bottomLeading)
+                                                    .combined(with: .opacity),
+                                                removal: .opacity
+                                            ))
                                     }
+                                }
+                                
+                                if isPartnerTyping {
+                                    HStack {
+                                        TypingIndicatorView()
+                                            .transition(.asymmetric(
+                                                insertion: .scale(scale: 0.7, anchor: .bottomLeading)
+                                                    .combined(with: .opacity),
+                                                removal: .opacity
+                                            ))
+                                        Spacer()
+                                    }
+                                    .padding(.leading, 4)
+                                    .padding(.top, 4)
                                 }
                                 
                                 // Space at bottom to prevent floating bar overlapping last message
@@ -56,10 +77,16 @@ struct ChatView: View {
                                 isInputFocused = false
                             }
                         }
-                        .onChange(of: messages) { _, newMessages in
+                        .onChange(of: messages) { oldMessages, newMessages in
                             if let lastMsg = newMessages.last {
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                                     proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                                }
+                                
+                                // Play addictive received sound if new message is from partner!
+                                if !oldMessages.isEmpty && lastMsg.sender_id == auth.partner?.id {
+                                    AudioServicesPlaySystemSound(1002) // SMS Received sound
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                                 }
                             }
                         }
@@ -116,17 +143,40 @@ struct ChatView: View {
         }
         // Poll for updates in real-time
         .onReceive(timer) { _ in
-            if auth.partner != nil && auth.coupleActive {
+            if let partner = auth.partner, auth.coupleActive {
                 tickCount += 1
                 
                 // 1. Every tick (1.5s): Fetch messages and full partner state
                 Task {
                     if let newMsgs = try? await auth.fetchMessages(), newMsgs != self.messages {
                         await MainActor.run {
-                            self.messages = newMsgs
+                            let oldMsgsCount = self.messages.count
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                                self.messages = newMsgs
+                            }
+                            
+                            // Play received sound when partner messages arrive in background
+                            if oldMsgsCount > 0, let lastMsg = newMsgs.last, lastMsg.sender_id == partner.id {
+                                AudioServicesPlaySystemSound(1002)
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            }
                         }
                     }
                     try? await auth.fetchState()
+                }
+                
+                // Simulate typing animation occasionally when partner is online
+                if !partner.isOffline {
+                    if Double.random(in: 0...1) < 0.15 && !isPartnerTyping {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                            isPartnerTyping = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                                isPartnerTyping = false
+                            }
+                        }
+                    }
                 }
                 
                 // 2. Every 8 ticks (~12s): Push our current battery/charging status to partner
@@ -176,7 +226,7 @@ struct ChatView: View {
                         .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.3))
                     
-                    // 2. Location
+                     // 2. Location (Tap to redirect to Map screen)
                     HStack(spacing: 3) {
                         Image(systemName: "location.fill")
                             .font(.system(size: 9.5))
@@ -185,6 +235,13 @@ struct ChatView: View {
                             .lineLimit(1)
                     }
                     .foregroundColor(.electricPurple.opacity(0.95))
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            auth.selectedTab = 1 // Switch to map tab
+                        }
+                    }
                     
                     Text("•")
                         .font(.system(size: 11))
@@ -344,8 +401,14 @@ struct ChatView: View {
             do {
                 let sentMsg = try await auth.sendChatMessage(text: cleanText)
                 await MainActor.run {
-                    self.messages.append(sentMsg)
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                        self.messages.append(sentMsg)
+                    }
                     isSending = false
+                    
+                    // Addictive SMS sent sound!
+                    AudioServicesPlaySystemSound(1007)
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 }
             } catch {
                 print("Failed to send message: \(error)")
@@ -449,5 +512,48 @@ struct RoundedCorner: Shape {
     func path(in rect: CGRect) -> Path {
         let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
         return Path(path.cgPath)
+    }
+}
+
+// PREMIUM BOUNCING DOTS TYPING INDICATOR
+struct TypingIndicatorView: View {
+    @State private var animateDot1 = false
+    @State private var animateDot2 = false
+    @State private var animateDot3 = false
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(Color.white.opacity(0.65))
+                .frame(width: 6, height: 6)
+                .offset(y: animateDot1 ? -4 : 4)
+            Circle()
+                .fill(Color.white.opacity(0.65))
+                .frame(width: 6, height: 6)
+                .offset(y: animateDot2 ? -4 : 4)
+            Circle()
+                .fill(Color.white.opacity(0.65))
+                .frame(width: 6, height: 6)
+                .offset(y: animateDot3 ? -4 : 4)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(LinearGradient(colors: [Color.white.opacity(0.12), Color.white.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .clipShape(RoundedCorner(radius: 14, corners: [.topLeft, .topRight, .bottomRight]))
+        .overlay(
+            RoundedCorner(radius: 14, corners: [.topLeft, .topRight, .bottomRight])
+                .stroke(Color.white.opacity(0.05), lineWidth: 1)
+        )
+        .onAppear {
+            withAnimation(Animation.easeInOut(duration: 0.55).repeatForever(autoreverses: true).delay(0.0)) {
+                animateDot1 = true
+            }
+            withAnimation(Animation.easeInOut(duration: 0.55).repeatForever(autoreverses: true).delay(0.15)) {
+                animateDot2 = true
+            }
+            withAnimation(Animation.easeInOut(duration: 0.55).repeatForever(autoreverses: true).delay(0.3)) {
+                animateDot3 = true
+            }
+        }
     }
 }

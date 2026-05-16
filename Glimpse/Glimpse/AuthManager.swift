@@ -14,6 +14,7 @@ class AuthManager {
     var coupleActive = false
     var invitedBy: Int?
     var showInviteDeclinedAlert = false
+    var selectedTab = 0
     
     var userToken: String? {
         UserDefaults.standard.string(forKey: "auth_token")
