@@ -26,8 +26,7 @@ struct FullPartnerMapView: View {
             }
             .mapStyle(isSatellite ? .hybrid(elevation: .realistic) : .standard(emphasis: .muted))
             .mapControls {
-                MapCompass()
-                MapUserLocationButton()
+                // Keep only essential system controls that don't overlap
                 MapScaleView()
             }
             .ignoresSafeArea()
@@ -38,25 +37,51 @@ struct FullPartnerMapView: View {
                 
                 HStack {
                     Spacer()
-                    // Map Style Switcher (Find My Style)
-                    Button {
-                        withAnimation {
-                            isSatellite.toggle()
+                    // Top Right: Compass & Map Style (Liquid Glass)
+                    VStack(spacing: 12) {
+                        // System Compass (Custom placement)
+                        MapCompass()
+                            .mapControlVisibility(.visible)
+                        
+                        Button {
+                            withAnimation(.spring()) {
+                                isSatellite.toggle()
+                            }
+                        } label: {
+                            Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(12)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Circle())
+                                .shadow(color: .black.opacity(0.2), radius: 10)
                         }
-                    } label: {
-                        Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(.white)
-                            .padding(12)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Circle())
-                            .shadow(radius: 10)
                     }
-                    .padding(.trailing, 20)
+                    .padding(.trailing, 16)
                     .padding(.top, 10)
                 }
                 
                 Spacer()
+                
+                // Bottom Right: Location Button (Moved down for better reachability)
+                HStack {
+                    Spacer()
+                    Button {
+                        withAnimation {
+                            position = .userLocation(fallback: .automatic)
+                        }
+                    } label: {
+                        Image(systemName: "location.fill")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(14)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Circle())
+                            .shadow(color: .black.opacity(0.2), radius: 10)
+                    }
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 10)
+                }
                 
                 // Bottom Info Card
                 PartnerOverlayCard(user: user)
