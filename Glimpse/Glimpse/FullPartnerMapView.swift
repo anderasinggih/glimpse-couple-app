@@ -5,6 +5,9 @@ struct FullPartnerMapView: View {
     let user: GlimpseUser
     @State private var position: MapCameraPosition
     
+    @State private var mapStyle: MapStyle = .standard(emphasis: .muted)
+    @State private var isSatellite = false
+    
     init(user: GlimpseUser) {
         self.user = user
         _position = State(initialValue: .region(MKCoordinateRegion(
@@ -21,12 +24,37 @@ struct FullPartnerMapView: View {
                     PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline)
                 }
             }
-            .mapStyle(.standard(emphasis: .muted))
+            .mapStyle(isSatellite ? .hybrid(elevation: .realistic) : .standard(emphasis: .muted))
+            .mapControls {
+                MapCompass()
+                MapUserLocationButton()
+                MapScaleView()
+            }
             .ignoresSafeArea()
             
             // Branding Overlay
             VStack(spacing: 0) {
                 BrandingHeader()
+                
+                HStack {
+                    Spacer()
+                    // Map Style Switcher (Find My Style)
+                    Button {
+                        withAnimation {
+                            isSatellite.toggle()
+                        }
+                    } label: {
+                        Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(12)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Circle())
+                            .shadow(radius: 10)
+                    }
+                    .padding(.trailing, 20)
+                    .padding(.top, 10)
+                }
                 
                 Spacer()
                 
