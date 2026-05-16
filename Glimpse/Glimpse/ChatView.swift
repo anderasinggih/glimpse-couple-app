@@ -28,53 +28,65 @@ struct ChatView: View {
             
             // LAYER 2: Main Content
             if let partner = auth.partner, auth.coupleActive {
-                VStack(spacing: 0) {
-                    // Premium Small Header
-                    chatHeader(partner: partner)
-                        .zIndex(10)
+                ZStack(alignment: .top) {
                     
-                    // Messages and Floating Input
-                    ZStack(alignment: .bottom) {
-                        // Scrollable Messages List
-                        ScrollViewReader { proxy in
-                            ScrollView {
-                                VStack(spacing: 12) {
-                                    ForEach(messages) { msg in
+                    // Messages ScrollView (occupies full height, goes UNDER header)
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(spacing: 12) {
+                                // Top space to offset first message below the frosted header
+                                Spacer().frame(height: 110)
+                                
+                                ForEach(Array(messages.enumerated()), id: \.element.id) { index, msg in
+                                    VStack(spacing: 12) {
+                                        if shouldShowDateHeader(for: index) {
+                                            dateHeaderBadge(for: msg)
+                                        }
                                         chatBubble(msg: msg)
                                     }
-                                    
-                                    // Space to avoid being covered by floating input bar
-                                    Spacer().frame(height: 85)
                                 }
-                                .padding(.horizontal, 16)
-                                .padding(.top, 15)
-                                .frame(maxWidth: .infinity, minHeight: 600)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    isInputFocused = false
-                                }
+                                
+                                // Space at bottom to prevent floating bar overlapping last message
+                                Spacer().frame(height: 95)
                             }
-                            .onChange(of: messages) { _, newMessages in
-                                if let lastMsg = newMessages.last {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                        proxy.scrollTo(lastMsg.id, anchor: .bottom)
-                                    }
-                                }
+                            .padding(.horizontal, 16)
+                            .frame(maxWidth: .infinity, minHeight: 600)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                isInputFocused = false
                             }
-                            .onAppear {
-                                if let lastMsg = messages.last {
+                        }
+                        .onChange(of: messages) { _, newMessages in
+                            if let lastMsg = newMessages.last {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                                     proxy.scrollTo(lastMsg.id, anchor: .bottom)
                                 }
                             }
                         }
-                        
-                        // Floating Message Input (Frosted Glass Container)
+                        .onAppear {
+                            if let lastMsg = messages.last {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                                        proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Floating Message Input (Frosted Glass Container) - aligned bottom
+                    VStack {
+                        Spacer()
                         floatingInputBar
                             .padding(.horizontal, 16)
                             .padding(.bottom, 16)
                     }
+                    .ignoresSafeArea(.keyboard) // Behaves smoothly with keyboard
+                    
+                    // Premium Small Header - aligned top overlaying ScrollView!
+                    chatHeader(partner: partner)
+                        .zIndex(10)
                 }
-                .ignoresSafeArea(edges: .top)
             } else {
                 // Not Connected Placeholder
                 VStack(spacing: 20) {
@@ -127,7 +139,7 @@ struct ChatView: View {
         }
     }
     
-    // PREMIUM TINY HEADER
+    // PREMIUM TINY HEADER WITH INTEGRATED BLUR EFFECT (Bleeds to top edge)
     private func chatHeader(partner: GlimpseUser) -> some View {
         HStack(spacing: 12) {
             // Profile Photo (Small circle)
@@ -247,33 +259,68 @@ struct ChatView: View {
         }
     }
     
+    // WHATSAPP STYLE CHAT BUBBLES WITH INDIVIDUAL TIME STAMPS
     private func chatBubble(msg: ChatMessage) -> some View {
         let isMe = msg.sender_id == auth.currentUser?.id
         let corners: UIRectCorner = isMe ? [.topLeft, .topRight, .bottomLeft] : [.topLeft, .topRight, .bottomRight]
+        let timeStr = formatMessageTime(msg.created_at)
         
         return HStack {
             if isMe {
                 Spacer()
             }
             
-            Text(msg.message)
-                .font(.system(size: 15))
-                .foregroundColor(isMe ? .deepVelvet : .white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(bubbleBackground(isMe: isMe))
-                .clipShape(RoundedCorner(radius: 18, corners: corners))
-                .overlay(
-                    RoundedCorner(radius: 18, corners: corners)
-                        .stroke(isMe ? Color.clear : Color.white.opacity(0.05), lineWidth: 1)
-                )
-                .shadow(color: isMe ? Color.electricPurple.opacity(0.2) : Color.clear, radius: 8, y: 4)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(msg.message)
+                    .font(.system(size: 15))
+                    .foregroundColor(isMe ? .deepVelvet : .white)
+                    .multilineTextAlignment(.leading)
+                
+                if !timeStr.isEmpty {
+                    Text(timeStr)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(isMe ? .deepVelvet.opacity(0.6) : .white.opacity(0.4))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(bubbleBackground(isMe: isMe))
+            .clipShape(RoundedCorner(radius: 18, corners: corners))
+            .overlay(
+                RoundedCorner(radius: 18, corners: corners)
+                    .stroke(isMe ? Color.clear : Color.white.opacity(0.05), lineWidth: 1)
+            )
+            .shadow(color: isMe ? Color.electricPurple.opacity(0.2) : Color.clear, radius: 8, y: 4)
             
             if !isMe {
                 Spacer()
             }
         }
         .id(msg.id)
+    }
+    
+    // WHATSAPP STYLE DYNAMIC CENTERED DATE BADGE
+    private func dateHeaderBadge(for msg: ChatMessage) -> some View {
+        guard let raw = msg.created_at else { return AnyView(EmptyView()) }
+        let dateStr = formatMessageDayString(raw)
+        return AnyView(
+            HStack {
+                Spacer()
+                Text(dateStr)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white.opacity(0.6))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.08))
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.white.opacity(0.04), lineWidth: 1)
+                    )
+                Spacer()
+            }
+            .padding(.vertical, 8)
+        )
     }
     
     private func loadMessages() {
@@ -325,6 +372,73 @@ struct ChatView: View {
             let cleanPath = urlString.hasPrefix("/") ? String(urlString.dropFirst()) : urlString
             let baseURL = AuthManager.shared.baseURL.replacingOccurrences(of: "/api", with: "")
             return cleanPath.contains("storage/") ? "\(baseURL)/\(cleanPath)" : "\(baseURL)/storage/\(cleanPath)"
+        }
+    }
+    
+    // FORMAT RAW TIME STRING TO LOCAL HOUR/MINUTE (HH:MM)
+    private func formatMessageTime(_ rawDate: String?) -> String {
+        guard let rawDate = rawDate else { return "" }
+        
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        var date = formatter.date(from: rawDate)
+        
+        if date == nil {
+            let fallbackFormatter = DateFormatter()
+            fallbackFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+            fallbackFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+            date = fallbackFormatter.date(from: rawDate)
+        }
+        
+        guard let validDate = date else { return "" }
+        
+        let outputFormatter = DateFormatter()
+        outputFormatter.dateFormat = "HH:mm"
+        outputFormatter.timeZone = TimeZone.current
+        return outputFormatter.string(from: validDate)
+    }
+    
+    // FORMAT DATE TO WHATSAPP STYLE LABELS ("Today", "Yesterday", or "16 May 2026")
+    private func shouldShowDateHeader(for index: Int) -> Bool {
+        guard index < messages.count else { return false }
+        if index == 0 { return true }
+        
+        let currentMsg = messages[index]
+        let prevMsg = messages[index - 1]
+        
+        guard let currentRaw = currentMsg.created_at, let prevRaw = prevMsg.created_at else { return false }
+        
+        let currentDay = formatMessageDayString(currentRaw)
+        let prevDay = formatMessageDayString(prevRaw)
+        
+        return currentDay != prevDay
+    }
+    
+    private func formatMessageDayString(_ rawDate: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        var date = formatter.date(from: rawDate)
+        
+        if date == nil {
+            let fallbackFormatter = DateFormatter()
+            fallbackFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+            fallbackFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+            date = fallbackFormatter.date(from: rawDate)
+        }
+        
+        guard let validDate = date else { return "" }
+        
+        let calendar = Calendar.current
+        if calendar.isDateInToday(validDate) {
+            return "Today"
+        } else if calendar.isDateInYesterday(validDate) {
+            return "Yesterday"
+        } else {
+            let outputFormatter = DateFormatter()
+            outputFormatter.dateFormat = "d MMMM yyyy"
+            return outputFormatter.string(from: validDate)
         }
     }
 }
