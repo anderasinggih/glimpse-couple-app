@@ -86,19 +86,7 @@ struct MainDashboardView: View {
     }
     
     private var headerView: some View {
-        HStack {
-            HStack(spacing: 10) {
-                Image(systemName: "heart.fill")
-                    .foregroundColor(.electricPurple)
-                    .font(.system(size: 28))
-                
-                Text("Glimpse")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 20)
+        BrandingHeader()
     }
 }
 

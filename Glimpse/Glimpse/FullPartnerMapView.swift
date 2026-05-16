@@ -26,24 +26,8 @@ struct FullPartnerMapView: View {
             
             // Branding Overlay
             VStack(spacing: 0) {
-                HStack {
-                    HStack(spacing: 10) {
-                        Image(systemName: "heart.fill")
-                            .font(.system(size: 28))
-                            .foregroundColor(.electricPurple)
-                        Text("Glimpse")
-                            .font(.system(size: 24, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(.ultraThinMaterial.opacity(0.8))
-                    .cornerRadius(20)
-                    .padding(.leading, 10)
-                    
-                    Spacer()
-                }
-                .padding(.top, 10)
+                BrandingHeader()
+                    .padding(.top, 10)
                 
                 Spacer()
                 

@@ -68,27 +68,22 @@ struct FlashCameraView: View {
     }
     
     private var headerSection: some View {
-        HStack {
-            HStack(spacing: 10) {
-                Image(systemName: "heart.fill")
-                    .font(.system(size: 28))
-                    .foregroundColor(.electricPurple)
-                Text("Glimpse")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-            }
-            Spacer()
+        ZStack {
+            BrandingHeader()
             
-            Button { model.switchCamera() } label: {
-                Image(systemName: "camera.rotate")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(10)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Circle())
+            HStack {
+                Spacer()
+                Button { model.switchCamera() } label: {
+                    Image(systemName: "camera.rotate")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(10)
+                        .background(.ultraThinMaterial)
+                        .clipShape(Circle())
+                }
+                .padding(.trailing, 20)
             }
         }
-        .padding(.horizontal, 20)
     }
     
     private func loadingFrame(size: CGFloat) -> some View {
