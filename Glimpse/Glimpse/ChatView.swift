@@ -270,21 +270,25 @@ struct ChatView: View {
     
     // FLOATING MESSAGE INPUT BAR (Fully floating, glassmorphic, separate rounded capsule and button)
     private var floatingInputBar: some View {
-        HStack(spacing: 10) {
-            // Fully rounded input capsule
+        let isMultiLine = messageInput.contains("\n") || messageInput.count > 26
+        let currentRadius: CGFloat = isMultiLine ? 16 : 22
+        
+        return HStack(spacing: 10) {
+            // Dynamically rounded input capsule matching send button height (44)
             HStack {
                 TextField("Type a message...", text: $messageInput, axis: .vertical)
                     .font(.system(size: 15))
                     .foregroundColor(.white)
                     .lineLimit(1...4)
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 8)
                     .focused($isInputFocused)
             }
+            .frame(minHeight: 44)
             .background(.ultraThinMaterial)
-            .clipShape(Capsule())
+            .clipShape(RoundedRectangle(cornerRadius: currentRadius))
             .overlay(
-                Capsule()
+                RoundedRectangle(cornerRadius: currentRadius)
                     .stroke(Color.white.opacity(0.15), lineWidth: 1.2)
             )
             .shadow(color: Color.black.opacity(0.15), radius: 8, y: 4)
