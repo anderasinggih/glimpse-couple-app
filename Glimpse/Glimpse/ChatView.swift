@@ -141,7 +141,7 @@ struct ChatView: View {
     
     // PREMIUM TINY HEADER WITH INTEGRATED BLUR EFFECT (Bleeds to top edge)
     private func chatHeader(partner: GlimpseUser) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             // Profile Photo (Small circle)
             AsyncImage(url: URL(string: formattedUrl(partner.profile_photo_url))) { image in
                 image.resizable()
@@ -149,57 +149,57 @@ struct ChatView: View {
             } placeholder: {
                 Color.white.opacity(0.1)
             }
-            .frame(width: 38, height: 38)
+            .frame(width: 44, height: 44)
             .clipShape(Circle())
             .overlay(Circle().stroke(Color.electricPurple.opacity(0.3), lineWidth: 1.5))
             
             // Partner Details (Tiny & Compact)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 7) {
                     Text(partner.name)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 16.5, weight: .bold))
                         .foregroundColor(.white)
                     
                     // Online Indicator Dot
                     Circle()
                         .fill(partner.isOffline ? Color.gray : Color.green)
-                        .frame(width: 6, height: 6)
+                        .frame(width: 7, height: 7)
                 }
                 
                 // Status, Location, and Battery
-                HStack(spacing: 8) {
+                HStack(spacing: 10) {
                     // 1. Online / Offline Status
                     Text(partner.isOffline ? "Offline" : "Online")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white.opacity(0.5))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.55))
                     
                     Text("•")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.3))
                     
                     // 2. Location
-                    HStack(spacing: 2) {
+                    HStack(spacing: 3) {
                         Image(systemName: "location.fill")
-                            .font(.system(size: 8))
+                            .font(.system(size: 9.5))
                         Text(partner.location_name ?? "Unknown")
-                            .font(.system(size: 10))
+                            .font(.system(size: 11, weight: .medium))
                             .lineLimit(1)
                     }
-                    .foregroundColor(.electricPurple.opacity(0.8))
+                    .foregroundColor(.electricPurple.opacity(0.95))
                     
                     Text("•")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.3))
                     
                     // 3. Battery with Charging Support
-                    HStack(spacing: 2) {
+                    HStack(spacing: 3) {
                         Image(systemName: partner.is_charging == true ? "battery.100.bolt" : "battery.75")
-                            .font(.system(size: 10))
-                            .foregroundColor(partner.is_charging == true ? .green : (partner.battery_level ?? 100 > 20 ? .white.opacity(0.6) : .red))
+                            .font(.system(size: 11))
+                            .foregroundColor(partner.is_charging == true ? .green : (partner.battery_level ?? 100 > 20 ? .white.opacity(0.7) : .red))
                         Text("\(partner.battery_level ?? 100)%")
-                            .font(.system(size: 10))
+                            .font(.system(size: 11, weight: .semibold))
                     }
-                    .foregroundColor(.white.opacity(0.6))
+                    .foregroundColor(.white.opacity(0.7))
                 }
             }
             
@@ -207,7 +207,7 @@ struct ChatView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 50)
-        .padding(.bottom, 10)
+        .padding(.bottom, 12)
         .background(.ultraThinMaterial)
         .ignoresSafeArea(edges: .top)
     }
