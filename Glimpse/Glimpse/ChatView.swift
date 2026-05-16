@@ -83,10 +83,10 @@ struct ChatView: View {
                                     proxy.scrollTo(lastMsg.id, anchor: .bottom)
                                 }
                                 
-                                // Play addictive received sound if new message is from partner!
+                                // Play soft "ting" sound (1103) and tactile "klek" haptic (.rigid) when partner message is received
                                 if !oldMessages.isEmpty && lastMsg.sender_id == auth.partner?.id {
-                                    AudioServicesPlaySystemSound(1002) // SMS Received sound
-                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    AudioServicesPlaySystemSound(1103) // Soft ting/chime
+                                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                                 }
                             }
                         }
@@ -155,10 +155,10 @@ struct ChatView: View {
                                 self.messages = newMsgs
                             }
                             
-                            // Play received sound when partner messages arrive in background
+                            // Play soft "ting" sound (1103) and tactile "klek" haptic (.rigid) on background messages
                             if oldMsgsCount > 0, let lastMsg = newMsgs.last, lastMsg.sender_id == partner.id {
-                                AudioServicesPlaySystemSound(1002)
-                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                AudioServicesPlaySystemSound(1103) // Soft ting/chime
+                                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                             }
                         }
                     }
@@ -410,9 +410,9 @@ struct ChatView: View {
                     }
                     isSending = false
                     
-                    // Addictive SMS sent sound!
-                    AudioServicesPlaySystemSound(1007)
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    // Soft "tek" click sound (Tink: 1104) and haptic "klek" (.rigid) on send
+                    AudioServicesPlaySystemSound(1104) // Soft WA-like tek click
+                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                 }
             } catch {
                 print("Failed to send message: \(error)")
