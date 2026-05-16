@@ -68,6 +68,72 @@ class AuthManager {
         
         try await fetchState()
     }
+
+    func updateProfile(name: String?, email: String?, photo: UIImage?) async throws {
+        guard let url = URL(string: "\(baseURL)/user/update") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        
+        var body = Data()
+        if let name = name {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"name\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(name)\r\n".data(using: .utf8)!)
+        }
+        
+        if let email = email {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"email\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(email)\r\n".data(using: .utf8)!)
+        }
+        
+        if let photo = photo, let imageData = photo.jpegData(compressionQuality: 0.7) {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"profile_photo\"; filename=\"avatar.jpg\"\r\n".data(using: .utf8)!)
+            body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+            body.append(imageData)
+            body.append("\r\n".data(using: .utf8)!)
+        }
+        
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        request.httpBody = body
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 500, userInfo: [NSLocalizedDescriptionKey: "Update failed"])
+        }
+        
+        try await fetchState()
+    }
+
+    func updateAnniversary(date: Date) async throws {
+        guard let url = URL(string: "\(baseURL)/couple/anniversary") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let formatter = ISO8601DateFormatter()
+        let body = ["anniversary_date": formatter.string(from: date)]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Update failed"])
+        }
+        
+        try await fetchState()
+    }
     
     func login(email: String, password: String) async throws {
         guard let url = URL(string: "\(baseURL)/login") else { return }

@@ -14,10 +14,13 @@ class GlimpseController extends Controller
         
         // Find partner if in a couple
         $partner = null;
+        $couple = null;
         if ($user->couple_id) {
             $partner = \App\Models\User::where('couple_id', $user->couple_id)
                 ->where('id', '!=', $user->id)
                 ->first();
+            
+            $couple = \App\Models\Couple::find($user->couple_id);
         }
 
         return response()->json([
@@ -30,8 +33,47 @@ class GlimpseController extends Controller
                 'couple_id' => $user->couple_id
             ],
             'partner_data' => $partner,
-            'anniversary_start_date' => $user->couple_id ? "2023-10-20T00:00:00Z" : null // Mock for now
+            'anniversary_start_date' => $couple ? $couple->anniversary_start_date : null
         ]);
+    }
+
+    public function updateProfile(Request $request)
+    {
+        $user = $request->user();
+        $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'email' => 'sometimes|email|unique:users,email,' . $user->id,
+            'profile_photo' => 'sometimes|image|max:5120'
+        ]);
+
+        if ($request->has('name')) $user->name = $request->name;
+        if ($request->has('email')) $user->email = $request->email;
+        
+        if ($request->hasFile('profile_photo')) {
+            if ($user->profile_photo_url && !str_contains($user->profile_photo_url, 'ui-avatars')) {
+                Storage::disk('public')->delete(str_replace('/storage/', '', $user->profile_photo_url));
+            }
+            $path = $request->file('profile_photo')->store('avatars', 'public');
+            $user->profile_photo_url = Storage::url($path);
+        }
+
+        $user->save();
+        return response()->json(['message' => 'Profile updated!', 'user' => $user]);
+    }
+
+    public function updateRelationship(Request $request)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) return response()->json(['message' => 'Not in a relationship'], 400);
+
+        $request->validate(['anniversary_date' => 'required|date']);
+        
+        $couple = \App\Models\Couple::updateOrCreate(
+            ['id' => $user->couple_id],
+            ['anniversary_start_date' => $request->anniversary_date]
+        );
+
+        return response()->json(['message' => 'Relationship updated!', 'anniversary_date' => $couple->anniversary_start_date]);
     }
 
     public function connect(Request $request)

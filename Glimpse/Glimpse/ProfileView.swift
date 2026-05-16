@@ -1,10 +1,13 @@
 import SwiftUI
+import PhotosUI
 import CoreLocation
 
 struct ProfileView: View {
     @State private var auth = AuthManager.shared
     @State private var inviteCodeInput = ""
     @State private var isShowingInviteAlert = false
+    @State private var isShowingEditProfile = false
+    @State private var isShowingEditAnniversary = false
     @State private var notificationsEnabled = true
     
     var body: some View {
@@ -20,29 +23,38 @@ struct ProfileView: View {
                 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 24) {
-                        // 1. Profile Summary (Compact)
-                        if let user = auth.currentUser {
-                            VStack(spacing: 12) {
-                                AsyncImage(url: URL(string: user.profile_photo_url)) { image in
-                                    image.resizable().aspectRatio(contentMode: .fill)
-                                } placeholder: {
-                                    Circle().fill(Color.gray.opacity(0.3))
+                        // 1. Profile Summary (Compact & Clickable)
+                        Button {
+                            isShowingEditProfile = true
+                        } label: {
+                            if let user = auth.currentUser {
+                                VStack(spacing: 12) {
+                                    AsyncImage(url: URL(string: user.profile_photo_url)) { image in
+                                        image.resizable().aspectRatio(contentMode: .fill)
+                                    } placeholder: {
+                                        Circle().fill(Color.gray.opacity(0.3))
+                                    }
+                                    .frame(width: 80, height: 80)
+                                    .clipShape(Circle())
+                                    .overlay(Circle().stroke(Color.electricPurple, lineWidth: 2))
+                                    .shadow(color: .electricPurple.opacity(0.2), radius: 10)
+                                    
+                                    VStack(spacing: 2) {
+                                        HStack(spacing: 5) {
+                                            Text(user.name)
+                                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                                .foregroundColor(.white)
+                                            Image(systemName: "pencil")
+                                                .font(.system(size: 10))
+                                                .foregroundColor(.electricPurple)
+                                        }
+                                        Text(user.email)
+                                            .font(.system(size: 13))
+                                            .foregroundColor(.white.opacity(0.5))
+                                    }
                                 }
-                                .frame(width: 80, height: 80)
-                                .clipShape(Circle())
-                                .overlay(Circle().stroke(Color.electricPurple, lineWidth: 2))
-                                .shadow(color: .electricPurple.opacity(0.2), radius: 10)
-                                
-                                VStack(spacing: 2) {
-                                    Text(user.name)
-                                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                                        .foregroundColor(.white)
-                                    Text(user.email)
-                                        .font(.system(size: 13))
-                                        .foregroundColor(.white.opacity(0.5))
-                                }
+                                .padding(.top, 20)
                             }
-                            .padding(.top, 20)
                         }
                         
                         // 2. Relationship Section
@@ -51,8 +63,11 @@ struct ProfileView: View {
                             
                             if let partner = auth.partner {
                                 CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: "Paired", color: .red)
-                                if let date = auth.anniversaryDate {
-                                    CompactMenuRow(icon: "calendar", title: "Anniversary date", value: formattedDate(date), color: .electricPurple)
+                                
+                                Button {
+                                    isShowingEditAnniversary = true
+                                } label: {
+                                    CompactMenuRow(icon: "calendar", title: "Anniversary date", value: formattedDate(auth.anniversaryDate ?? Date()), color: .electricPurple)
                                 }
                             } else {
                                 inviteCard
@@ -105,6 +120,14 @@ struct ProfileView: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: $isShowingEditProfile) {
+            EditProfileView(auth: auth)
+                .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $isShowingEditAnniversary) {
+            EditAnniversaryView(auth: auth)
+                .presentationDetents([.height(300)])
         }
         .alert("Connect Partner", isPresented: $isShowingInviteAlert) {
             TextField("Partner code", text: $inviteCodeInput)
@@ -214,6 +237,172 @@ struct ProfileView: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         return formatter.string(from: date)
+    }
+}
+
+struct EditProfileView: View {
+    @Bindable var auth: AuthManager
+    @State private var name = ""
+    @State private var email = ""
+    @State private var selectedItem: PhotosPickerItem?
+    @State private var selectedImage: UIImage?
+    @State private var isSaving = false
+    @Environment(\.dismiss) var dismiss
+    
+    init(auth: AuthManager) {
+        self.auth = auth
+        _name = State(initialValue: auth.currentUser?.name ?? "")
+        _email = State(initialValue: auth.currentUser?.email ?? "")
+    }
+    
+    var body: some View {
+        ZStack {
+            Color.deepVelvet.ignoresSafeArea()
+            
+            VStack(spacing: 20) {
+                Text("Edit Profile")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding(.top)
+                
+                PhotosPicker(selection: $selectedItem, matching: .images) {
+                    if let image = selectedImage {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 80, height: 80)
+                            .clipShape(Circle())
+                    } else {
+                        AsyncImage(url: URL(string: auth.currentUser?.profile_photo_url ?? "")) { image in
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Circle().fill(Color.gray.opacity(0.3))
+                        }
+                        .frame(width: 80, height: 80)
+                        .clipShape(Circle())
+                    }
+                }
+                .onChange(of: selectedItem) { old, new in
+                    Task {
+                        if let data = try? await new?.loadData(type: Data.self), let image = UIImage(data: data) {
+                            selectedImage = image
+                        }
+                    }
+                }
+                
+                VStack(spacing: 12) {
+                    TextField("Name", text: $name)
+                        .padding()
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(12)
+                    
+                    TextField("Email", text: $email)
+                        .padding()
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(12)
+                        .keyboardType(.emailAddress)
+                        .autocapitalization(.none)
+                }
+                .padding(.horizontal)
+                
+                Button {
+                    saveProfile()
+                } label: {
+                    if isSaving {
+                        ProgressView().tint(.deepVelvet)
+                    } else {
+                        Text("Save changes")
+                            .font(.headline)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.electricPurple)
+                .foregroundColor(.deepVelvet)
+                .cornerRadius(16)
+                .padding(.horizontal)
+                .disabled(isSaving)
+                
+                Spacer()
+            }
+        }
+    }
+    
+    private func saveProfile() {
+        isSaving = true
+        Task {
+            do {
+                try await auth.updateProfile(name: name, email: email, photo: selectedImage)
+                dismiss()
+            } catch {
+                print("Failed to save: \(error)")
+            }
+            isSaving = false
+        }
+    }
+}
+
+struct EditAnniversaryView: View {
+    @Bindable var auth: AuthManager
+    @State private var date = Date()
+    @State private var isSaving = false
+    @Environment(\.dismiss) var dismiss
+    
+    init(auth: AuthManager) {
+        self.auth = auth
+        _date = State(initialValue: auth.anniversaryDate ?? Date())
+    }
+    
+    var body: some View {
+        ZStack {
+            Color.deepVelvet.ignoresSafeArea()
+            
+            VStack(spacing: 20) {
+                Text("Select Anniversary Date")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding(.top)
+                
+                DatePicker("", selection: $date, displayedComponents: .date)
+                    .datePickerStyle(.wheel)
+                    .labelsHidden()
+                    .colorInvert() // For dark mode wheel visibility
+                    .colorMultiply(.white)
+                
+                Button {
+                    saveAnniversary()
+                } label: {
+                    if isSaving {
+                        ProgressView().tint(.deepVelvet)
+                    } else {
+                        Text("Update date")
+                            .font(.headline)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.electricPurple)
+                .foregroundColor(.deepVelvet)
+                .cornerRadius(16)
+                .padding(.horizontal)
+                .disabled(isSaving)
+                
+                Spacer()
+            }
+        }
+    }
+    
+    private func saveAnniversary() {
+        isSaving = true
+        Task {
+            do {
+                try await auth.updateAnniversary(date: date)
+                dismiss()
+            } catch {
+                print("Failed to save: \(error)")
+            }
+            isSaving = false
+        }
     }
 }
 
