@@ -176,14 +176,26 @@ struct PartnerOverlayCard: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(user.name)
                             .font(.system(size: 18, weight: .bold))
-                        Text("Updated \(timeAgo(from: user.lastUpdatedDate))")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        
+                        if user.isOffline {
+                            Text("Last sync \(timeAgo(from: user.lastUpdatedDate)) (Offline)")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.5))
+                        } else {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 6, height: 6)
+                                Text("Live Syncing (Online)")
+                                    .font(.caption)
+                                    .foregroundColor(.green)
+                            }
+                        }
                     }
                     
                     Spacer()
                     
-                    BatteryIndicator(level: user.battery_level ?? 0)
+                    BatteryIndicator(level: user.battery_level ?? 0, isCharging: user.is_charging)
                 }
                 
                 HStack(spacing: 8) {
@@ -247,8 +259,10 @@ struct PartnerOverlayCard: View {
 
 struct BatteryIndicator: View {
     let level: Int
+    let isCharging: Bool?
     
     var color: Color {
+        if isCharging == true { return .green }
         if level > 60 { return .green }
         if level > 20 { return .yellow }
         return .red
@@ -256,7 +270,7 @@ struct BatteryIndicator: View {
     
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: level > 20 ? "battery.100" : "battery.25")
+            Image(systemName: isCharging == true ? "battery.100.bolt" : (level > 20 ? "battery.100" : "battery.25"))
                 .foregroundColor(color)
             Text("\(level)%")
                 .font(.system(size: 14, weight: .bold, design: .rounded))
