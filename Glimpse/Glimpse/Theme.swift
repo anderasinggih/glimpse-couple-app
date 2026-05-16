@@ -99,42 +99,22 @@ struct LiquidGlassModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [.white.opacity(0.5), .clear, .white.opacity(0.2)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.8
-                    )
-            )
-            .shadow(color: Color.black.opacity(0.15), radius: 20, x: 0, y: 10)
+            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
     }
 }
 
 struct LiquidButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.85 : 1.0)
-            .scaleEffect(x: configuration.isPressed ? 1.05 : 1.0) // Subtle stretch effect
-            .animation(.spring(response: 0.3, dampingFraction: 0.5, blendDuration: 0), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.82 : 1.0)
+            .scaleEffect(y: configuration.isPressed ? 0.9 : 1.0) // Squishy/Kenyal vertical compress
+            .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.4, blendDuration: 0), value: configuration.isPressed)
             .background(
-                ZStack {
-                    Circle()
-                        .fill(.ultraThinMaterial)
-                        .overlay(
-                            Circle()
-                                .stroke(
-                                    LinearGradient(colors: [.white.opacity(0.6), .clear], startPoint: .topLeading, endPoint: .bottomTrailing),
-                                    lineWidth: 1
-                                )
-                        )
-                }
-                .shadow(color: .black.opacity(0.2), radius: 12, x: 0, y: 6)
+                Circle()
+                    .fill(.ultraThinMaterial)
             )
+            .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
     }
 }
 
