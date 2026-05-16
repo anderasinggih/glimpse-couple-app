@@ -46,7 +46,6 @@ struct FullPartnerMapView: View {
                     .buttonStyle(.bordered)
                     .buttonBorderShape(.circle)
                     .controlSize(.large)
-                    .tint(.white.opacity(0.1))
                     .padding(.trailing, 10)
                 }
                 
@@ -65,7 +64,6 @@ struct FullPartnerMapView: View {
                     .buttonStyle(.bordered)
                     .buttonBorderShape(.circle)
                     .controlSize(.large)
-                    .tint(.white.opacity(0.1))
                 }
                 .padding(.trailing, 20)
                 .padding(.bottom, 12) // Gap above the card
