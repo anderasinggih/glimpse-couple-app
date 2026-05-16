@@ -93,7 +93,7 @@ struct PartnerOverlayCard: View {
                     .foregroundColor(.adaptiveAccent)
                     .font(.system(size: 14))
                 
-                Text(user.status_note)
+                Text(user.status_note ?? "")
                     .font(.system(size: 14))
                     .lineLimit(2)
             }
