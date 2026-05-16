@@ -7,26 +7,20 @@ struct AnniversaryTimerView: View {
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
     var body: some View {
-        VStack(spacing: 8) {
-            Label("OUR JOURNEY", systemImage: "infinity")
-                .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundStyle(Color.electricPurple)
-                .kerning(1.5)
+        VStack(spacing: 4) {
+            Text("OUR JOURNEY")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundColor(.adaptiveAccent.opacity(0.8))
+                .kerning(2)
             
             Text(timeElapsed)
-                .font(.system(size: 24, weight: .bold, design: .monospaced))
-                .foregroundStyle(.white)
+                .font(.system(size: 28, weight: .black, design: .monospaced))
+                .foregroundColor(.adaptiveAccent)
                 .contentTransition(.numericText())
-                .multilineTextAlignment(.center)
         }
-        .padding(.vertical, 16)
+        .padding(.vertical, 12)
         .padding(.horizontal, 24)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(.white.opacity(0.1), lineWidth: 0.5)
-        )
+        .glassmorphic()
         .onAppear(perform: updateTimer)
         .onReceive(timer) { _ in
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {

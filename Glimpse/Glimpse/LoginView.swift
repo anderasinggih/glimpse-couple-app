@@ -8,85 +8,84 @@ struct LoginView: View {
     
     var body: some View {
         ZStack {
-            iOS26Background()
-            
-            VStack(spacing: 20) {
-                // Hero Branding (Compact)
-                VStack(spacing: 8) {
-                    Image(systemName: "heart.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(
-                            LinearGradient(colors: [Color.electricPurple, Color.activeCyan], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        )
-                        .shadow(color: Color.electricPurple.opacity(0.4), radius: 15)
-                    
-                    Text("Glimpse")
-                        .font(.system(size: 28, weight: .black, design: .rounded))
-                        .tracking(-0.5)
+            Color.deepVelvet
+                .ignoresSafeArea()
+                .onTapGesture {
+                    hideKeyboard()
                 }
-                .padding(.top, 50)
+            
+            VStack(spacing: 24) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Welcome Back")
+                        .font(.system(size: 32, weight: .bold))
+                        .foregroundColor(.white)
+                    Text("Sign in to connect with your partner.")
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
                 
-                // Liquid Glass Form
-                VStack(spacing: 12) {
-                    CustomGlassField(icon: "envelope.fill", placeholder: "Email", text: $email)
-                    CustomGlassField(icon: "lock.fill", placeholder: "Password", text: $password, isSecure: true)
+                VStack(spacing: 16) {
+                    CustomTextField(icon: "envelope.fill", placeholder: "Email", text: $email)
+                        .keyboardType(.emailAddress)
+                    CustomTextField(icon: "lock.fill", placeholder: "Password", text: $password, isSecure: true)
                 }
                 .padding(.horizontal)
                 
                 if !errorMessage.isEmpty {
                     Text(errorMessage)
-                        .font(.caption2)
-                        .foregroundStyle(.red.opacity(0.8))
+                        .font(.caption)
+                        .foregroundColor(.red)
                         .padding(.horizontal)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 
-                // Mini & Sleek Glass Button
                 Button {
                     if validate() {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        Task { await login() }
+                        Task {
+                            await login()
+                        }
                     }
                 } label: {
                     HStack {
                         if isLoading {
-                            ProgressView().tint(.white)
+                            ProgressView().tint(.deepVelvet)
                         } else {
                             Text("Sign In")
-                                .font(.system(size: 15, weight: .bold))
+                                .fontWeight(.bold)
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12) // Smaller
-                    .background(
-                        LinearGradient(colors: [Color.electricPurple, Color.royalPurple.opacity(0.9)], startPoint: .leading, endPoint: .trailing)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(color: Color.electricPurple.opacity(0.2), radius: 8, y: 3)
+                    .padding(.vertical, 16)
+                    .background(email.isEmpty || password.isEmpty ? Color.gray.opacity(0.3) : Color.electricPurple)
+                    .foregroundColor(.deepVelvet)
+                    .cornerRadius(12)
                 }
                 .disabled(isLoading || email.isEmpty || password.isEmpty)
-                .padding(.horizontal, 40) // More narrow
+                .padding(.horizontal)
+                .padding(.top, 8)
                 
                 Spacer()
-                
-                NavigationLink(destination: SignupView()) {
-                    Text("Don't have an account? **Create One**")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.6))
-                }
-                .padding(.bottom, 20)
             }
+            .padding(.top, 40)
         }
-        .navigationBarHidden(true)
-        .onTapGesture { hideKeyboard() }
+        .navigationBarTitleDisplayMode(.inline)
     }
     
     private func validate() -> Bool {
-        if !email.contains("@") { return false }
-        if password.count < 6 { return false }
+        if !email.contains("@") || !email.contains(".") {
+            errorMessage = "Please enter a valid email address."
+            return false
+        }
+        if password.count < 6 {
+            errorMessage = "Password must be at least 6 characters."
+            return false
+        }
         return true
     }
     
     private func login() async {
+        hideKeyboard()
         isLoading = true
         errorMessage = ""
         do {
@@ -98,7 +97,7 @@ struct LoginView: View {
     }
 }
 
-struct CustomGlassField: View {
+struct CustomTextField: View {
     let icon: String
     let placeholder: String
     @Binding var text: String
@@ -107,26 +106,25 @@ struct CustomGlassField: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 14))
-                .foregroundStyle(Color.electricPurple)
+                .foregroundColor(.electricPurple)
                 .frame(width: 20)
             
             if isSecure {
                 SecureField(placeholder, text: $text)
-                    .font(.system(size: 14))
+                    .foregroundColor(.white)
+                    .tint(.electricPurple) // Cursor color
             } else {
                 TextField(placeholder, text: $text)
-                    .font(.system(size: 14))
+                    .foregroundColor(.white)
                     .autocapitalization(.none)
-                    .keyboardType(.emailAddress)
+                    .disableAutocorrection(true)
+                    .tint(.electricPurple) // Cursor color
             }
         }
-        .padding(14)
-        .background(.ultraThinMaterial.opacity(0.5))
-        .cornerRadius(14)
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(.white.opacity(0.1), lineWidth: 0.5)
-        )
+        .padding(16)
+        .background(Color.white.opacity(0.05))
+        .cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.1)))
+        .contentShape(Rectangle()) // Ensure the whole area is tappable
     }
 }

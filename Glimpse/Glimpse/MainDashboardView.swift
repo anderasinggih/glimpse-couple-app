@@ -30,7 +30,7 @@ struct MainDashboardView: View {
                 .tag(1)
             
             // Tab 3: Flash
-            Text("Flash Photo")
+            FlashCameraView()
                 .tabItem {
                     Label("Flash", systemImage: "camera.fill")
                 }
@@ -53,32 +53,32 @@ struct MainDashboardView: View {
             iOS26Background()
             
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 12) {
-                    // Presence Interface (Map) - High Density
+                VStack(spacing: 16) {
+                    // Presence Interface (Map) - Compact
                     PartnerMapView(user: partner)
-                        .frame(height: 320)
-                        .padding(.top, 8)
+                        .frame(height: 340)
+                        .padding(.top, 12)
+                        .shadow(color: .electricPurple.opacity(0.15), radius: 20)
                     
                     // Kabar Panel (Actions) - Compact
                     KabarPanel()
-                        .padding(.horizontal, 4)
                     
-                    Spacer(minLength: 20)
+                    Spacer(minLength: 40)
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 16)
             }
         }
     }
     
     private var headerView: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Image(systemName: "heart.fill")
-                .foregroundColor(Color.electricPurple)
-                .font(.system(size: 24))
+                .foregroundColor(.electricPurple)
+                .font(.system(size: 28)) // Bigger heart
             
             Text("Glimpse")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundColor(.primary)
+                .font(.system(size: 24, weight: .bold, design: .rounded)) // Refined font
+                .foregroundColor(.white)
         }
         .padding(.leading, 4)
     }

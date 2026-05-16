@@ -8,66 +8,66 @@ struct KabarPanel: View {
     
     var body: some View {
         VStack(spacing: 12) {
-            // Header (Compact)
             HStack {
-                Label("KABAR", systemImage: "sparkles")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(Color.electricPurple)
+                Text("KABAR")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.secondary)
                 Spacer()
                 Text("\(statusText.count)/140")
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundColor(statusText.count > 130 ? .red : .secondary)
             }
             
-            // Compact Input Area
             HStack(spacing: 10) {
                 TextField("Apa kabarmu?", text: $statusText)
-                    .font(.system(size: 13))
                     .padding(10)
-                    .background(Color.white.opacity(0.05))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .onChange(of: statusText) { _, newValue in
-                        if newValue.count > 140 { statusText = String(newValue.prefix(140)) }
+                    .font(.system(size: 14))
+                    .background(Color.adaptiveBackground.opacity(0.5))
+                    .cornerRadius(12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.secondary.opacity(0.15)))
+                    .onChange(of: statusText) { newValue in
+                        if newValue.count > 140 {
+                            statusText = String(newValue.prefix(140))
+                        }
                     }
                 
                 Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    statusText = ""
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 } label: {
                     Image(systemName: "paperplane.fill")
                         .font(.system(size: 14))
-                        .foregroundStyle(Color.white)
-                        .frame(width: 36, height: 36)
-                        .background(Color.electricPurple)
+                        .foregroundColor(.white)
+                        .padding(10)
+                        .background(Color.adaptiveAccent)
                         .clipShape(Circle())
                 }
                 .disabled(statusText.isEmpty)
             }
             
-            // Glass Flash Button (Mini & Sleek)
             Button {
                 showCamera = true
             } label: {
-                HStack(spacing: 6) {
+                HStack {
                     if isUploading {
                         ProgressView().tint(.white)
                     } else {
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 10))
-                        Text("Flash Moment")
-                            .font(.system(size: 12, weight: .bold))
+                        Image(systemName: "camera.shutter.button.fill")
+                            .font(.system(size: 14))
+                        Text("Flash Photo")
+                            .font(.system(size: 14, weight: .bold))
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 10) // Tighter
+                .padding(.vertical, 12)
                 .background(
-                    LinearGradient(colors: [Color.electricPurple, Color.royalPurple.opacity(0.8)], startPoint: .leading, endPoint: .trailing)
+                    LinearGradient(colors: [.electricPurple, .royalPurple], startPoint: .leading, endPoint: .trailing)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .shadow(color: Color.electricPurple.opacity(0.15), radius: 6, y: 3)
+                .foregroundColor(.white)
+                .cornerRadius(12)
+                .shadow(color: .electricPurple.opacity(0.2), radius: 8, y: 4)
             }
         }
-        .padding(14)
+        .padding(16)
         .glassmorphic()
         .sheet(isPresented: $showCamera) {
             CameraPlaceholderView(isUploading: $isUploading)

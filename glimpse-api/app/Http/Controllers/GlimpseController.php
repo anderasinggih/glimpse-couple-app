@@ -3,70 +3,61 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use App\Models\User;
-use App\Models\Couple;
-use App\Events\PartnerStateUpdated;
 use Illuminate\Support\Facades\Storage;
+use App\Events\PartnerStateUpdated;
 
 class GlimpseController extends Controller
 {
-    public function getState(Request $request)
+    public function sync(Request $request)
     {
         $user = $request->user();
-        if (!$user->couple_id) {
-            return response()->json(['error' => 'No partner linked'], 404);
-        }
-
-        $partner = User::where('couple_id', $user->couple_id)
-            ->where('id', '!=', $user->id)
-            ->first();
-
-        $couple = Couple::find($user->couple_id);
-
-        return response()->json([
-            'partner' => $partner,
-            'couple' => $couple
-        ]);
-    }
-
-    public function updateStatus(Request $request)
-    {
-        $user = $request->user();
-        $request->validate([
-            'status_note' => 'string|nullable',
-            'latitude' => 'numeric|nullable',
-            'longitude' => 'numeric|nullable',
-            'location_name' => 'string|nullable',
-            'battery_level' => 'integer|nullable'
-        ]);
-
+        
         $user->update($request->only([
-            'status_note', 'latitude', 'longitude', 'location_name', 'battery_level'
+            'latitude', 
+            'longitude', 
+            'location_name', 
+            'battery_level', 
+            'status_note'
         ]));
 
-        broadcast(new PartnerStateUpdated($user))->toOthers();
+        if ($user->couple_id) {
+            broadcast(new PartnerStateUpdated($user))->toOthers();
+        }
 
-        return response()->json(['status' => 'updated', 'user' => $user]);
+        return response()->json([
+            'user' => $user,
+            'partner' => $user->partner()
+        ]);
     }
 
     public function uploadPhoto(Request $request)
     {
-        $user = $request->user();
         $request->validate([
-            'photo' => 'required|image|max:5120'
+            'photo' => 'required|image|max:10240', // Max 10MB
         ]);
 
+        $user = $request->user();
+        
         if ($request->hasFile('photo')) {
+            // Delete old photo if exists
+            if ($user->latest_photo_url) {
+                Storage::disk('public')->delete(str_replace('/storage/', '', $user->latest_photo_url));
+            }
+
             $path = $request->file('photo')->store('glimpse_photos', 'public');
-            $url = Storage::url($path);
-            
-            $user->update(['latest_photo_url' => $url]);
-            
-            broadcast(new PartnerStateUpdated($user))->toOthers();
-            
-            return response()->json(['url' => $url]);
+            $user->latest_photo_url = Storage::url($path);
+            $user->save();
+
+            if ($user->couple_id) {
+                broadcast(new PartnerStateUpdated($user))->toOthers();
+            }
+
+            return response()->json([
+                'message' => 'Photo uploaded successfully',
+                'photo_url' => $user->latest_photo_url
+            ]);
         }
 
-        return response()->json(['error' => 'No photo provided'], 400);
+        return response()->json(['message' => 'No photo uploaded'], 400);
     }
 }

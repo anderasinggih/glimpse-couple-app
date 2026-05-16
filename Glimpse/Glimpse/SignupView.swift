@@ -6,87 +6,92 @@ struct SignupView: View {
     @State private var password = ""
     @State private var isLoading = false
     @State private var errorMessage = ""
-    @Environment(\.dismiss) var dismiss
     
     var body: some View {
         ZStack {
-            iOS26Background()
+            Color.deepVelvet.ignoresSafeArea()
             
-            VStack(spacing: 20) {
-                // Header (Compact)
-                VStack(spacing: 6) {
+            VStack(spacing: 24) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("Join Glimpse")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                    Text("The future of connection starts here.")
-                        .font(.caption)
+                        .font(.system(size: 32, weight: .bold))
+                        .foregroundColor(.white)
+                    Text("Start your intimate journey today.")
                         .foregroundColor(.secondary)
                 }
-                .padding(.top, 40)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
                 
-                // Liquid Glass Form
-                VStack(spacing: 12) {
-                    CustomGlassField(icon: "person.fill", placeholder: "Full Name", text: $name)
-                    CustomGlassField(icon: "envelope.fill", placeholder: "Email", text: $email)
-                    CustomGlassField(icon: "lock.fill", placeholder: "Password", text: $password, isSecure: true)
+                VStack(spacing: 16) {
+                    CustomTextField(icon: "person.fill", placeholder: "Full Name", text: $name)
+                    CustomTextField(icon: "envelope.fill", placeholder: "Email", text: $email)
+                        .keyboardType(.emailAddress)
+                    CustomTextField(icon: "lock.fill", placeholder: "Password", text: $password, isSecure: true)
                 }
                 .padding(.horizontal)
                 
                 if !errorMessage.isEmpty {
                     Text(errorMessage)
-                        .font(.caption2)
-                        .foregroundStyle(.red.opacity(0.8))
+                        .font(.caption)
+                        .foregroundColor(.red)
                         .padding(.horizontal)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 
-                // Mini & Sleek Action Button
                 Button {
                     if validate() {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        Task { await register() }
+                        Task {
+                            await register()
+                        }
                     }
                 } label: {
                     HStack {
                         if isLoading {
-                            ProgressView().tint(.white)
+                            ProgressView().tint(.deepVelvet)
                         } else {
                             Text("Create Account")
-                                .font(.system(size: 15, weight: .bold))
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 10))
+                                .fontWeight(.bold)
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12) // Smaller
-                    .background(
-                        LinearGradient(colors: [Color.electricPurple, Color.royalPurple.opacity(0.9)], startPoint: .leading, endPoint: .trailing)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(color: Color.electricPurple.opacity(0.2), radius: 8, y: 3)
+                    .padding(.vertical, 16)
+                    .background(name.isEmpty || email.isEmpty || password.isEmpty ? Color.gray.opacity(0.3) : Color.electricPurple)
+                    .foregroundColor(.deepVelvet)
+                    .cornerRadius(12)
                 }
                 .disabled(isLoading || name.isEmpty || email.isEmpty || password.isEmpty)
-                .padding(.horizontal, 40) // More narrow
+                .padding(.horizontal)
+                .padding(.top, 8)
                 
                 Spacer()
-                
-                Button("Already have an account? **Sign In**") {
-                    dismiss()
-                }
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.6))
-                .padding(.bottom, 20)
+            }
+            .padding(.top, 40)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                hideKeyboard()
             }
         }
-        .navigationBarHidden(true)
+        .navigationBarTitleDisplayMode(.inline)
     }
     
     private func validate() -> Bool {
-        if name.count < 3 { return false }
-        if !email.contains("@") { return false }
-        if password.count < 8 { return false }
+        if name.count < 3 {
+            errorMessage = "Please enter your full name."
+            return false
+        }
+        if !email.contains("@") || !email.contains(".") {
+            errorMessage = "Please enter a valid email address."
+            return false
+        }
+        if password.count < 8 {
+            errorMessage = "Password must be at least 8 characters."
+            return false
+        }
         return true
     }
     
     private func register() async {
+        hideKeyboard()
         isLoading = true
         errorMessage = ""
         do {
