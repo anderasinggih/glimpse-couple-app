@@ -372,9 +372,9 @@ struct EditProfileView: View {
                             .offset(x: 30, y: 30)
                     }
                 }
-                .onChange(of: selectedItem) { new in
+                .onChange(of: selectedItem) {
                     Task {
-                        if let data = try? await new?.loadData(type: Data.self), let image = UIImage(data: data) {
+                        if let data = try? await selectedItem?.loadData(type: Data.self), let image = UIImage(data: data) {
                             selectedImage = image
                         }
                     }
