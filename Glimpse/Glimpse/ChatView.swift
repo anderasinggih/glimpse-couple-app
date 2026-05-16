@@ -22,6 +22,9 @@ struct ChatView: View {
             }
             .ignoresSafeArea()
             .ignoresSafeArea(.keyboard)
+            .onTapGesture {
+                isInputFocused = false
+            }
             
             // LAYER 2: Main Content
             if let partner = auth.partner, auth.coupleActive {
@@ -45,6 +48,11 @@ struct ChatView: View {
                                 }
                                 .padding(.horizontal, 16)
                                 .padding(.top, 15)
+                                .frame(maxWidth: .infinity, minHeight: 600)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    isInputFocused = false
+                                }
                             }
                             .onChange(of: messages) { _, newMessages in
                                 if let lastMsg = newMessages.last {
@@ -202,15 +210,9 @@ struct ChatView: View {
     private var floatingInputBar: some View {
         HStack(spacing: 12) {
             TextField("Type a message...", text: $messageInput)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 11)
-                .background(Color.white.opacity(0.06))
-                .cornerRadius(20)
+                .font(.system(size: 15))
                 .foregroundColor(.white)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
+                .padding(.leading, 12)
                 .focused($isInputFocused)
             
             Button {
@@ -225,14 +227,15 @@ struct ChatView: View {
             }
             .disabled(messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
         }
-        .padding(8)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(.ultraThinMaterial)
         .cornerRadius(24)
         .overlay(
             RoundedRectangle(cornerRadius: 24)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1.2)
+                .stroke(Color.white.opacity(0.15), lineWidth: 1.2)
         )
-        .shadow(color: Color.black.opacity(0.25), radius: 12, y: 6)
+        .shadow(color: Color.black.opacity(0.3), radius: 10, y: 5)
     }
     
     @ViewBuilder
