@@ -51,9 +51,6 @@ extension Color {
     }
 }
 
-    }
-}
-
 struct iOS26Background: View {
     @State private var animate = false
     
