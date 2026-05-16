@@ -99,48 +99,18 @@ struct LiquidGlassModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 }
 
-struct GlassButtonStyle: ButtonStyle {
+struct LiquidButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.85 : 1.0)
-            .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(12)
             .background(.ultraThinMaterial)
-            .clipShape(Capsule())
-            .foregroundColor(Color.electricPurple)
-            .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+            .clipShape(Circle())
+            .opacity(configuration.isPressed ? 0.7 : 1.0)
     }
-}
-
-struct GlassProminentButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.85 : 1.0)
-            .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .fill(Color.electricPurple.opacity(0.15))
-                    .background(.ultraThinMaterial)
-            )
-            .foregroundColor(Color.electricPurple)
-            .shadow(color: Color.electricPurple.opacity(0.2), radius: 10, x: 0, y: 4)
-    }
-}
-
-extension ButtonStyle where Self == GlassButtonStyle {
-    static var glimpseGlass: GlassButtonStyle { GlassButtonStyle() }
-}
-
-extension ButtonStyle where Self == GlassProminentButtonStyle {
-    static var glimpseGlassProminent: GlassProminentButtonStyle { GlassProminentButtonStyle() }
 }
 
 extension View {
