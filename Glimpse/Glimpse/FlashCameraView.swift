@@ -12,53 +12,57 @@ struct FlashCameraView: View {
             let screenWidth = geometry.size.width
             let frameSize = screenWidth - 25
             
-            ZStack {
-                // Background
+            ZStack(alignment: .top) {
+                // LAYER 1: Background
                 Color.deepVelvet.ignoresSafeArea()
                 iOS26Background().opacity(0.4)
                 
-                // Use a VStack with Spacers to find the TRUE visual center
-                VStack(spacing: 0) {
-                    // 1. Header Area
+                // LAYER 2: The Camera Frame (Absolute Center)
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer(minLength: 0)
+                        ZStack {
+                            if model.permissionStatus == .authorized {
+                                if model.isInitialized {
+                                    CameraPreview(session: model.session)
+                                        .frame(width: frameSize, height: frameSize)
+                                        .opacity(capturedImage == nil ? 1 : 0)
+                                    
+                                    if let image = capturedImage {
+                                        Image(uiImage: image)
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(width: frameSize, height: frameSize)
+                                    }
+                                } else {
+                                    loadingFrame(size: frameSize)
+                                }
+                            } else {
+                                permissionView(size: frameSize)
+                            }
+                        }
+                        .frame(width: frameSize, height: frameSize)
+                        .background(Color.black)
+                        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                                .stroke(LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
+                        )
+                        .shadow(color: .electricPurple.opacity(0.2), radius: 30)
+                        Spacer(minLength: 0)
+                    }
+                    Spacer()
+                }
+                .offset(y: -10)
+                
+                // LAYER 3: UI Overlays
+                VStack {
                     headerSection
                         .padding(.top, 10)
                     
-                    Spacer() // Top Spacer
+                    Spacer()
                     
-                    // 2. Camera Frame Area (The Heart of the view)
-                    ZStack {
-                        if model.permissionStatus == .authorized {
-                            if model.isInitialized {
-                                CameraPreview(session: model.session)
-                                    .frame(width: frameSize, height: frameSize)
-                                    .opacity(capturedImage == nil ? 1 : 0)
-                                
-                                if let image = capturedImage {
-                                    Image(uiImage: image)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: frameSize, height: frameSize)
-                                }
-                            } else {
-                                loadingFrame(size: frameSize)
-                            }
-                        } else {
-                            permissionView(size: frameSize)
-                        }
-                    }
-                    .frame(width: frameSize, height: frameSize)
-                    .background(Color.black)
-                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 28, style: .continuous)
-                            .stroke(LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
-                    )
-                    .shadow(color: .electricPurple.opacity(0.2), radius: 30)
-                    .offset(y: -10) // Subtle upward offset for visual balance against TabBar
-                    
-                    Spacer() // Bottom Spacer
-                    
-                    // 3. Footer Area
                     footerSection
                         .padding(.bottom, 20)
                 }
@@ -120,7 +124,8 @@ struct FlashCameraView: View {
     private var captureButton: some View {
         Button {
             model.capturePhoto { image in
-                self.capturedImage = cropImageToSquare(image)
+                // Process and crop the image
+                self.capturedImage = processCapturedImage(image)
             }
         } label: {
             ZStack {
@@ -152,16 +157,27 @@ struct FlashCameraView: View {
         }
     }
     
-    private func cropImageToSquare(_ image: UIImage?) -> UIImage? {
+    // NEW: Robust image processing (Crop + Mirror check)
+    private func processCapturedImage(_ image: UIImage?) -> UIImage? {
         guard let image = image else { return nil }
-        let imageSize = image.size
+        
+        // 1. Flip if it's the front camera to match the preview
+        var finalImage = image
+        if model.isUsingFrontCamera {
+            if let cgImage = image.cgImage {
+                finalImage = UIImage(cgImage: cgImage, scale: image.scale, orientation: .leftMirrored)
+            }
+        }
+        
+        // 2. Crop to Square
+        let imageSize = finalImage.size
         let side = min(imageSize.width, imageSize.height)
         let x = (imageSize.width - side) / 2
         let y = (imageSize.height - side) / 2
         let cropRect = CGRect(x: x, y: y, width: side, height: side)
         
-        guard let cgImage = image.cgImage?.cropping(to: cropRect) else { return image }
-        return UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
+        guard let cgImage = finalImage.cgImage?.cropping(to: cropRect) else { return finalImage }
+        return UIImage(cgImage: cgImage, scale: finalImage.scale, orientation: finalImage.imageOrientation)
     }
     
     private func uploadPhoto(_ image: UIImage) {
@@ -183,6 +199,7 @@ class GlimpseCameraModel: NSObject, AVCapturePhotoCaptureDelegate {
     var session = AVCaptureSession()
     var isInitialized = false
     var permissionStatus: AVAuthorizationStatus = .notDetermined
+    var isUsingFrontCamera = true // Tracking for flipping logic
     
     private let output = AVCapturePhotoOutput()
     private var completion: ((UIImage?) -> Void)?
@@ -209,7 +226,6 @@ class GlimpseCameraModel: NSObject, AVCapturePhotoCaptureDelegate {
             self.session.beginConfiguration()
             self.session.sessionPreset = .photo
             
-            // DEFAULT TO FRONT CAMERA (Selfie)
             let discoverySession = AVCaptureDevice.DiscoverySession(
                 deviceTypes: [.builtInWideAngleCamera],
                 mediaType: .video,
@@ -237,6 +253,8 @@ class GlimpseCameraModel: NSObject, AVCapturePhotoCaptureDelegate {
             self.session.removeInput(currentInput)
             
             let newPosition: AVCaptureDevice.Position = currentInput.device.position == .back ? .front : .back
+            self.isUsingFrontCamera = (newPosition == .front)
+            
             guard let newDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: newPosition),
                   let newInput = try? AVCaptureDeviceInput(device: newDevice) else { return }
             

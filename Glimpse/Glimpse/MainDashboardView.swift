@@ -8,19 +8,11 @@ struct MainDashboardView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             // Tab 1: Dashboard
-            NavigationStack {
-                dashboardContent
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarLeading) {
-                            headerView
-                        }
-                    }
-            }
-            .tabItem {
-                Label("Home", systemImage: "house.fill")
-            }
-            .tag(0)
+            dashboardView
+                .tabItem {
+                    Label("Home", systemImage: "house.fill")
+                }
+                .tag(0)
             
             // Tab 2: Map
             Text("Presence Map")
@@ -48,43 +40,54 @@ struct MainDashboardView: View {
         .tint(.electricPurple)
     }
     
-    private var dashboardContent: some View {
-        ZStack {
+    private var dashboardView: some View {
+        ZStack(alignment: .top) {
+            // Background
             iOS26Background()
             
+            // Main Scroll Content
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 16) {
-                    // Presence Interface (Map) - Compact
+                VStack(spacing: 20) {
+                    // Increased Spacer for better initial placement
+                    Spacer(minLength: 95)
+                    
+                    // Presence Interface (Map)
                     PartnerMapView(user: partner)
                         .frame(height: 340)
-                        .padding(.top, 12)
                         .shadow(color: .electricPurple.opacity(0.15), radius: 20)
                     
-                    // Kabar Panel (Actions) - Compact
+                    // Kabar Panel
                     KabarPanel()
                     
-                    Spacer(minLength: 40)
+                    Spacer(minLength: 100)
                 }
                 .padding(.horizontal, 16)
             }
+            .ignoresSafeArea(.container, edges: .top)
+            
+            // Floating Header - Exactly matched with Flash
+            headerView
+                .padding(.top, 10)
         }
     }
     
     private var headerView: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "heart.fill")
-                .foregroundColor(.electricPurple)
-                .font(.system(size: 28)) // Bigger heart
-            
-            Text("Glimpse")
-                .font(.system(size: 24, weight: .bold, design: .rounded)) // Refined font
-                .foregroundColor(.white)
+        HStack {
+            HStack(spacing: 10) {
+                Image(systemName: "heart.fill")
+                    .foregroundColor(.electricPurple)
+                    .font(.system(size: 28))
+                
+                Text("Glimpse")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+            }
+            Spacer()
         }
-        .padding(.leading, 4)
+        .padding(.horizontal, 20)
     }
 }
+
 #Preview {
-    NavigationStack {
-        MainDashboardView()
-    }
+    MainDashboardView()
 }
