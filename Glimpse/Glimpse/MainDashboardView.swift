@@ -68,16 +68,16 @@ struct MainDashboardView: View {
                     let threshold: CGFloat = 100
                     if value.translation.width > threshold {
                         // Swipe Right -> Previous Tab
-                        if selectedTab > 0 {
+                        if auth.selectedTab > 0 {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                selectedTab -= 1
+                                auth.selectedTab -= 1
                             }
                         }
                     } else if value.translation.width < -threshold {
                         // Swipe Left -> Next Tab
-                        if selectedTab < 4 {
+                        if auth.selectedTab < 4 {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                selectedTab += 1
+                                auth.selectedTab += 1
                             }
                         }
                     }
@@ -85,7 +85,7 @@ struct MainDashboardView: View {
             )
             
             // MASTER HEADER (Like app.blade.php)
-            if selectedTab != 3 {
+            if auth.selectedTab != 3 {
                 BrandingHeader()
                     .zIndex(100)
             }
@@ -279,7 +279,7 @@ struct MainDashboardView: View {
                                 .padding(.horizontal, 20)
                             
                             Button {
-                                withAnimation { selectedTab = 3 }
+                                withAnimation { auth.selectedTab = 4 }
                             } label: {
                                 Text("Connect Partner")
                                     .font(.headline)
