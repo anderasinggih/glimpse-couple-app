@@ -18,9 +18,18 @@ struct ProfileView: View {
             iOS26Background().opacity(0.4)
             
             VStack(spacing: 0) {
-                // Fixed Header Branding
-                headerView
-                    .padding(.top, 10)
+                // Fixed Header with Blur Gradient
+                ZStack(alignment: .top) {
+                    Rectangle()
+                        .fill(.ultraThinMaterial)
+                        .mask(LinearGradient(colors: [.black, .black, .clear], startPoint: .top, endPoint: .bottom))
+                        .frame(height: 120)
+                        .ignoresSafeArea()
+                    
+                    headerView
+                        .padding(.top, 10)
+                }
+                .zIndex(10)
                 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 24) {
