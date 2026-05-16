@@ -20,7 +20,8 @@ struct AnniversaryTimerView: View {
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 24)
-        .glassmorphic()
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .onAppear(perform: updateTimer)
         .onReceive(timer) { _ in
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
