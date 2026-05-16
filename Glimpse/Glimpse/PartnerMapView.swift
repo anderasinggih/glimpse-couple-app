@@ -90,7 +90,7 @@ struct PartnerOverlayCard: View {
             
             HStack(spacing: 8) {
                 Image(systemName: "quote.bubble.fill")
-                    .foregroundColor(.adaptiveAccent)
+                    .foregroundColor(.electricPurple)
                     .font(.system(size: 14))
                 
                 Text(user.status_note ?? "")

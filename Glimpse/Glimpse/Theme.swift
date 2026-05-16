@@ -104,14 +104,35 @@ struct LiquidGlassModifier: ViewModifier {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .stroke(
                         LinearGradient(
-                            colors: [.white.opacity(0.5), .clear, .white.opacity(0.2)],
+                            colors: [.white.opacity(0.4), .clear, .white.opacity(0.1)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        lineWidth: 1.2
+                        lineWidth: 1.0
                     )
             )
-            .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
+            .shadow(color: Color.black.opacity(0.2), radius: 15, x: 0, y: 8)
+    }
+}
+
+struct LiquidButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.88 : 1.0)
+            .animation(.spring(response: 0.35, dampingFraction: 0.6, blendDuration: 0), value: configuration.isPressed)
+            .background(
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        Circle()
+                            .stroke(
+                                LinearGradient(colors: [.white.opacity(0.5), .clear], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                lineWidth: 1
+                            )
+                    )
+                    .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
+            )
+            .opacity(configuration.isPressed ? 0.9 : 1.0)
     }
 }
 
