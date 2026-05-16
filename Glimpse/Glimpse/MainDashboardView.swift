@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct MainDashboardView: View {
-    @State private var partner: GlimpseUser = .mockPartner
-    @State private var anniversaryDate = CoupleResponse.mock.anniversaryDate
+    @State private var auth = AuthManager.shared
     @State private var selectedTab = 0
     
     var body: some View {
@@ -15,11 +14,19 @@ struct MainDashboardView: View {
                 .tag(0)
             
             // Tab 2: Map
-            Text("Presence Map")
-                .tabItem {
-                    Label("Map", systemImage: "map.fill")
+            Group {
+                if let partner = auth.partner {
+                    FullPartnerMapView(user: partner)
+                } else {
+                    ProgressView("Finding partner...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.deepVelvet)
                 }
-                .tag(1)
+            }
+            .tabItem {
+                Label("Map", systemImage: "map.fill")
+            }
+            .tag(1)
             
             // Tab 3: Flash
             FlashCameraView()
@@ -29,15 +36,24 @@ struct MainDashboardView: View {
                 .tag(2)
             
             // Tab 4: Profile
-            ProfileView(user: partner, anniversaryDate: anniversaryDate)
-                .tabItem {
-                    Label("Profile", systemImage: "person.fill")
+            Group {
+                if let partner = auth.partner {
+                    ProfileView(user: partner, anniversaryDate: auth.anniversaryDate ?? Date())
+                } else {
+                    Color.deepVelvet
                 }
-                .tag(3)
+            }
+            .tabItem {
+                Label("Profile", systemImage: "person.fill")
+            }
+            .tag(3)
         }
         .toolbarBackground(.ultraThinMaterial, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .tint(.electricPurple)
+        .onAppear {
+            Task { try? await auth.fetchState() }
+        }
     }
     
     private var dashboardView: some View {
@@ -48,13 +64,14 @@ struct MainDashboardView: View {
             // Main Scroll Content
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 20) {
-                    // Increased Spacer for better initial placement
                     Spacer(minLength: 95)
                     
                     // Presence Interface (Map)
-                    PartnerMapView(user: partner)
-                        .frame(height: 340)
-                        .shadow(color: .electricPurple.opacity(0.15), radius: 20)
+                    if let partner = auth.partner {
+                        PartnerMapView(user: partner)
+                            .frame(height: 340)
+                            .shadow(color: .electricPurple.opacity(0.15), radius: 20)
+                    }
                     
                     // Kabar Panel
                     KabarPanel()
@@ -64,8 +81,11 @@ struct MainDashboardView: View {
                 .padding(.horizontal, 16)
             }
             .ignoresSafeArea(.container, edges: .top)
+            .refreshable {
+                try? await auth.fetchState()
+            }
             
-            // Floating Header - Exactly matched with Flash
+            // Floating Header
             headerView
                 .padding(.top, 10)
         }

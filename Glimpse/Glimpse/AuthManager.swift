@@ -6,6 +6,9 @@ class AuthManager {
     static let shared = AuthManager()
     
     var isAuthenticated = false
+    var partner: GlimpseUser?
+    var anniversaryDate: Date?
+    
     var userToken: String? {
         UserDefaults.standard.string(forKey: "auth_token")
     }
@@ -14,6 +17,32 @@ class AuthManager {
     
     init() {
         self.isAuthenticated = userToken != nil
+        if isAuthenticated {
+            Task { try? await fetchState() }
+        }
+    }
+    
+    func fetchState() async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/state") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            return
+        }
+        
+        let decoder = JSONDecoder()
+        if let stateResponse = try? decoder.decode(CoupleResponse.self, from: data) {
+            DispatchQueue.main.async {
+                self.partner = stateResponse.partner_data
+                self.anniversaryDate = stateResponse.anniversaryDate
+            }
+        }
     }
     
     func login(email: String, password: String) async throws {
