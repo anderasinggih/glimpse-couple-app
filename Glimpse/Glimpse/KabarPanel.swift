@@ -18,31 +18,21 @@ struct KabarPanel: View {
                     .foregroundColor(statusText.count > 130 ? .red : .secondary)
             }
             
-            HStack(spacing: 10) {
-                TextField("Apa kabarmu?", text: $statusText)
-                    .padding(10)
-                    .font(.system(size: 14))
-                    .background(Color.adaptiveBackground.opacity(0.5))
-                    .cornerRadius(12)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.secondary.opacity(0.15)))
-                    .onChange(of: statusText) { oldValue, newValue in
-                        if newValue.count > 140 {
-                            statusText = String(newValue.prefix(140))
-                        }
+            TextField("Apa kabarmu?", text: $statusText)
+                .padding(10)
+                .font(.system(size: 14))
+                .background(Color.adaptiveBackground.opacity(0.5))
+                .cornerRadius(12)
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.secondary.opacity(0.15)))
+                .onChange(of: statusText) { oldValue, newValue in
+                    if newValue.count > 140 {
+                        statusText = String(newValue.prefix(140))
                     }
-                
-                Button {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                } label: {
-                    Image(systemName: "paperplane.fill")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white)
-                        .padding(10)
-                        .background(Color.adaptiveAccent)
-                        .clipShape(Circle())
                 }
-                .disabled(statusText.isEmpty)
-            }
+                .onSubmit {
+                    // Logic to send can be added here if needed later
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                }
             
             Button {
                 showCamera = true

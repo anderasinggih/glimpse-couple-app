@@ -22,13 +22,13 @@ struct SplashScreenView: View {
             }
         }
         .onAppear {
-            // Beating animation
-            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                pulse = 1.2
+            // Light Beating animation - non-repeating or shorter to save CPU
+            withAnimation(.easeInOut(duration: 0.8).repeatCount(3, autoreverses: true)) {
+                pulse = 1.15
             }
             
             // Text fade in
-            withAnimation(.easeIn(duration: 1.0).delay(0.5)) {
+            withAnimation(.easeIn(duration: 0.6).delay(0.2)) {
                 opacity = 1.0
             }
         }

@@ -31,6 +31,7 @@ class User extends Authenticatable
         'status_note',
         'battery_level',
         'latest_photo_url',
+        'profile_photo_url',
     ];
 
     protected static function boot()

@@ -28,16 +28,24 @@ class GlimpseController extends Controller
             $photoUrl = url($photoUrl);
         }
 
-        $partnerData = null;
+        $latestPhotoUrl = $user->latest_photo_url;
+        if ($latestPhotoUrl && !str_starts_with($latestPhotoUrl, 'http')) {
+            $latestPhotoUrl = url($latestPhotoUrl);
+        }
+
+        $partnerLatestPhotoUrl = null;
         if ($partner) {
             $partnerPhotoUrl = $partner->profile_photo_url;
             if ($partnerPhotoUrl && !str_starts_with($partnerPhotoUrl, 'http')) {
                 $partnerPhotoUrl = url($partnerPhotoUrl);
             }
+            $partnerLatestPhotoUrl = $partner->latest_photo_url;
+            if ($partnerLatestPhotoUrl && !str_starts_with($partnerLatestPhotoUrl, 'http')) {
+                $partnerLatestPhotoUrl = url($partnerLatestPhotoUrl);
+            }
             $partnerData = $partner->toArray();
             $partnerData['profile_photo_url'] = $partnerPhotoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($partner->name);
         }
-
         return response()->json([
             'user' => [
                 'id' => $user->id,
@@ -45,10 +53,35 @@ class GlimpseController extends Controller
                 'email' => $user->email,
                 'invite_code' => $user->invite_code,
                 'profile_photo_url' => $photoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($user->name),
-                'couple_id' => $user->couple_id
+                'couple_id' => $user->couple_id,
+                'latitude' => $user->latitude,
+                'longitude' => $user->longitude,
+                'location_name' => $user->location_name,
+                'battery_level' => $user->battery_level,
+                'is_charging' => (bool)$user->is_charging,
+                'status_note' => $user->status_note,
+                'latest_photo_url' => $latestPhotoUrl,
+                'last_updated' => $user->updated_at->toIso8601String(),
             ],
-            'partner_data' => $partnerData,
-            'anniversary_start_date' => $couple ? $couple->anniversary_start_date : null
+            'partner_data' => $partner ? [
+                'id' => $partner->id,
+                'name' => $partner->name,
+                'email' => $partner->email,
+                'profile_photo_url' => $partnerPhotoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($partner->name),
+                'couple_id' => $partner->couple_id,
+                'latitude' => $partner->latitude,
+                'longitude' => $partner->longitude,
+                'location_name' => $partner->location_name,
+                'battery_level' => $partner->battery_level,
+                'is_charging' => (bool)$partner->is_charging,
+                'status_note' => $partner->status_note,
+                'latest_photo_url' => $partnerLatestPhotoUrl,
+                'last_updated' => $partner->updated_at->toIso8601String(),
+            ] : null,
+            'anniversary_start_date' => $couple ? $couple->anniversary_start_date : null,
+            'disconnect_requested_by' => $couple ? $couple->disconnect_requested_by : null,
+            'couple_active' => $couple ? (bool) $couple->is_active : false,
+            'invited_by' => $couple ? $couple->invited_by : null
         ]);
     }
 
@@ -124,21 +157,98 @@ class GlimpseController extends Controller
             return response()->json(['message' => 'User is already in a relationship'], 400);
         }
 
-        $coupleId = rand(10000, 99999);
+        $couple = \App\Models\Couple::create([
+            'anniversary_start_date' => now(),
+            'is_active' => 0,
+            'invited_by' => $user->id
+        ]);
+        $coupleId = $couple->id;
         $user->update(['couple_id' => $coupleId]);
         $targetUser->update(['couple_id' => $coupleId]);
 
-        return response()->json(['message' => 'Connected successfully!', 'couple_id' => $coupleId]);
+        return response()->json(['message' => 'Invite sent successfully!', 'couple_id' => $coupleId]);
+    }
+
+    public function acceptConnect(Request $request)
+    {
+        $user = $request->user();
+        if ($user->couple_id) {
+            $couple = \App\Models\Couple::find($user->couple_id);
+            if ($couple && $couple->is_active == 0) {
+                $couple->update(['is_active' => 1]);
+                return response()->json(['message' => 'Connected successfully!']);
+            }
+        }
+        return response()->json(['message' => 'No pending connect request found'], 400);
+    }
+
+    public function declineConnect(Request $request)
+    {
+        $user = $request->user();
+        if ($user->couple_id) {
+            $coupleId = $user->couple_id;
+            \App\Models\User::where('couple_id', $coupleId)->update(['couple_id' => null]);
+            \App\Models\Couple::where('id', $coupleId)->delete();
+            return response()->json(['message' => 'Connect request declined']);
+        }
+        return response()->json(['message' => 'No request found'], 400);
+    }
+
+    public function disconnect(Request $request)
+    {
+        $user = $request->user();
+        if ($user->couple_id) {
+            $couple = \App\Models\Couple::find($user->couple_id);
+            if ($couple) {
+                $couple->update(['disconnect_requested_by' => $user->id]);
+            }
+        }
+        return response()->json(['message' => 'Disconnect request sent']);
+    }
+
+    public function approveDisconnect(Request $request)
+    {
+        $user = $request->user();
+        if ($user->couple_id) {
+            $coupleId = $user->couple_id;
+            \App\Models\User::where('couple_id', $coupleId)->update(['couple_id' => null]);
+            \App\Models\Couple::where('id', $coupleId)->delete();
+        }
+        return response()->json(['message' => 'Partner disconnected']);
+    }
+
+    public function cancelDisconnect(Request $request)
+    {
+        $user = $request->user();
+        if ($user->couple_id) {
+            $couple = \App\Models\Couple::find($user->couple_id);
+            if ($couple) {
+                $couple->update(['disconnect_requested_by' => null]);
+            }
+        }
+        return response()->json(['message' => 'Disconnect request cancelled']);
     }
 
     public function uploadPhoto(Request $request)
     {
         $request->validate([
             'photo' => 'required|image|max:10240', // Max 10MB
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
+            'battery_level' => 'nullable|integer',
+            'status_note' => 'nullable|string|max:255',
+            'location_name' => 'nullable|string|max:255',
         ]);
 
         $user = $request->user();
         
+        // Update presence data
+        if ($request->has('latitude')) $user->latitude = $request->latitude;
+        if ($request->has('longitude')) $user->longitude = $request->longitude;
+        if ($request->has('battery_level')) $user->battery_level = $request->battery_level;
+        if ($request->has('status_note')) $user->status_note = $request->status_note;
+        if ($request->has('location_name')) $user->location_name = $request->location_name;
+
         if ($request->hasFile('photo')) {
             // Delete old photo if exists
             if ($user->latest_photo_url) {
@@ -154,11 +264,83 @@ class GlimpseController extends Controller
             }
 
             return response()->json([
-                'message' => 'Photo uploaded successfully',
-                'photo_url' => $user->latest_photo_url
+                'message' => 'Kabar updated successfully!',
+                'photo_url' => $user->latest_photo_url,
+                'user' => $user
             ]);
         }
 
         return response()->json(['message' => 'No photo uploaded'], 400);
+    }
+
+    public function getMessages(Request $request)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        $couple = \App\Models\Couple::find($user->couple_id);
+        if (!$couple || $couple->is_active == 0) {
+            return response()->json(['message' => 'Relationship is not active'], 400);
+        }
+
+        $messages = \App\Models\Message::where('couple_id', $user->couple_id)
+            ->orderBy('created_at', 'asc')
+            ->take(100)
+            ->get();
+
+        return response()->json($messages);
+    }
+
+    public function sendMessage(Request $request)
+    {
+        $request->validate(['message' => 'required|string']);
+        $user = $request->user();
+
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        $couple = \App\Models\Couple::find($user->couple_id);
+        if (!$couple || $couple->is_active == 0) {
+            return response()->json(['message' => 'Relationship is not active'], 400);
+        }
+
+        $msg = \App\Models\Message::create([
+            'couple_id' => $user->couple_id,
+            'sender_id' => $user->id,
+            'message' => $request->message
+        ]);
+
+        return response()->json($msg);
+    }
+
+    public function updateStatus(Request $request)
+    {
+        $request->validate([
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
+            'battery_level' => 'nullable|integer',
+            'is_charging' => 'nullable|boolean',
+            'status_note' => 'nullable|string|max:255',
+            'location_name' => 'nullable|string|max:255',
+        ]);
+
+        $user = $request->user();
+        
+        if ($request->has('latitude')) $user->latitude = $request->latitude;
+        if ($request->has('longitude')) $user->longitude = $request->longitude;
+        if ($request->has('battery_level')) $user->battery_level = $request->battery_level;
+        if ($request->has('is_charging')) $user->is_charging = $request->is_charging ? 1 : 0;
+        if ($request->has('status_note')) $user->status_note = $request->status_note;
+        if ($request->has('location_name')) $user->location_name = $request->location_name;
+
+        $user->save();
+
+        return response()->json([
+            'message' => 'Status updated successfully!',
+            'user' => $user
+        ]);
     }
 }

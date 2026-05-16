@@ -9,14 +9,24 @@ struct ProfileView: View {
     @State private var isShowingEditProfile = false
     @State private var isShowingChangePassword = false
     @State private var isShowingEditAnniversary = false
+    @State private var isShowingLogoutConfirmation = false
+    @State private var isShowingDisconnectConfirmation = false
+    @State private var isShowingCancelDisconnectConfirmation = false
+    @State private var isShowingApproveDisconnectConfirmation = false
+    @State private var isShowingAcceptInviteConfirmation = false
+    @State private var isShowingCancelInviteConfirmation = false
     @State private var notificationsEnabled = true
     @State private var scrollOffset: CGFloat = 0
+    @State private var isCopied = false
     
     var body: some View {
         ZStack(alignment: .top) {
             // LAYER 1: Background
-            Color.deepVelvet.ignoresSafeArea()
-            iOS26Background().opacity(0.4)
+            ZStack {
+                Color.deepVelvet
+                iOS26Background().opacity(0.4)
+            }
+            .ignoresSafeArea()
             
             // LAYER 2: Scroll Content
             ScrollView(showsIndicators: false) {
@@ -82,12 +92,48 @@ struct ProfileView: View {
                             sectionLabel(auth.partner != nil ? "Relationship (shared settings)" : "Get started")
                             
                             if let partner = auth.partner {
-                                CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: "Paired", color: .red)
-                                
-                                Button {
-                                    isShowingEditAnniversary = true
-                                } label: {
-                                    CompactMenuRow(icon: "calendar", title: "Anniversary date", value: formattedDate(auth.anniversaryDate ?? Date()), color: .electricPurple)
+                                if auth.coupleActive {
+                                    if let reqBy = auth.disconnectRequestedBy {
+                                        if reqBy == auth.currentUser?.id {
+                                            Button {
+                                                isShowingCancelDisconnectConfirmation = true
+                                            } label: {
+                                                CompactMenuRow(icon: "clock.fill", title: "Unlink requested...", value: "Cancel Request", color: .orange)
+                                            }
+                                        } else {
+                                            Button {
+                                                isShowingApproveDisconnectConfirmation = true
+                                            } label: {
+                                                CompactMenuRow(icon: "person.fill.xmark", title: "Unlink request from \(partner.name)", value: "Review", color: .red)
+                                            }
+                                        }
+                                    } else {
+                                        Button {
+                                            isShowingDisconnectConfirmation = true
+                                        } label: {
+                                            CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: "Paired", color: .red)
+                                        }
+                                    }
+                                    
+                                    Button {
+                                        isShowingEditAnniversary = true
+                                    } label: {
+                                        CompactMenuRow(icon: "calendar", title: "Anniversary date", value: formattedDate(auth.anniversaryDate ?? Date()), color: .electricPurple)
+                                    }
+                                } else {
+                                    if auth.invitedBy == auth.currentUser?.id {
+                                        Button {
+                                            isShowingCancelInviteConfirmation = true
+                                        } label: {
+                                            CompactMenuRow(icon: "hourglass.badge.plus", title: "Invite sent to \(partner.name)", value: "Pending", color: .orange)
+                                        }
+                                    } else {
+                                        Button {
+                                            isShowingAcceptInviteConfirmation = true
+                                        } label: {
+                                            CompactMenuRow(icon: "heart.badge.plus.fill", title: "Invite from \(partner.name)", value: "Review", color: .red)
+                                        }
+                                    }
                                 }
                             } else {
                                 inviteCard
@@ -137,7 +183,7 @@ struct ProfileView: View {
                         
                         // 5. Logout
                         Button {
-                            auth.logout()
+                            isShowingLogoutConfirmation = true
                         } label: {
                             HStack {
                                 Image(systemName: "rectangle.portrait.and.arrow.right")
@@ -159,16 +205,7 @@ struct ProfileView: View {
                 }
             }
             .coordinateSpace(name: "scroll")
-            .onPreferenceChange(ScrollOffsetKey.self) { value in
-                scrollOffset = value
-            }
             .ignoresSafeArea(.container, edges: .top)
-            
-            // LAYER 3: Floating Header (With Dynamic Opacity)
-            headerView
-                .opacity(headerOpacity)
-                .animation(.easeInOut, value: headerOpacity)
-                .zIndex(10)
         }
         .sheet(isPresented: $isShowingEditProfile) {
             EditProfileView(auth: auth)
@@ -188,22 +225,76 @@ struct ProfileView: View {
             Button("Connect") { connectPartner() }
             Button("Cancel", role: .cancel) {}
         }
+        .alert("Logout", isPresented: $isShowingLogoutConfirmation) {
+            Button("Logout", role: .destructive) {
+                auth.logout()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to logout? You will need to login again to see your partner's updates.")
+        }
+        .alert("Unlink Partner?", isPresented: $isShowingDisconnectConfirmation) {
+            Button("Request Unlink", role: .destructive) {
+                Task { try? await auth.disconnectPartner() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will send a disconnect request to \(auth.partner?.name ?? "your partner"). You will remain connected until they approve it.")
+        }
+        .alert("Approve Unlink?", isPresented: $isShowingApproveDisconnectConfirmation) {
+            Button("Approve Disconnect", role: .destructive) {
+                Task { try? await auth.approveDisconnectPartner() }
+            }
+            Button("Keep Connected", role: .cancel) {
+                Task { try? await auth.cancelDisconnectPartner() }
+            }
+        } message: {
+            Text("\(auth.partner?.name ?? "Your partner") has requested to unlink. Approving this will immediately disconnect you both. Choosing 'Keep Connected' will decline the request.")
+        }
+        .alert("Cancel Unlink Request?", isPresented: $isShowingCancelDisconnectConfirmation) {
+            Button("Cancel Request", role: .destructive) {
+                Task { try? await auth.cancelDisconnectPartner() }
+            }
+            Button("Keep Waiting", role: .cancel) {}
+        } message: {
+            Text("Do you want to cancel your request to unlink from \(auth.partner?.name ?? "your partner")?")
+        }
+        .alert("Approve Connection?", isPresented: $isShowingAcceptInviteConfirmation) {
+            Button("Accept", role: .destructive) {
+                Task { try? await auth.acceptConnectRequest() }
+            }
+            Button("Decline", role: .cancel) {
+                Task { try? await auth.declineConnectRequest() }
+            }
+        } message: {
+            Text("\(auth.partner?.name ?? "Your partner") has sent you a connection request. Would you like to connect and share your Glimpse?")
+        }
+        .alert("Cancel Invite?", isPresented: $isShowingCancelInviteConfirmation) {
+            Button("Cancel Request", role: .destructive) {
+                Task { try? await auth.declineConnectRequest() }
+            }
+            Button("Keep Waiting", role: .cancel) {}
+        } message: {
+            Text("Do you want to cancel your pending invite to \(auth.partner?.name ?? "your partner")?")
+        }
     }
     
-    private var headerView: some View {
-        BrandingHeader()
+    private func formattedUrl(_ urlString: String) -> String {
+        if urlString.hasPrefix("http") {
+            return urlString
+        } else {
+            let cleanPath = urlString.hasPrefix("/") ? String(urlString.dropFirst()) : urlString
+            let baseURL = AuthManager.shared.baseURL.replacingOccurrences(of: "/api", with: "")
+            return cleanPath.contains("storage/") ? "\(baseURL)/\(cleanPath)" : "\(baseURL)/storage/\(cleanPath)"
+        }
     }
     
     private func avatarImage(url: String) -> some View {
-        AsyncImage(url: URL(string: url)) { image in
-            image.resizable().aspectRatio(contentMode: .fill)
-        } placeholder: {
-            Circle().fill(Color.gray.opacity(0.3))
-        }
-        .frame(width: 80, height: 80)
-        .clipShape(Circle())
-        .overlay(Circle().stroke(Color.electricPurple, lineWidth: 2))
-        .shadow(color: .electricPurple.opacity(0.2), radius: 10)
+        CachedImageView(urlString: formattedUrl(url))
+            .frame(width: 80, height: 80)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(Color.electricPurple, lineWidth: 2))
+            .shadow(color: .electricPurple.opacity(0.2), radius: 10)
     }
     
     private func sectionLabel(_ text: String) -> some View {
@@ -217,12 +308,26 @@ struct ProfileView: View {
         VStack(spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Your invite code")
+                    Text(isCopied ? "Copied!" : "Your invite code (Tap to Copy)")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.electricPurple)
+                        .foregroundColor(isCopied ? .green : .electricPurple)
                     Text(auth.currentUser?.invite_code ?? "----")
                         .font(.system(size: 18, weight: .bold, design: .monospaced))
                         .foregroundColor(.white)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    guard let code = auth.currentUser?.invite_code else { return }
+                    UIPasteboard.general.string = code
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    withAnimation {
+                        isCopied = true
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        withAnimation {
+                            isCopied = false
+                        }
+                    }
                 }
                 Spacer()
                 Button { shareInviteCode() } label: {
@@ -291,12 +396,6 @@ struct ProfileView: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         return formatter.string(from: date)
-    }
-    
-    private var headerOpacity: Double {
-        // Logo starts fading after 20px scroll, disappears at 60px
-        let opacity = 1.0 + (scrollOffset / 60.0)
-        return max(0, min(1, opacity))
     }
 }
 
@@ -379,6 +478,16 @@ struct EditProfileView: View {
         _email = State(initialValue: auth.currentUser?.email ?? "")
     }
     
+    private func formattedUrl(_ urlString: String) -> String {
+        if urlString.hasPrefix("http") {
+            return urlString
+        } else {
+            let cleanPath = urlString.hasPrefix("/") ? String(urlString.dropFirst()) : urlString
+            let baseURL = AuthManager.shared.baseURL.replacingOccurrences(of: "/api", with: "")
+            return cleanPath.contains("storage/") ? "\(baseURL)/\(cleanPath)" : "\(baseURL)/storage/\(cleanPath)"
+        }
+    }
+    
     var body: some View {
         ZStack {
             Color.deepVelvet.ignoresSafeArea()
@@ -398,13 +507,9 @@ struct EditProfileView: View {
                                 .frame(width: 80, height: 80)
                                 .clipShape(Circle())
                         } else {
-                            AsyncImage(url: URL(string: auth.currentUser?.profile_photo_url ?? "")) { image in
-                                image.resizable().aspectRatio(contentMode: .fill)
-                            } placeholder: {
-                                Circle().fill(Color.gray.opacity(0.3))
-                            }
-                            .frame(width: 80, height: 80)
-                            .clipShape(Circle())
+                            CachedImageView(urlString: formattedUrl(auth.currentUser?.profile_photo_url ?? ""))
+                                .frame(width: 80, height: 80)
+                                .clipShape(Circle())
                         }
                         
                         if isProcessingImage {
@@ -507,8 +612,7 @@ struct EditAnniversaryView: View {
                 DatePicker("", selection: $date, displayedComponents: .date)
                     .datePickerStyle(.wheel)
                     .labelsHidden()
-                    .colorInvert()
-                    .colorMultiply(.white)
+                    .environment(\.colorScheme, .dark)
                 
                 Button {
                     saveAnniversary()

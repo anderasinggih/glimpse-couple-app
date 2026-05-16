@@ -13,11 +13,10 @@ struct ContentView: View {
     
     var body: some View {
         ZStack {
-            Color.deepVelvet.ignoresSafeArea() // BG Permanen sejak detik 0
-            
             if showSplash {
                 SplashScreenView()
-                    .transition(.opacity.combined(with: .scale))
+                    .transition(.opacity)
+                    .zIndex(1)
             } else {
                 Group {
                     if auth.isAuthenticated {
@@ -26,17 +25,15 @@ struct ContentView: View {
                         OnboardingView()
                     }
                 }
-                .transition(.opacity)
+                .transition(.identity) // No heavy transition here
+                .zIndex(0)
             }
         }
-        .animation(.smooth(duration: 0.8), value: showSplash)
-        .animation(.smooth, value: auth.isAuthenticated)
+        .animation(.linear(duration: 0.2), value: showSplash)
         .task {
-            // Splash duration - Optimized for iOS 26 speed
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
-            withAnimation(.smooth(duration: 0.6)) {
-                showSplash = false
-            }
+            // Very short splash for iOS 26 speed
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            showSplash = false
         }
     }
 }

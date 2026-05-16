@@ -1,20 +1,44 @@
 import SwiftUI
 
 struct LoginView: View {
+    @Environment(\.dismiss) var dismiss
     @State private var email = ""
     @State private var password = ""
     @State private var isLoading = false
     @State private var errorMessage = ""
     
+    @FocusState private var focusedField: Field?
+    
+    enum Field {
+        case email, password
+    }
+    
     var body: some View {
         ZStack {
+            // Background tap to dismiss keyboard
             Color.deepVelvet
                 .ignoresSafeArea()
+                .contentShape(Rectangle())
                 .onTapGesture {
-                    hideKeyboard()
+                    focusedField = nil
                 }
             
             VStack(spacing: 24) {
+                // Back Button Row
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "chevron.left")
+                            .font(.title3.bold())
+                            .foregroundColor(.white)
+                            .padding(12) // Wider hit area
+                            .background(Color.white.opacity(0.01)) // Make the padding clickable
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 8)
+                .padding(.top, 10) // Extra breathing room
+                .zIndex(10)
+                
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Welcome Back")
                         .font(.system(size: 32, weight: .bold))
@@ -28,7 +52,23 @@ struct LoginView: View {
                 VStack(spacing: 16) {
                     CustomTextField(icon: "envelope.fill", placeholder: "Email", text: $email)
                         .keyboardType(.emailAddress)
+                        .focused($focusedField, equals: .email)
+                        .submitLabel(.next)
+                        .id("login-email-field")
+                        .onTapGesture { focusedField = .email } // Click anywhere in container
+                    
                     CustomTextField(icon: "lock.fill", placeholder: "Password", text: $password, isSecure: true)
+                        .focused($focusedField, equals: .password)
+                        .submitLabel(.done)
+                        .id("login-password-field")
+                        .onTapGesture { focusedField = .password } // Click anywhere in container
+                }
+                .onSubmit {
+                    if focusedField == .email {
+                        focusedField = .password
+                    } else {
+                        focusedField = nil
+                    }
                 }
                 .padding(.horizontal)
                 
@@ -69,7 +109,7 @@ struct LoginView: View {
             }
             .padding(.top, 40)
         }
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
     }
     
     private func validate() -> Bool {
@@ -107,24 +147,19 @@ struct CustomTextField: View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .foregroundColor(.electricPurple)
-                .frame(width: 20)
             
             if isSecure {
                 SecureField(placeholder, text: $text)
                     .foregroundColor(.white)
-                    .tint(.electricPurple) // Cursor color
             } else {
                 TextField(placeholder, text: $text)
                     .foregroundColor(.white)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
-                    .tint(.electricPurple) // Cursor color
             }
         }
         .padding(16)
-        .background(Color.white.opacity(0.05))
+        .background(Color.white.opacity(0.1))
         .cornerRadius(12)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.1)))
-        .contentShape(Rectangle()) // Ensure the whole area is tappable
     }
 }

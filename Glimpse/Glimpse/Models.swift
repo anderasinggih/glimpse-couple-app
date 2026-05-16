@@ -11,6 +11,7 @@ struct GlimpseUser: Codable, Identifiable {
     let location_name: String?
     let status_note: String?
     let battery_level: Int?
+    let is_charging: Bool?
     let latest_photo_url: String?
     let last_updated: String?
     let invite_code: String?
@@ -28,14 +29,17 @@ struct GlimpseUser: Codable, Identifiable {
     
     var isOffline: Bool {
         guard last_updated != nil else { return true }
-        return Calendar.current.dateComponents([.minute], from: lastUpdatedDate, to: Date()).minute ?? 0 > 60
+        return Calendar.current.dateComponents([.minute], from: lastUpdatedDate, to: Date()).minute ?? 0 > 3
     }
 }
 
-struct CoupleResponse: Codable {
+struct CoupleResponse: Codable { 
     let user: GlimpseUser
     let partner_data: GlimpseUser?
     let anniversary_start_date: String?
+    let disconnect_requested_by: Int?
+    let couple_active: Bool?
+    let invited_by: Int?
     
     var anniversaryDate: Date? {
         guard let start = anniversary_start_date else { return nil }
@@ -56,6 +60,7 @@ extension GlimpseUser {
         location_name: "My Home",
         status_note: "Coding Glimpse 🚀",
         battery_level: 100,
+        is_charging: false,
         latest_photo_url: nil,
         last_updated: ISO8601DateFormatter().string(from: Date()),
         invite_code: "GLMP-1234",
@@ -64,17 +69,27 @@ extension GlimpseUser {
     
     static let mockPartner = GlimpseUser(
         id: 2,
-        name: "Sarah",
-        email: "sarah@glimpse.com",
-        profile_photo_url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330",
-        latitude: -6.9750,
-        longitude: 107.6310,
-        location_name: "Kampus Telkom",
-        status_note: "Miss you! ❤️",
-        battery_level: 85,
+        name: "Unknown",
+        email: "unknown@glimpse.com",
+        profile_photo_url: "https://ui-avatars.com/api/?name=Unknown",
+        latitude: 0.0,
+        longitude: 0.0,
+        location_name: "Unknown Location",
+        status_note: "No status available",
+        battery_level: 0,
+        is_charging: false,
         latest_photo_url: nil,
-        last_updated: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-300)),
-        invite_code: "SARAH-CODE",
-        couple_id: 1
+        last_updated: ISO8601DateFormatter().string(from: Date()),
+        invite_code: "UNKNOWN",
+        couple_id: nil
     )
+}
+
+struct ChatMessage: Codable, Identifiable, Equatable {
+    let id: Int
+    let couple_id: Int
+    let sender_id: Int
+    let message: String
+    let created_at: String?
+    let updated_at: String?
 }

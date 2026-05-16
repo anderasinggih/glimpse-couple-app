@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import WidgetKit
 
 @Observable
 class AuthManager {
@@ -9,17 +10,25 @@ class AuthManager {
     var currentUser: GlimpseUser?
     var partner: GlimpseUser?
     var anniversaryDate: Date?
+    var disconnectRequestedBy: Int?
+    var coupleActive = false
+    var invitedBy: Int?
+    var showInviteDeclinedAlert = false
     
     var userToken: String? {
         UserDefaults.standard.string(forKey: "auth_token")
     }
     
-    private let baseURL = "http://192.168.0.103:8000/api"
+    let baseURL = "http://192.168.0.103:8000/api"
     
     init() {
-        self.isAuthenticated = userToken != nil
-        if isAuthenticated {
-            Task { try? await fetchState() }
+        // FAST START: Don't do heavy work here
+        let token = UserDefaults.standard.string(forKey: "auth_token")
+        if token != nil {
+            self.isAuthenticated = true
+            Task {
+                try? await self.fetchState()
+            }
         }
     }
     
@@ -31,18 +40,66 @@ class AuthManager {
         request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         
+        let wasPending = self.partner != nil && !self.coupleActive
+        
         let (data, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             return
         }
         
-        let decoder = JSONDecoder()
-        if let stateResponse = try? decoder.decode(CoupleResponse.self, from: data) {
-            DispatchQueue.main.async {
-                self.currentUser = stateResponse.user
-                self.partner = stateResponse.partner_data
-                self.anniversaryDate = stateResponse.anniversaryDate
+        let responseData = try JSONDecoder().decode(CoupleResponse.self, from: data)
+        await MainActor.run {
+            let isNowDisconnected = responseData.partner_data == nil
+            
+            self.currentUser = responseData.user
+            self.partner = responseData.partner_data
+            self.anniversaryDate = responseData.anniversaryDate
+            self.disconnectRequestedBy = responseData.disconnect_requested_by
+            self.coupleActive = responseData.couple_active ?? false
+            self.invitedBy = responseData.invited_by
+            
+            if wasPending && isNowDisconnected {
+                self.showInviteDeclinedAlert = true
+            }
+            
+            // SAVE DATA FOR WIDGET
+            let sharedDefaults = UserDefaults(suiteName: "group.glimpse.app")
+            if let partner = responseData.partner_data,
+               let encoded = try? JSONEncoder().encode(partner) {
+                sharedDefaults?.set(encoded, forKey: "latest_partner_data")
+                
+                // Main App men-download foto untuk Widget agar menghindari error ATS dan menghemat baterai Widget
+                Task {
+                    var urlString = partner.latest_photo_url ?? partner.profile_photo_url
+                    
+                    if !urlString.hasPrefix("http") {
+                        let cleanPath = urlString.hasPrefix("/") ? String(urlString.dropFirst()) : urlString
+                        let base = "http://192.168.0.103:8000"
+                        urlString = cleanPath.contains("storage/") ? "\(base)/\(cleanPath)" : "\(base)/storage/\(cleanPath)"
+                    }
+                    
+                    if let url = URL(string: urlString) {
+                        do {
+                            let (data, _) = try await URLSession.shared.data(from: url)
+                            if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+                                let fileURL = groupURL.appendingPathComponent("widget_photo.jpg")
+                                try data.write(to: fileURL)
+                            }
+                        } catch {
+                            print("Widget Photo Download Error: \(error)")
+                        }
+                    }
+                    WidgetCenter.shared.reloadAllTimelines() // Force widget refresh setelah foto siap
+                }
+            } else {
+                // Clear widget data if there is no partner
+                sharedDefaults?.removeObject(forKey: "latest_partner_data")
+                if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+                    let fileURL = groupURL.appendingPathComponent("widget_photo.jpg")
+                    try? FileManager.default.removeItem(at: fileURL)
+                }
+                WidgetCenter.shared.reloadAllTimelines()
             }
         }
     }
@@ -67,6 +124,175 @@ class AuthManager {
         }
         
         try await fetchState()
+    }
+    
+    func acceptConnectRequest() async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/connect/accept") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to accept connection request"])
+        }
+        
+        try await fetchState()
+    }
+    
+    func declineConnectRequest() async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/connect/decline") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to decline connection request"])
+        }
+        
+        try await fetchState()
+    }
+    
+    func disconnectPartner() async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/disconnect") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to request disconnect"])
+        }
+        
+        try await fetchState()
+    }
+    
+    func approveDisconnectPartner() async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/disconnect/approve") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to approve disconnect"])
+        }
+        
+        // Clear shared container data on disconnect
+        let sharedDefaults = UserDefaults(suiteName: "group.glimpse.app")
+        sharedDefaults?.removeObject(forKey: "latest_partner_data")
+        if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+            let fileURL = groupURL.appendingPathComponent("widget_photo.jpg")
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+        WidgetCenter.shared.reloadAllTimelines()
+        
+        try await fetchState()
+    }
+    
+    func cancelDisconnectPartner() async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/disconnect/cancel") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to cancel disconnect request"])
+        }
+        
+        try await fetchState()
+    }
+    
+    func pushCurrentStatus() {
+        guard isAuthenticated else { return }
+        
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        let batteryLevel = Int(UIDevice.current.batteryLevel * 100)
+        let isCharging = UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full
+        
+        Task {
+            guard let url = URL(string: "\(baseURL)/glimpse/status") else { return }
+            guard let token = userToken else { return }
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.addValue("application/json", forHTTPHeaderField: "Accept")
+            
+            let body: [String: Any] = [
+                "battery_level": batteryLevel,
+                "is_charging": isCharging
+            ]
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            
+            _ = try? await URLSession.shared.data(for: request)
+        }
+    }
+    
+    func fetchMessages() async throws -> [ChatMessage] {
+        guard let url = URL(string: "\(baseURL)/glimpse/chat") else { return [] }
+        guard let token = userToken else { return [] }
+        
+        var request = URLRequest(url: url)
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            return []
+        }
+        
+        return try JSONDecoder().decode([ChatMessage].self, from: data)
+    }
+    
+    func sendChatMessage(text: String) async throws -> ChatMessage {
+        guard let url = URL(string: "\(baseURL)/glimpse/chat") else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
+        }
+        guard let token = userToken else {
+            throw NSError(domain: "Auth", code: 401, userInfo: [NSLocalizedDescriptionKey: "Unauthorized"])
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let body = ["message": text]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to send message"])
+        }
+        
+        return try JSONDecoder().decode(ChatMessage.self, from: data)
     }
 
     func updateProfile(name: String?, email: String?, photo: UIImage?) async throws {
@@ -94,7 +320,7 @@ class AuthManager {
             body.append("\(email)\r\n".data(using: .utf8)!)
         }
         
-        if let photo = photo, let imageData = photo.jpegData(compressionQuality: 0.7) {
+        if let photo = photo, let imageData = photo.compressedForApp(maxDimension: 400, targetBytes: 100_000) {
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
             body.append("Content-Disposition: form-data; name=\"profile_photo\"; filename=\"avatar.jpg\"\r\n".data(using: .utf8)!)
             body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
@@ -196,12 +422,21 @@ class AuthManager {
     
     func logout() {
         UserDefaults.standard.removeObject(forKey: "auth_token")
+        
+        let sharedDefaults = UserDefaults(suiteName: "group.glimpse.app")
+        sharedDefaults?.removeObject(forKey: "latest_partner_data")
+        if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+            let fileURL = groupURL.appendingPathComponent("widget_photo.jpg")
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+        WidgetCenter.shared.reloadAllTimelines()
+        
         withAnimation {
             self.isAuthenticated = false
         }
     }
     
-    func uploadPhoto(_ image: UIImage) async throws {
+    func uploadPhoto(_ image: UIImage, latitude: Double? = nil, longitude: Double? = nil, battery: Int? = nil, note: String? = nil, locationName: String? = nil) async throws {
         guard let url = URL(string: "\(baseURL)/glimpse/photo") else { return }
         guard let token = userToken else { return }
         
@@ -213,15 +448,54 @@ class AuthManager {
         let boundary = "Boundary-\(UUID().uuidString)"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         
-        guard let imageData = image.jpegData(compressionQuality: 0.7) else { return }
+        // 1. COMPRESS: Scale down to 800px and compress to under 100KB
+        guard let finalData = image.compressedForApp(maxDimension: 800, targetBytes: 100_000) else { return }
         
         var body = Data()
+        
+        // 1. Photo data
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"photo\"; filename=\"flash.jpg\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
-        body.append(imageData)
-        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        body.append(finalData)
+        body.append("\r\n".data(using: .utf8)!)
         
+        // 2. Latitude
+        if let lat = latitude {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"latitude\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(lat)\r\n".data(using: .utf8)!)
+        }
+        
+        // 3. Longitude
+        if let lon = longitude {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"longitude\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(lon)\r\n".data(using: .utf8)!)
+        }
+        
+        // 4. Battery
+        if let batt = battery {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"battery_level\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(batt)\r\n".data(using: .utf8)!)
+        }
+        
+        // 5. Note (Kabar)
+        if let status = note {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"status_note\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(status)\r\n".data(using: .utf8)!)
+        }
+        
+        // 6. Location Name
+        if let loc = locationName {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"location_name\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(loc)\r\n".data(using: .utf8)!)
+        }
+        
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
         
         let (_, response) = try await URLSession.shared.data(for: request)
@@ -229,5 +503,37 @@ class AuthManager {
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw NSError(domain: "Auth", code: 500, userInfo: [NSLocalizedDescriptionKey: "Upload failed"])
         }
+        
+        // Refresh state after upload to reflect changes
+        try? await fetchState()
+    }
+}
+
+extension UIImage {
+    func compressedForApp(maxDimension: CGFloat, targetBytes: Int) -> Data? {
+        var targetSize = self.size
+        if self.size.width > maxDimension || self.size.height > maxDimension {
+            let aspectRatio = self.size.width / self.size.height
+            if aspectRatio > 1 {
+                targetSize = CGSize(width: maxDimension, height: maxDimension / aspectRatio)
+            } else {
+                targetSize = CGSize(width: maxDimension * aspectRatio, height: maxDimension)
+            }
+        }
+        
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        let resizedImage = renderer.image { _ in
+            self.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+        
+        var compression: CGFloat = 0.7
+        var imageData = resizedImage.jpegData(compressionQuality: compression)
+        
+        while (imageData?.count ?? 0) > targetBytes && compression > 0.05 {
+            compression -= 0.1
+            imageData = resizedImage.jpegData(compressionQuality: compression)
+        }
+        
+        return imageData
     }
 }

@@ -11,18 +11,9 @@ extension Color {
     static let royalPurple = Color(hex: "7A28FF")
     static let vividMint = Color(hex: "00FF88")
     
-    // Adaptive Colors
-    static var adaptiveBackground: Color {
-        Color(UIColor { traitCollection in
-            traitCollection.userInterfaceStyle == .dark ? UIColor(Color.deepVelvet) : UIColor(Color.lavenderMist)
-        })
-    }
-    
-    static var adaptiveAccent: Color {
-        Color(UIColor { traitCollection in
-            traitCollection.userInterfaceStyle == .dark ? UIColor(Color.electricPurple) : UIColor(Color.royalPurple)
-        })
-    }
+    // Adaptive Colors - Static for performance
+    static let adaptiveBackground = Color.deepVelvet
+    static let adaptiveAccent = Color.electricPurple
 }
 
 extension Color {
@@ -68,30 +59,25 @@ struct GlassmorphicModifier: ViewModifier {
 }
 
 struct iOS26Background: View {
-    @State private var animate = false
-    
     var body: some View {
         ZStack {
             Color.deepVelvet.ignoresSafeArea()
             
-            // Animated Mesh-like Orbs
+            // Static Orbs for Performance
             Circle()
-                .fill(Color.electricPurple.opacity(0.15))
+                .fill(Color.electricPurple.opacity(0.12))
                 .frame(width: 400, height: 400)
                 .blur(radius: 80)
-                .offset(x: animate ? 100 : -100, y: animate ? -200 : -100)
+                .offset(x: -80, y: -220)
             
             Circle()
-                .fill(Color.royalPurple.opacity(0.1))
+                .fill(Color.royalPurple.opacity(0.08))
                 .frame(width: 300, height: 300)
                 .blur(radius: 60)
-                .offset(x: animate ? -150 : 150, y: animate ? 100 : 200)
+                .offset(x: 120, y: 180)
         }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 10).repeatForever(autoreverses: true)) {
-                animate.toggle()
-            }
-        }
+        .drawingGroup()
+        .ignoresSafeArea()
     }
 }
 
@@ -145,8 +131,16 @@ extension View {
         self.modifier(LiquidGlassModifier())
     }
     
+    func blurBackground() -> some View {
+        self.background(.ultraThinMaterial)
+            .clipShape(Capsule())
+    }
+    
     func hideKeyboard() {
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        #if canImport(UIKit)
+        guard let sharedApp = UIApplication.perform(NSSelectorFromString("sharedApplication"))?.takeUnretainedValue() as? UIApplication else { return }
+        sharedApp.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        #endif
     }
 }
 
@@ -163,7 +157,7 @@ struct BrandingHeader: View {
             }
             Spacer()
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 12)
         .padding(.top, 10) // Locked Top Padding
     }
 }
