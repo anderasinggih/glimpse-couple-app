@@ -30,6 +30,12 @@ struct FullPartnerMapView: View {
                 MapUserLocationButton()
                 MapScaleView()
             }
+            .safeAreaInset(edge: .bottom) {
+                // Bottom Info Card acts as a safe area inset, pushing map controls UP
+                PartnerOverlayCard(user: user)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 30)
+            }
             .ignoresSafeArea()
             
             // Branding Overlay
@@ -53,11 +59,6 @@ struct FullPartnerMapView: View {
                 }
                 
                 Spacer()
-                
-                // Bottom Info Card
-                PartnerOverlayCard(user: user)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 30)
             }
         }
     }
