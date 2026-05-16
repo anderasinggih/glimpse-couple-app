@@ -17,46 +17,43 @@ struct FlashCameraView: View {
                 Color.deepVelvet.ignoresSafeArea()
                 iOS26Background().opacity(0.4)
                 
-                VStack(spacing: 0) {
-                    // Header - Calibrated Branding
+                // LAYER 1: The Camera Frame (Absolute Center)
+                ZStack {
+                    if model.permissionStatus == .authorized {
+                        if model.isInitialized {
+                            CameraPreview(session: model.session)
+                                .frame(width: frameSize, height: frameSize)
+                                .opacity(capturedImage == nil ? 1 : 0)
+                            
+                            if let image = capturedImage {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: frameSize, height: frameSize)
+                            }
+                        } else {
+                            loadingFrame(size: frameSize)
+                        }
+                    } else {
+                        permissionView(size: frameSize)
+                    }
+                }
+                .frame(width: frameSize, height: frameSize)
+                .background(Color.black)
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .stroke(LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
+                )
+                .shadow(color: .electricPurple.opacity(0.2), radius: 30)
+                
+                // LAYER 2: UI Overlays (Header & Footer)
+                VStack {
                     headerSection
                         .padding(.top, 10)
                     
                     Spacer()
                     
-                    // Camera Frame
-                    ZStack {
-                        if model.permissionStatus == .authorized {
-                            if model.isInitialized {
-                                CameraPreview(session: model.session)
-                                    .frame(width: frameSize, height: frameSize)
-                                    .opacity(capturedImage == nil ? 1 : 0)
-                                
-                                if let image = capturedImage {
-                                    Image(uiImage: image)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: frameSize, height: frameSize)
-                                }
-                            } else {
-                                loadingFrame(size: frameSize)
-                            }
-                        } else {
-                            permissionView(size: frameSize)
-                        }
-                    }
-                    .frame(width: frameSize, height: frameSize)
-                    .background(Color.black)
-                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 28, style: .continuous)
-                            .stroke(LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
-                    )
-                    .shadow(color: .electricPurple.opacity(0.2), radius: 30)
-                    
-                    Spacer()
-                    
-                    // Footer Controls
                     footerSection
                         .padding(.bottom, 30)
                 }
@@ -66,13 +63,12 @@ struct FlashCameraView: View {
     
     private var headerSection: some View {
         HStack {
-            // Universal Glimpse Branding - Refined
             HStack(spacing: 10) {
                 Image(systemName: "heart.fill")
-                    .font(.system(size: 28)) // Bigger heart icon
+                    .font(.system(size: 28))
                     .foregroundColor(.electricPurple)
                 Text("Glimpse")
-                    .font(.system(size: 24, weight: .bold, design: .rounded)) // Lighter but bold font
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
             }
             Spacer()
