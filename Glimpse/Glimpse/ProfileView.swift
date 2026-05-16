@@ -1,10 +1,11 @@
 import SwiftUI
+import CoreLocation
 
 struct ProfileView: View {
     @State private var auth = AuthManager.shared
     @State private var inviteCodeInput = ""
     @State private var isShowingInviteAlert = false
-    @State private var errorMessage = ""
+    @State private var notificationsEnabled = true
     
     var body: some View {
         ZStack(alignment: .top) {
@@ -18,7 +19,7 @@ struct ProfileView: View {
                     .padding(.top, 10)
                 
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 20) {
+                    VStack(spacing: 24) {
                         // 1. Profile Summary (Compact)
                         if let user = auth.currentUser {
                             VStack(spacing: 12) {
@@ -27,7 +28,7 @@ struct ProfileView: View {
                                 } placeholder: {
                                     Circle().fill(Color.gray.opacity(0.3))
                                 }
-                                .frame(width: 80, height: 80) // Downsized
+                                .frame(width: 80, height: 80)
                                 .clipShape(Circle())
                                 .overlay(Circle().stroke(Color.electricPurple, lineWidth: 2))
                                 .shadow(color: .electricPurple.opacity(0.2), radius: 10)
@@ -46,11 +47,13 @@ struct ProfileView: View {
                         
                         // 2. Relationship Section
                         VStack(alignment: .leading, spacing: 10) {
-                            sectionLabel("RELATIONSHIP")
+                            sectionLabel("Relationship status")
                             
                             if let partner = auth.partner {
-                                CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: "Since 2023", color: .red)
-                                CompactMenuRow(icon: "calendar", title: "Anniversary Date", value: "Oct 20", color: .electricPurple)
+                                CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: "Paired", color: .red)
+                                if let date = auth.anniversaryDate {
+                                    CompactMenuRow(icon: "calendar", title: "Anniversary date", value: formattedDate(date), color: .electricPurple)
+                                }
                             } else {
                                 inviteCard
                             }
@@ -59,11 +62,23 @@ struct ProfileView: View {
                         
                         // 3. Settings & Stats Section
                         VStack(alignment: .leading, spacing: 10) {
-                            sectionLabel("ACCOUNT & PRIVACY")
+                            sectionLabel("App & privacy")
                             
-                            CompactMenuRow(icon: "bell.fill", title: "Notifications", value: "Enabled", color: .activeCyan)
-                            CompactMenuRow(icon: "location.viewfinder", title: "Background Sharing", value: "Always", color: .green)
-                            CompactMenuRow(icon: "shield.fill", title: "Privacy Policy", value: "", color: .secondary)
+                            Button {
+                                notificationsEnabled.toggle()
+                            } label: {
+                                CompactMenuRow(icon: "bell.fill", title: "Push notifications", value: notificationsEnabled ? "On" : "Off", color: .activeCyan)
+                            }
+                            
+                            Button {
+                                openAppSettings()
+                            } label: {
+                                CompactMenuRow(icon: "location.viewfinder", title: "Location sharing", value: locationStatus(), color: .green)
+                            }
+                            
+                            Link(destination: URL(string: "https://glimpse-app.com/privacy")!) {
+                                CompactMenuRow(icon: "shield.fill", title: "Privacy policy", value: "View", color: .secondary)
+                            }
                         }
                         .padding(.horizontal)
                         
@@ -74,7 +89,7 @@ struct ProfileView: View {
                             HStack {
                                 Image(systemName: "rectangle.portrait.and.arrow.right")
                                     .font(.system(size: 14))
-                                Text("Logout Account")
+                                Text("Logout from account")
                                     .font(.system(size: 14, weight: .bold))
                             }
                             .foregroundColor(.red)
@@ -92,7 +107,7 @@ struct ProfileView: View {
             }
         }
         .alert("Connect Partner", isPresented: $isShowingInviteAlert) {
-            TextField("Partner Code", text: $inviteCodeInput)
+            TextField("Partner code", text: $inviteCodeInput)
                 .autocapitalization(.allCharacters)
             Button("Connect") { connectPartner() }
             Button("Cancel", role: .cancel) {}
@@ -116,7 +131,7 @@ struct ProfileView: View {
     
     private func sectionLabel(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11, weight: .bold))
+            .font(.system(size: 13, weight: .medium))
             .foregroundColor(.white.opacity(0.4))
             .padding(.leading, 8)
     }
@@ -125,7 +140,7 @@ struct ProfileView: View {
         VStack(spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Your Invite Code")
+                    Text("Your invite code")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundColor(.electricPurple)
                     Text(auth.currentUser?.invite_code ?? "----")
@@ -146,7 +161,7 @@ struct ProfileView: View {
             Divider().background(Color.white.opacity(0.1))
             
             Button { isShowingInviteAlert = true } label: {
-                Text("Enter Partner Code")
+                Text("Enter partner code")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
@@ -178,6 +193,27 @@ struct ProfileView: View {
                 print("Connection failed: \(error)")
             }
         }
+    }
+    
+    private func locationStatus() -> String {
+        let manager = CLLocationManager()
+        switch manager.authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse: return "Always"
+        case .denied, .restricted: return "Disabled"
+        default: return "Check settings"
+        }
+    }
+    
+    private func openAppSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+    }
+    
+    private func formattedDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
     }
 }
 
