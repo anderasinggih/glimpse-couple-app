@@ -17,8 +17,7 @@ struct FullPartnerMapView: View {
     }
     
     var body: some View {
-        ZStack(alignment: .top) {
-            // Full Screen Map
+        NavigationStack {
             Map(position: $position) {
                 Annotation(user.name, coordinate: user.coordinate) {
                     PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline)
@@ -27,51 +26,33 @@ struct FullPartnerMapView: View {
             .mapStyle(isSatellite ? .hybrid(elevation: .realistic) : .standard(emphasis: .muted))
             .mapControls {
                 MapCompass()
+                MapUserLocationButton()
                 MapScaleView()
             }
             .ignoresSafeArea()
-            
-            // Branding & Controls Overlay
-            VStack(spacing: 0) {
-                BrandingHeader()
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "heart.fill")
+                            .foregroundColor(.electricPurple)
+                        Text("Glimpse")
+                            .font(.system(.headline, design: .rounded))
+                            .fontWeight(.bold)
+                    }
+                }
                 
-                HStack {
-                    Spacer()
-                    // Map Style Switcher
-                    Button {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Style", systemImage: isSatellite ? "map.fill" : "globe.americas.fill") {
                         withAnimation { isSatellite.toggle() }
-                    } label: {
-                        Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
                     }
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.circle)
-                    .controlSize(.large)
-                    .padding(.trailing, 10)
                 }
-                
-                Spacer()
-                
-                // Location Button: Floating above the card on the right
-                HStack {
-                    Spacer()
-                    Button {
-                        withAnimation {
-                            position = .userLocation(fallback: .automatic)
-                        }
-                    } label: {
-                        Image(systemName: "location.fill")
-                    }
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.circle)
-                    .controlSize(.large)
-                }
-                .padding(.trailing, 20)
-                .padding(.bottom, 12) // Gap above the card
-                
-                // Bottom Info Card
+            }
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .safeAreaInset(edge: .bottom) {
                 PartnerOverlayCard(user: user)
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 30)
+                    .padding(.bottom, 20)
             }
         }
     }
