@@ -67,14 +67,14 @@ struct ProfileView: View {
                         }
                         .padding(.horizontal)
                         
-                        // 3. Account Settings (New Section)
+                        // 3. Account Settings
                         VStack(alignment: .leading, spacing: 10) {
                             sectionLabel("Account settings")
                             
                             Button {
                                 isShowingEditProfile = true
                             } label: {
-                                CompactMenuRow(icon: "person.text.rectangle.fill", title: "Edit profile info", value: "Name, Email", color: .activeCyan)
+                                CompactMenuRow(icon: "person.text.rectangle.fill", title: "Edit profile info", value: "Name, Email, Photo", color: .activeCyan)
                             }
                             
                             Button {
@@ -107,31 +107,21 @@ struct ProfileView: View {
                         }
                         .padding(.horizontal)
                         
-                        // 5. Logout & Danger Zone
-                        VStack(spacing: 12) {
-                            Button {
-                                auth.logout()
-                            } label: {
-                                HStack {
-                                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                                        .font(.system(size: 14))
-                                    Text("Logout from account")
-                                        .font(.system(size: 14, weight: .bold))
-                                }
-                                .foregroundColor(.red)
-                                .padding(.vertical, 12)
-                                .frame(maxWidth: .infinity)
-                                .background(Color.red.opacity(0.1))
-                                .cornerRadius(12)
+                        // 5. Logout (Delete Account Removed)
+                        Button {
+                            auth.logout()
+                        } label: {
+                            HStack {
+                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                                    .font(.system(size: 14))
+                                Text("Logout from account")
+                                    .font(.system(size: 14, weight: .bold))
                             }
-                            
-                            Button {
-                                // Action to delete account
-                            } label: {
-                                Text("Delete account")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.3))
-                            }
+                            .foregroundColor(.red)
+                            .padding(.vertical, 12)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(12)
                         }
                         .padding(.horizontal)
                         .padding(.top, 10)
@@ -327,6 +317,7 @@ struct EditProfileView: View {
     @State private var selectedItem: PhotosPickerItem?
     @State private var selectedImage: UIImage?
     @State private var isSaving = false
+    @State private var isProcessingImage = false
     @Environment(\.dismiss) var dismiss
     
     init(auth: AuthManager) {
@@ -363,20 +354,27 @@ struct EditProfileView: View {
                             .clipShape(Circle())
                         }
                         
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 14))
-                            .foregroundColor(.white)
-                            .padding(6)
-                            .background(Color.electricPurple)
-                            .clipShape(Circle())
-                            .offset(x: 30, y: 30)
+                        if isProcessingImage {
+                            ProgressView().tint(.white)
+                        } else {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(.white)
+                                .padding(6)
+                                .background(Color.electricPurple)
+                                .clipShape(Circle())
+                                .offset(x: 30, y: 30)
+                        }
                     }
                 }
                 .onChange(of: selectedItem) {
                     Task {
-                        if let data = try? await selectedItem?.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+                        isProcessingImage = true
+                        if let data = try? await selectedItem?.loadTransferable(type: Data.self), 
+                           let image = UIImage(data: data) {
                             selectedImage = image
                         }
+                        isProcessingImage = false
                     }
                 }
                 
@@ -411,7 +409,7 @@ struct EditProfileView: View {
                 .foregroundColor(.deepVelvet)
                 .cornerRadius(16)
                 .padding(.horizontal)
-                .disabled(isSaving)
+                .disabled(isSaving || isProcessingImage)
                 
                 Spacer()
             }

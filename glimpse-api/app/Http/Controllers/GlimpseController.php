@@ -23,16 +23,31 @@ class GlimpseController extends Controller
             $couple = \App\Models\Couple::find($user->couple_id);
         }
 
+        $photoUrl = $user->profile_photo_url;
+        if ($photoUrl && !str_starts_with($photoUrl, 'http')) {
+            $photoUrl = url($photoUrl);
+        }
+
+        $partnerData = null;
+        if ($partner) {
+            $partnerPhotoUrl = $partner->profile_photo_url;
+            if ($partnerPhotoUrl && !str_starts_with($partnerPhotoUrl, 'http')) {
+                $partnerPhotoUrl = url($partnerPhotoUrl);
+            }
+            $partnerData = $partner->toArray();
+            $partnerData['profile_photo_url'] = $partnerPhotoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($partner->name);
+        }
+
         return response()->json([
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'invite_code' => $user->invite_code,
-                'profile_photo_url' => $user->profile_photo_url ?? "https://ui-avatars.com/api/?name=" . urlencode($user->name),
+                'profile_photo_url' => $photoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($user->name),
                 'couple_id' => $user->couple_id
             ],
-            'partner_data' => $partner,
+            'partner_data' => $partnerData,
             'anniversary_start_date' => $couple ? $couple->anniversary_start_date : null
         ]);
     }
@@ -58,7 +73,21 @@ class GlimpseController extends Controller
         }
 
         $user->save();
-        return response()->json(['message' => 'Profile updated!', 'user' => $user]);
+        
+        $photoUrl = $user->profile_photo_url;
+        if ($photoUrl && !str_starts_with($photoUrl, 'http')) {
+            $photoUrl = url($photoUrl);
+        }
+
+        return response()->json([
+            'message' => 'Profile updated!', 
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'profile_photo_url' => $photoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($user->name),
+            ]
+        ]);
     }
 
     public function updateRelationship(Request $request)
