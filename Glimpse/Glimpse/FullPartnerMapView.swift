@@ -52,10 +52,9 @@ struct FullPartnerMapView: View {
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(.white)
                                 .padding(12)
-                                .background(.ultraThinMaterial)
-                                .clipShape(Circle())
-                                .shadow(color: .black.opacity(0.2), radius: 10)
                         }
+                        .liquidGlass()
+                        .clipShape(Circle())
                     }
                     .padding(.trailing, 16)
                     .padding(.top, 10)
@@ -75,10 +74,9 @@ struct FullPartnerMapView: View {
                             .font(.system(size: 20, weight: .bold))
                             .foregroundColor(.white)
                             .padding(14)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Circle())
-                            .shadow(color: .black.opacity(0.2), radius: 10)
                     }
+                    .liquidGlass()
+                    .clipShape(Circle())
                     .padding(.trailing, 16)
                     .padding(.bottom, 10)
                 }

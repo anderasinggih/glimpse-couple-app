@@ -95,9 +95,33 @@ struct iOS26Background: View {
     }
 }
 
+struct LiquidGlassModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [.white.opacity(0.5), .clear, .white.opacity(0.2)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.2
+                    )
+            )
+            .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
+    }
+}
+
 extension View {
     func glassmorphic() -> some View {
         self.modifier(GlassmorphicModifier())
+    }
+    
+    func liquidGlass() -> some View {
+        self.modifier(LiquidGlassModifier())
     }
     
     func hideKeyboard() {

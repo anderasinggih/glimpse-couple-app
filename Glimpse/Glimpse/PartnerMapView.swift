@@ -100,7 +100,7 @@ struct PartnerOverlayCard: View {
             .padding(.top, 4)
         }
         .padding(16)
-        .glassmorphic()
+        .liquidGlass()
         .saturation(user.isOffline ? 0.5 : 1.0)
     }
     
