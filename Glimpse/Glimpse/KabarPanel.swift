@@ -7,78 +7,68 @@ struct KabarPanel: View {
     @State private var showCamera = false
     
     var body: some View {
-        VStack(spacing: 16) {
-            // Header
+        VStack(spacing: 12) {
+            // Header (Compact)
             HStack {
-                Label("KABAR", systemImage: "bubble.left.and.exclamationmark.bubble.right.fill")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.secondary)
+                Label("KABAR", systemImage: "sparkles")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color.electricPurple)
                 Spacer()
                 Text("\(statusText.count)/140")
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.system(size: 9, design: .monospaced))
                     .foregroundColor(statusText.count > 130 ? .red : .secondary)
             }
             
-            // Input Area
-            HStack(spacing: 12) {
-                TextField("Apa kabarmu?", text: $statusText, axis: .vertical)
-                    .lineLimit(1...3)
-                    .padding(14)
-                    .background(.white.opacity(0.05))
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            // Compact Input Area
+            HStack(spacing: 10) {
+                TextField("Apa kabarmu?", text: $statusText)
+                    .font(.system(size: 13))
+                    .padding(10)
+                    .background(Color.white.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                     .onChange(of: statusText) { _, newValue in
-                        if newValue.count > 140 {
-                            statusText = String(newValue.prefix(140))
-                        }
+                        if newValue.count > 140 { statusText = String(newValue.prefix(140)) }
                     }
                 
                 Button {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    // Logic to send status would go here
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     statusText = ""
                 } label: {
                     Image(systemName: "paperplane.fill")
-                        .font(.system(size: 18, weight: .bold))
+                        .font(.system(size: 14))
                         .foregroundStyle(Color.white)
-                        .frame(width: 48, height: 48)
-                        .background(
-                            LinearGradient(colors: [Color.electricPurple, Color.activeCyan], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        )
+                        .frame(width: 36, height: 36)
+                        .background(Color.electricPurple)
                         .clipShape(Circle())
-                        .shadow(color: .electricPurple.opacity(0.3), radius: 10)
                 }
                 .disabled(statusText.isEmpty)
             }
             
-            // Native-feel Flash Button
+            // Glass Flash Button (Compact)
             Button {
                 showCamera = true
             } label: {
-                HStack(spacing: 12) {
+                HStack(spacing: 8) {
                     if isUploading {
                         ProgressView().tint(.white)
                     } else {
-                        Image(systemName: "camera.shutter.button.fill")
-                            .symbolRenderingMode(.hierarchical)
-                        Text("Capture Flash Moment")
-                            .fontWeight(.semibold)
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 12))
+                        Text("Flash Moment")
+                            .font(.system(size: 13, weight: .bold))
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
+                .padding(.vertical, 12)
+                .background(
+                    LinearGradient(colors: [Color.electricPurple, Color.royalPurple], startPoint: .leading, endPoint: .trailing)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .shadow(color: Color.electricPurple.opacity(0.2), radius: 8, y: 4)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.electricPurple)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .shadow(color: Color.electricPurple.opacity(0.2), radius: 15, y: 5)
         }
-        .padding(20)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(.white.opacity(0.1), lineWidth: 0.5)
-        )
+        .padding(14)
+        .glassmorphic()
         .sheet(isPresented: $showCamera) {
             CameraPlaceholderView(isUploading: $isUploading)
         }

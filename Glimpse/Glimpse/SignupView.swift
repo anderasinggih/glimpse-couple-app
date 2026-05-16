@@ -12,103 +12,77 @@ struct SignupView: View {
         ZStack {
             iOS26Background()
             
-            VStack(spacing: 32) {
-                // Header
-                VStack(spacing: 12) {
+            VStack(spacing: 20) {
+                // Header (Compact)
+                VStack(spacing: 6) {
                     Text("Join Glimpse")
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .tracking(-0.5)
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
                     Text("The future of connection starts here.")
-                        .font(.subheadline)
+                        .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 .padding(.top, 40)
                 
-                // Form Container
-                VStack(spacing: 0) {
-                    CustomNativeField(icon: "person.fill", placeholder: "Full Name", text: $name)
-                    Divider().padding(.leading, 50).opacity(0.1)
-                    CustomNativeField(icon: "envelope.fill", placeholder: "Email", text: $email)
-                    Divider().padding(.leading, 50).opacity(0.1)
-                    CustomNativeField(icon: "lock.fill", placeholder: "Password", text: $password, isSecure: true)
+                // Liquid Glass Form
+                VStack(spacing: 12) {
+                    CustomGlassField(icon: "person.fill", placeholder: "Full Name", text: $name)
+                    CustomGlassField(icon: "envelope.fill", placeholder: "Email", text: $email)
+                    CustomGlassField(icon: "lock.fill", placeholder: "Password", text: $password, isSecure: true)
                 }
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 22))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22)
-                        .stroke(.white.opacity(0.1), lineWidth: 0.5)
-                )
                 .padding(.horizontal)
                 
                 if !errorMessage.isEmpty {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                    Text(errorMessage)
+                        .font(.caption2)
+                        .foregroundStyle(.red.opacity(0.8))
                         .padding(.horizontal)
                 }
                 
                 // Action Button
                 Button {
                     if validate() {
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         Task { await register() }
                     }
                 } label: {
                     HStack {
                         if isLoading {
-                            ProgressView().tint(.deepVelvet)
+                            ProgressView().tint(.white)
                         } else {
                             Text("Create Account")
-                                .fontWeight(.bold)
+                                .font(.system(size: 16, weight: .bold))
                             Image(systemName: "sparkles")
+                                .font(.caption)
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
+                    .padding(.vertical, 14)
+                    .background(
+                        LinearGradient(colors: [Color.electricPurple, Color.royalPurple], startPoint: .leading, endPoint: .trailing)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .shadow(color: Color.electricPurple.opacity(0.3), radius: 10, y: 4)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.electricPurple)
-                .clipShape(Capsule())
-                .padding(.horizontal)
                 .disabled(isLoading || name.isEmpty || email.isEmpty || password.isEmpty)
+                .padding(.horizontal)
                 
                 Spacer()
                 
-                Button("Already have an account? Sign In") {
+                Button("Already have an account? **Sign In**") {
                     dismiss()
                 }
-                .font(.footnote)
-                .foregroundColor(.white.opacity(0.7))
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.6))
                 .padding(.bottom, 20)
             }
         }
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.body.bold())
-                        .foregroundColor(.white)
-                }
-            }
-        }
+        .navigationBarHidden(true)
     }
     
     private func validate() -> Bool {
-        if name.count < 3 {
-            errorMessage = "Full name required"
-            return false
-        }
-        if !email.contains("@") {
-            errorMessage = "Invalid email format"
-            return false
-        }
-        if password.count < 8 {
-            errorMessage = "Password must be 8+ chars"
-            return false
-        }
+        if name.count < 3 { return false }
+        if !email.contains("@") { return false }
+        if password.count < 8 { return false }
         return true
     }
     

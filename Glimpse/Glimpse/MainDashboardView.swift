@@ -53,19 +53,19 @@ struct MainDashboardView: View {
             iOS26Background()
             
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 16) {
-                    // Presence Interface (Map) - Compact
+                VStack(spacing: 12) {
+                    // Presence Interface (Map) - High Density
                     PartnerMapView(user: partner)
-                        .frame(height: 340)
-                        .padding(.top, 12)
-                        .shadow(color: .electricPurple.opacity(0.15), radius: 20)
+                        .frame(height: 320)
+                        .padding(.top, 8)
                     
                     // Kabar Panel (Actions) - Compact
                     KabarPanel()
+                        .padding(.horizontal, 4)
                     
-                    Spacer(minLength: 40)
+                    Spacer(minLength: 20)
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 12)
             }
         }
     }
