@@ -100,7 +100,8 @@ struct PartnerOverlayCard: View {
             .padding(.top, 4)
         }
         .padding(16)
-        .liquidGlass()
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .saturation(user.isOffline ? 0.5 : 1.0)
     }
     

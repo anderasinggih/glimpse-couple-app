@@ -52,7 +52,10 @@ struct FullPartnerMapView: View {
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(.electricPurple)
                         }
-                        .buttonStyle(LiquidButtonStyle())
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.circle)
+                        .controlSize(.large)
+                        .tint(.white.opacity(0.1))
                     }
                     .padding(.trailing, 16)
                     .padding(.top, 10)
@@ -72,7 +75,10 @@ struct FullPartnerMapView: View {
                             .font(.system(size: 20, weight: .bold))
                             .foregroundColor(.electricPurple)
                     }
-                    .buttonStyle(LiquidButtonStyle())
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
+                    .tint(.white.opacity(0.1))
                     .padding(.trailing, 16)
                     .padding(.bottom, 10)
                 }

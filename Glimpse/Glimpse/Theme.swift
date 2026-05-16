@@ -95,34 +95,11 @@ struct iOS26Background: View {
     }
 }
 
-struct LiquidGlassModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-    }
-}
-
-struct LiquidButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(12)
-            .background(.ultraThinMaterial)
-            .clipShape(Circle())
-            .opacity(configuration.isPressed ? 0.7 : 1.0)
-    }
-}
-
 extension View {
-    func glassmorphic() -> some View {
-        self.modifier(GlassmorphicModifier())
-    }
-    
-    func liquidGlass() -> some View {
-        self.modifier(LiquidGlassModifier())
-    }
-    
     func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+}
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
