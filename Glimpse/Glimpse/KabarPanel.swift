@@ -25,7 +25,7 @@ struct KabarPanel: View {
                     .background(Color.adaptiveBackground.opacity(0.5))
                     .cornerRadius(12)
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.secondary.opacity(0.15)))
-                    .onChange(of: statusText) { newValue in
+                    .onChange(of: statusText) { oldValue, newValue in
                         if newValue.count > 140 {
                             statusText = String(newValue.prefix(140))
                         }

@@ -105,7 +105,7 @@ struct MediumWidgetView: View {
                     .foregroundColor(.white.opacity(0.7))
                     .lineLimit(3)
                 
-                if let photoUrl = entry.partner.latest_photo_url {
+                if entry.partner.latest_photo_url != nil {
                     // Crisp rendering of compressed photo
                     Text("New Photo Available")
                         .font(.system(size: 8, weight: .bold))

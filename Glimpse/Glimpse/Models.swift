@@ -4,6 +4,7 @@ import CoreLocation
 struct GlimpseUser: Codable, Identifiable {
     let id: Int
     let name: String
+    let email: String
     let profile_photo_url: String
     let latitude: Double?
     let longitude: Double?
@@ -48,6 +49,7 @@ extension GlimpseUser {
     static let mockSelf = GlimpseUser(
         id: 1,
         name: "Anderas",
+        email: "anderas@glimpse.com",
         profile_photo_url: "https://ui-avatars.com/api/?name=Anderas",
         latitude: -6.9740,
         longitude: 107.6303,
@@ -63,6 +65,7 @@ extension GlimpseUser {
     static let mockPartner = GlimpseUser(
         id: 2,
         name: "Sarah",
+        email: "sarah@glimpse.com",
         profile_photo_url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330",
         latitude: -6.9750,
         longitude: 107.6310,

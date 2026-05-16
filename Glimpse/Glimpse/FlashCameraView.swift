@@ -269,7 +269,8 @@ class GlimpseCameraModel: NSObject, AVCapturePhotoCaptureDelegate {
         sessionQueue.async { self.output.capturePhoto(with: settings, delegate: self) }
     }
     
-    @objc func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+    @MainActor
+    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         guard let data = photo.fileDataRepresentation(), let image = UIImage(data: data) else {
             completion?(nil)
             return
