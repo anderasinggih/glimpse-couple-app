@@ -25,27 +25,36 @@ struct FullPartnerMapView: View {
                     }
                 }
                 .mapStyle(isSatellite ? .hybrid(elevation: .realistic) : .standard(emphasis: .muted))
-                .mapControls {
-                    MapCompass()
-                    MapUserLocationButton()
-                    MapScaleView()
-                }
-                .ignoresSafeArea()
+            .mapControls {
+                MapUserLocationButton()
+                MapScaleView()
             }
+            .ignoresSafeArea()
             .safeAreaInset(edge: .top) {
-                BrandingHeader()
+                VStack(spacing: 10) {
+                    BrandingHeader()
+                    
+                    HStack(spacing: 12) {
+                        Spacer()
+                        
+                        // Compass and Satellite side-by-side
+                        MapCompass()
+                        
+                        Button {
+                            withAnimation { isSatellite.toggle() }
+                        } label: {
+                            Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
+                        }
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.circle)
+                    }
+                    .padding(.trailing, 16)
+                }
             }
             .safeAreaInset(edge: .bottom) {
                 PartnerOverlayCard(user: user)
                     .padding(.horizontal, 20)
                     .padding(.bottom, 20)
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Style", systemImage: isSatellite ? "map.fill" : "globe.americas.fill") {
-                        withAnimation { isSatellite.toggle() }
-                    }
-                }
             }
         }
     }
