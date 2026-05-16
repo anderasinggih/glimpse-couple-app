@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Laravel
+glimpse-api/vendor/
+glimpse-api/node_modules/
+glimpse-api/.env
+glimpse-api/storage/*.key
+glimpse-api/storage/framework/cache/data/*
+glimpse-api/storage/framework/sessions/*
+glimpse-api/storage/framework/views/*
+glimpse-api/storage/logs/*.log
+glimpse-api/database/*.sqlite
+glimpse-api/public/storage
+glimpse-api/.rr.yaml
+
+# iOS (Xcode)
+Glimpse/build/
+Glimpse/*.xcodeproj/xcuserdata/
+Glimpse/*.xcworkspace/xcuserdata/
+Glimpse/DerivedData/
+Glimpse/.swiftpm/
+Glimpse/*.moved-aside
+Glimpse/*.xcuserstate
+Glimpse/*.xccheckout
+Glimpse/.DS_Store
