@@ -81,7 +81,6 @@ struct ChatView: View {
                             .padding(.horizontal, 16)
                             .padding(.bottom, 16)
                     }
-                    .ignoresSafeArea(.keyboard) // Behaves smoothly with keyboard
                     
                     // Premium Small Header - aligned top overlaying ScrollView!
                     chatHeader(partner: partner)
@@ -208,40 +207,45 @@ struct ChatView: View {
         .padding(.horizontal, 16)
         .padding(.top, 50)
         .padding(.bottom, 12)
-        .background(.ultraThinMaterial)
+        .background(Color.deepVelvet.opacity(0.55).background(.ultraThinMaterial.opacity(0.7)))
         .ignoresSafeArea(edges: .top)
     }
     
-    // FLOATING MESSAGE INPUT BAR (Fully floating, glassmorphic, no outer border block)
+    // FLOATING MESSAGE INPUT BAR (Fully floating, glassmorphic, separate rounded capsule and button)
     private var floatingInputBar: some View {
-        HStack(spacing: 12) {
-            TextField("Type a message...", text: $messageInput)
-                .font(.system(size: 15))
-                .foregroundColor(.white)
-                .padding(.leading, 12)
-                .focused($isInputFocused)
+        HStack(spacing: 10) {
+            // Fully rounded input capsule
+            HStack {
+                TextField("Type a message...", text: $messageInput, axis: .vertical)
+                    .font(.system(size: 15))
+                    .foregroundColor(.white)
+                    .lineLimit(1...4)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .focused($isInputFocused)
+            }
+            .background(.ultraThinMaterial)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(0.15), lineWidth: 1.2)
+            )
+            .shadow(color: Color.black.opacity(0.15), radius: 8, y: 4)
             
+            // Separate Send Button (Outside, Floating on the right)
             Button {
                 sendMessage()
             } label: {
                 Image(systemName: "paperplane.fill")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.deepVelvet)
-                    .padding(11)
+                    .frame(width: 44, height: 44)
                     .background(messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.white.opacity(0.3) : Color.electricPurple)
                     .clipShape(Circle())
+                    .shadow(color: messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.clear : Color.electricPurple.opacity(0.3), radius: 8, y: 3)
             }
             .disabled(messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
-        .cornerRadius(24)
-        .overlay(
-            RoundedRectangle(cornerRadius: 24)
-                .stroke(Color.white.opacity(0.15), lineWidth: 1.2)
-        )
-        .shadow(color: Color.black.opacity(0.3), radius: 10, y: 5)
     }
     
     @ViewBuilder
