@@ -90,6 +90,17 @@ struct ChatView: View {
                                 }
                             }
                         }
+                        .onChange(of: isInputFocused) { _, isFocused in
+                            if isFocused {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                                    if let lastMsg = messages.last {
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                                            proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         .onAppear {
                             if let lastMsg = messages.last {
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -101,12 +112,24 @@ struct ChatView: View {
                         }
                     }
                     
-                    // Floating Message Input (Frosted Glass Container) - aligned bottom
+                    // Frosted Glass Bottom Panel covering Input Bar & Safe Area
                     VStack {
                         Spacer()
-                        floatingInputBar
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 16)
+                        VStack(spacing: 0) {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.08))
+                                .frame(height: 0.8)
+                            
+                            floatingInputBar
+                                .padding(.horizontal, 16)
+                                .padding(.top, 12)
+                                .padding(.bottom, 12)
+                        }
+                        .background(
+                            Color.deepVelvet.opacity(0.6)
+                                .background(.ultraThickMaterial)
+                                .ignoresSafeArea(edges: .bottom)
+                        )
                     }
                     
                     // Premium Small Header - aligned top overlaying ScrollView!
@@ -264,7 +287,7 @@ struct ChatView: View {
         .padding(.horizontal, 16)
         .padding(.top, 50)
         .padding(.bottom, 12)
-        .background(Color.deepVelvet.opacity(0.55).background(.ultraThinMaterial.opacity(0.7)))
+        .background(Color.deepVelvet.opacity(0.65).background(.ultraThickMaterial))
         .ignoresSafeArea(edges: .top)
     }
     
