@@ -14,7 +14,7 @@ class AuthManager {
         UserDefaults.standard.string(forKey: "auth_token")
     }
     
-    private let baseURL = "http://192.168.100.108:8000/api"
+    private let baseURL = "http://192.168.0.103:8000/api"
     
     init() {
         self.isAuthenticated = userToken != nil
