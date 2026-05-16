@@ -51,7 +51,7 @@ struct SmallWidgetView: View {
                 .font(.system(size: 12, weight: .bold, design: .rounded))
                 .foregroundColor(.electricPurple)
             
-            Text(entry.partner.status_note)
+            Text(entry.partner.status_note ?? "Active now")
                 .font(.system(size: 10))
                 .foregroundColor(.white.opacity(0.8))
                 .lineLimit(2)
@@ -79,7 +79,7 @@ struct MediumWidgetView: View {
                 
                 VStack {
                     Spacer()
-                    Text(entry.partner.location_name)
+                    Text(entry.partner.location_name ?? "Somewhere")
                         .font(.system(size: 10, weight: .bold))
                         .padding(4)
                         .background(.ultraThinMaterial)
@@ -100,7 +100,7 @@ struct MediumWidgetView: View {
                         .foregroundColor(.green)
                 }
                 
-                Text(entry.partner.status_note)
+                Text(entry.partner.status_note ?? "")
                     .font(.caption2)
                     .foregroundColor(.white.opacity(0.7))
                     .lineLimit(3)
