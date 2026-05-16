@@ -51,7 +51,7 @@ struct FullPartnerMapView: View {
                             Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
                                 .font(.system(size: 20, weight: .bold))
                         }
-                        .buttonStyle(.glass)
+                        .buttonStyle(.glimpseGlass)
                     }
                     .padding(.trailing, 16)
                     .padding(.top, 10)
@@ -70,7 +70,7 @@ struct FullPartnerMapView: View {
                         Image(systemName: "location.fill")
                             .font(.system(size: 20, weight: .bold))
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.glimpseGlass)
                     .padding(.trailing, 16)
                     .padding(.bottom, 10)
                 }

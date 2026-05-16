@@ -136,11 +136,11 @@ struct GlassProminentButtonStyle: ButtonStyle {
 }
 
 extension ButtonStyle where Self == GlassButtonStyle {
-    static var glass: GlassButtonStyle { GlassButtonStyle() }
+    static var glimpseGlass: GlassButtonStyle { GlassButtonStyle() }
 }
 
 extension ButtonStyle where Self == GlassProminentButtonStyle {
-    static var glassProminent: GlassProminentButtonStyle { GlassProminentButtonStyle() }
+    static var glimpseGlassProminent: GlassProminentButtonStyle { GlassProminentButtonStyle() }
 }
 
 extension View {
