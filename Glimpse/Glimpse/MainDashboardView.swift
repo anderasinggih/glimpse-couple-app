@@ -36,17 +36,11 @@ struct MainDashboardView: View {
                 .tag(2)
             
             // Tab 4: Profile
-            Group {
-                if let partner = auth.partner {
-                    ProfileView(user: partner, anniversaryDate: auth.anniversaryDate ?? Date())
-                } else {
-                    Color.deepVelvet
+            ProfileView()
+                .tabItem {
+                    Label("Profile", systemImage: "person.fill")
                 }
-            }
-            .tabItem {
-                Label("Profile", systemImage: "person.fill")
-            }
-            .tag(3)
+                .tag(3)
         }
         .toolbarBackground(.ultraThinMaterial, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
