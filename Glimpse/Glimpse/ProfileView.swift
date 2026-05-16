@@ -10,16 +10,24 @@ struct ProfileView: View {
     @State private var isShowingChangePassword = false
     @State private var isShowingEditAnniversary = false
     @State private var notificationsEnabled = true
+    @State private var scrollOffset: CGFloat = 0
     
     var body: some View {
         ZStack(alignment: .top) {
-            // LAYER 1: Background (Exactly like Dashboard)
+            // LAYER 1: Background
             Color.deepVelvet.ignoresSafeArea()
             iOS26Background().opacity(0.4)
             
-            // LAYER 2: Scroll Content (Scrolls behind header)
+            // LAYER 2: Scroll Content
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 24) {
+                ZStack {
+                    // Scroll Position Detector
+                    GeometryReader { geo in
+                        Color.clear.preference(key: ScrollOffsetKey.self, value: geo.frame(in: .named("scroll")).minY)
+                    }
+                    .frame(height: 0)
+                    
+                    VStack(spacing: 24) {
                     Spacer(minLength: 95) // Space for floating header
                     
                     // 1. Profile Summary (Dynamic Header)
@@ -149,11 +157,17 @@ struct ProfileView: View {
                     Spacer(minLength: 120)
                 }
             }
+            .coordinateSpace(name: "scroll")
+            .onPreferenceChange(ScrollOffsetKey.self) { value in
+                scrollOffset = value
+            }
             .ignoresSafeArea(.container, edges: .top)
             
-            // LAYER 3: Floating Header (Identical to Dashboard)
+            // LAYER 3: Floating Header (With Dynamic Opacity)
             headerView
                 .padding(.top, 10)
+                .opacity(headerOpacity)
+                .animation(.easeInOut, value: headerOpacity)
                 .zIndex(10)
         }
         .sheet(isPresented: $isShowingEditProfile) {
@@ -288,6 +302,21 @@ struct ProfileView: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         return formatter.string(from: date)
+    }
+    
+    private var headerOpacity: Double {
+        // Logo starts fading after 20px scroll, disappears at 60px
+        let threshold: CGFloat = -40
+        if scrollOffset >= 0 { return 1.0 }
+        let opacity = 1.0 + (scrollOffset / 60.0)
+        return max(0, min(1, opacity))
+    }
+}
+
+struct ScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
