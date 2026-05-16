@@ -22,23 +22,22 @@ struct FlashCameraView: View {
                     if model.permissionStatus == .authorized {
                         if model.isInitialized {
                             CameraPreview(session: model.session)
-                                .frame(width: frameSize, height: frameSize)
+                                .aspectRatio(1, contentMode: .fill)
                                 .opacity(capturedImage == nil ? 1 : 0)
                             
                             if let image = capturedImage {
                                 Image(uiImage: image)
                                     .resizable()
                                     .aspectRatio(contentMode: .fill)
-                                    .frame(width: frameSize, height: frameSize)
                             }
                         } else {
-                            loadingFrame(size: frameSize)
+                            loadingFrame(size: screenWidth - 32)
                         }
                     } else {
-                        permissionView(size: frameSize)
+                        permissionView(size: screenWidth - 32)
                     }
                 }
-                .frame(width: frameSize, height: frameSize)
+                .aspectRatio(1, contentMode: .fit)
                 .background(Color.black)
                 .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                 .overlay(
@@ -46,11 +45,13 @@ struct FlashCameraView: View {
                         .stroke(LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
                 )
                 .shadow(color: .electricPurple.opacity(0.2), radius: 30)
+                .padding(.horizontal, 16)
                 .offset(y: -10)
                 
                 // LAYER 3: UI Overlays
-                BrandingHeader()
+                headerSection
                     .zIndex(10)
+                    .frame(maxHeight: .infinity, alignment: .top)
                 
                 VStack {
                     Spacer()
