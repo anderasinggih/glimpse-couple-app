@@ -24,23 +24,49 @@ struct ProfileView: View {
                 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 24) {
-                        // 1. Profile Summary (Compact)
+                        // 1. Profile Summary (Dynamic Header)
                         if let user = auth.currentUser {
-                            VStack(spacing: 12) {
-                                AsyncImage(url: URL(string: user.profile_photo_url)) { image in
-                                    image.resizable().aspectRatio(contentMode: .fill)
-                                } placeholder: {
-                                    Circle().fill(Color.gray.opacity(0.3))
+                            VStack(spacing: 16) {
+                                if let partner = auth.partner {
+                                    // PAIRED AVATARS
+                                    ZStack {
+                                        // Partner Photo (Bottom-Right)
+                                        avatarImage(url: partner.profile_photo_url)
+                                            .offset(x: 25, y: 10)
+                                            .scaleEffect(0.9)
+                                        
+                                        // Your Photo (Top-Left)
+                                        avatarImage(url: user.profile_photo_url)
+                                            .overlay(Circle().stroke(Color.deepVelvet, lineWidth: 4))
+                                            .offset(x: -20)
+                                        
+                                        // Central Love Icon
+                                        Image(systemName: "heart.fill")
+                                            .font(.system(size: 16))
+                                            .foregroundColor(.red)
+                                            .padding(6)
+                                            .background(Color.white)
+                                            .clipShape(Circle())
+                                            .shadow(radius: 5)
+                                            .offset(x: 10, y: 0)
+                                    }
+                                    .padding(.horizontal, 30)
+                                } else {
+                                    // SINGLE AVATAR
+                                    avatarImage(url: user.profile_photo_url)
                                 }
-                                .frame(width: 80, height: 80)
-                                .clipShape(Circle())
-                                .overlay(Circle().stroke(Color.electricPurple, lineWidth: 2))
-                                .shadow(color: .electricPurple.opacity(0.2), radius: 10)
                                 
-                                VStack(spacing: 2) {
-                                    Text(user.name)
-                                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                                        .foregroundColor(.white)
+                                VStack(spacing: 4) {
+                                    if let partner = auth.partner {
+                                        Text("\(user.name) & \(partner.name)")
+                                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                                            .foregroundColor(.white)
+                                    } else {
+                                        Text(user.name)
+                                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                                            .foregroundColor(.white)
+                                    }
+                                    
                                     Text(user.email)
                                         .font(.system(size: 13))
                                         .foregroundColor(.white.opacity(0.5))
@@ -166,6 +192,18 @@ struct ProfileView: View {
         .padding(.horizontal, 20)
     }
     
+    private func avatarImage(url: String) -> some View {
+        AsyncImage(url: URL(string: url)) { image in
+            image.resizable().aspectRatio(contentMode: .fill)
+        } placeholder: {
+            Circle().fill(Color.gray.opacity(0.3))
+        }
+        .frame(width: 80, height: 80)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(Color.electricPurple, lineWidth: 2))
+        .shadow(color: .electricPurple.opacity(0.2), radius: 10)
+    }
+
     private func sectionLabel(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 13, weight: .medium))
