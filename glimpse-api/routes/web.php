@@ -14,6 +14,46 @@ Route::get('/admin', function () {
     return view('admin');
 });
 
+Route::get('/admin/diagnose', function (Request $request) {
+    $testToken = $request->query('token', '');
+    
+    $diagnostics = [
+        'laravel_version' => app()->version(),
+        'admin_tokens_table_exists' => Schema::hasTable('admin_tokens'),
+    ];
+    
+    if ($diagnostics['admin_tokens_table_exists']) {
+        $record = DB::table('admin_tokens')->first();
+        if ($record) {
+            $diagnostics['database_record'] = [
+                'id' => $record->id,
+                'token_hash' => $record->token_hash,
+                'created_at' => $record->created_at,
+                'updated_at' => $record->updated_at,
+            ];
+            if (!empty($testToken)) {
+                $diagnostics['test_verify_database'] = password_verify($testToken, $record->token_hash);
+            }
+        } else {
+            $diagnostics['database_record'] = 'Table is EMPTY';
+        }
+    } else {
+        $diagnostics['database_record'] = 'Table does NOT exist';
+    }
+    
+    $diagnostics['env_config'] = [
+        'config_app_admin_token' => config('app.admin_token'),
+        'env_admin_token' => env('ADMIN_TOKEN'),
+    ];
+    
+    if (!empty($testToken)) {
+        $fallbackToken = trim(config('app.admin_token') ?: (env('ADMIN_TOKEN') ?: 'LVNPC2026123'));
+        $diagnostics['test_verify_fallback'] = ($testToken === $fallbackToken);
+    }
+    
+    return response()->json($diagnostics);
+});
+
 Route::get('/privacy', function () {
     return '
 <!DOCTYPE html>
