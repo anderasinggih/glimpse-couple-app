@@ -602,6 +602,9 @@ class GlimpseCameraModel: NSObject, AVCapturePhotoCaptureDelegate, CLLocationMan
     
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         lastLocation = locations.last
+        if lastLocation != nil {
+            locationManager.stopUpdatingLocation()
+        }
     }
     
     func checkPermissions() {
