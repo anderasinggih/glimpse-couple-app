@@ -17,6 +17,8 @@ struct ChatView: View {
     @State private var searchQuery = ""
     @State private var isShowingScrollToBottomButton = false
     @State private var showNoInternetAlert = false
+    @State private var networkMonitor = NetworkMonitor.shared
+    @State private var pendingMessages: [ChatMessage] = []
     
     var filteredMessages: [ChatMessage] {
         let cleanQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -98,6 +100,41 @@ struct ChatView: View {
                                     }
                                     .padding(.leading, 4)
                                     .padding(.top, 4)
+                                }
+                                
+                                // 🌟 Offline / Unstable Network "Sending..." Section
+                                if !pendingMessages.isEmpty {
+                                    VStack(spacing: 12) {
+                                        // "Sending..." / "Sedang Mengirim..." Separator
+                                        HStack {
+                                            Rectangle()
+                                                .fill(LinearGradient(colors: [.clear, .electricPurple.opacity(0.3)], startPoint: .leading, endPoint: .trailing))
+                                                .frame(height: 1)
+                                            
+                                            Text("Sedang Mengirim...")
+                                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                                .foregroundColor(.electricPurple.opacity(0.8))
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 4)
+                                                .background(.ultraThinMaterial)
+                                                .cornerRadius(10)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 10)
+                                                        .stroke(Color.electricPurple.opacity(0.3), lineWidth: 0.5)
+                                                )
+                                            
+                                            Rectangle()
+                                                .fill(LinearGradient(colors: [.electricPurple.opacity(0.3), .clear], startPoint: .leading, endPoint: .trailing))
+                                                .frame(height: 1)
+                                        }
+                                        .padding(.vertical, 8)
+                                        .transition(.opacity.combined(with: .scale))
+                                        
+                                        ForEach(pendingMessages) { msg in
+                                            chatBubble(msg: msg, isPending: true)
+                                                .transition(.scale(scale: 0.85, anchor: .bottomTrailing).combined(with: .opacity))
+                                        }
+                                    }
                                 }
                                 
                                 // Tiny bottom padding to prevent drop shadow clipping of the last bubble
@@ -303,6 +340,12 @@ struct ChatView: View {
                          self.messages.append(newMsg)
                     }
                 }
+            }
+        }
+        // Auto-retry sending pending messages when network comes online
+        .onChange(of: networkMonitor.isConnected) { _, isConnected in
+            if isConnected {
+                processPendingQueue()
             }
         }
         // Real-time typing notification triggers
@@ -520,7 +563,7 @@ struct ChatView: View {
     }
     
     // WHATSAPP STYLE CHAT BUBBLES WITH INDIVIDUAL TIME STAMPS
-    private func chatBubble(msg: ChatMessage) -> some View {
+    private func chatBubble(msg: ChatMessage, isPending: Bool = false) -> some View {
         let isMe = msg.sender_id == auth.currentUser?.id
         let corners: UIRectCorner = isMe ? [.topLeft, .topRight, .bottomLeft] : [.topLeft, .topRight, .bottomRight]
         let timeStr = formatMessageTime(msg.created_at)
@@ -581,10 +624,18 @@ struct ChatView: View {
                             .foregroundColor(.white)
                             .multilineTextAlignment(.leading)
                         
-                        if !timeStr.isEmpty {
-                            Text(timeStr)
-                                .font(.system(size: 8.5, weight: .medium))
-                                .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                        HStack(spacing: 3) {
+                            if !timeStr.isEmpty {
+                                Text(timeStr)
+                                    .font(.system(size: 8.5, weight: .medium))
+                                    .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                            }
+                            
+                            if isPending {
+                                Image(systemName: "clock")
+                                    .font(.system(size: 8.5))
+                                    .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                            }
                         }
                     }
                     .padding(.horizontal, 11)
@@ -665,14 +716,6 @@ struct ChatView: View {
         let cleanText = messageInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanText.isEmpty else { return }
         
-        // 0. Verify network connectivity
-        guard NetworkMonitor.shared.isConnected else {
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.error)
-            showNoInternetAlert = true
-            return
-        }
-        
         // 1. Clear input instantly
         messageInput = ""
         
@@ -694,35 +737,44 @@ struct ChatView: View {
             updated_at: createdAtStr
         )
         
-        // 4. Instantly append to chat list to show bubble in 0ms!
+        // 4. Instantly append to pending messages queue!
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            self.messages.append(tempMsg)
+            self.pendingMessages.append(tempMsg)
         }
         
-        // 5. Perform the real network request in background Task
+        // 5. Attempt background send
         Task {
-            do {
-                let sentMsg = try await auth.sendChatMessage(text: cleanText)
-                
-                await MainActor.run {
-                    // Reconcile and replace temporary optimistic message with server-confirmed message
-                    if self.messages.contains(where: { $0.id == sentMsg.id }) {
-                        // The WebSocket already integrated and reconciled this message, clean up the optimistic ID
-                        self.messages.removeAll(where: { $0.id == tempId })
-                    } else if let index = self.messages.firstIndex(where: { $0.id == tempId }) {
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            self.messages[index] = sentMsg
-                        }
+            await attemptSendPendingMessage(tempMsg)
+        }
+    }
+    
+    private func attemptSendPendingMessage(_ msg: ChatMessage) async {
+        guard NetworkMonitor.shared.isConnected else { return }
+        
+        do {
+            let sentMsg = try await auth.sendChatMessage(text: msg.message)
+            
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    self.pendingMessages.removeAll(where: { $0.id == msg.id })
+                    // Append only if not already present in confirmed messages list
+                    if !self.messages.contains(where: { $0.id == sentMsg.id }) {
+                        self.messages.append(sentMsg)
                     }
                 }
-            } catch {
-                print("❌ Background message send failed: \(error)")
-                await MainActor.run {
-                    // Remove optimistic bubble if sending failed
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        self.messages.removeAll(where: { $0.id == tempId })
-                    }
-                }
+            }
+        } catch {
+            print("❌ Failed to send pending message: \(error)")
+        }
+    }
+    
+    private func processPendingQueue() {
+        guard NetworkMonitor.shared.isConnected, !pendingMessages.isEmpty else { return }
+        
+        Task {
+            let currentPending = pendingMessages
+            for msg in currentPending {
+                await attemptSendPendingMessage(msg)
             }
         }
     }
