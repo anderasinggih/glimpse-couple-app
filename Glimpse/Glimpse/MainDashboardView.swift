@@ -15,6 +15,13 @@ struct MainDashboardView: View {
     @State private var anniversaryCardBounce = false
     @State private var showReactions = false
     @State private var reactionCardScale: CGFloat = 1.0
+    @State private var reactionHoveredIndex: Int? = nil
+    @State private var touchStartTime: Date? = nil
+    @State private var isLongPressActive = false
+    @State private var activeReactionBadge: String? = nil
+    @State private var showReactionBadge = false
+    @State private var reactionBadgeScale: CGFloat = 0.0
+    @State private var reactionBadgeAngle: Double = 0.0
     @State private var pollCounter = 0
     @State private var currentTime = Date()
     private let dashboardPollTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
@@ -456,40 +463,131 @@ struct MainDashboardView: View {
                                     .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
                                     .scaleEffect(reactionCardScale)
                                     .gesture(
-                                        LongPressGesture(minimumDuration: 0.5)
-                                            .onEnded { _ in
-                                                UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-                                                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                                                    reactionCardScale = 0.95
-                                                    showReactions = true
+                                        DragGesture(minimumDistance: 0)
+                                            .onChanged { value in
+                                                if touchStartTime == nil {
+                                                    touchStartTime = Date()
+                                                    let startLoc = value.startLocation
+                                                    // Trigger fast long-press overlay after 150ms hold
+                                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                                        guard let startTime = touchStartTime else { return }
+                                                        if !isLongPressActive {
+                                                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                                reactionCardScale = 0.94
+                                                                showReactions = true
+                                                                isLongPressActive = true
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                guard isLongPressActive else { return }
+                                                
+                                                // Map touch position to the 5 emoji slots
+                                                let xPos = value.location.x
+                                                let cardWidth: CGFloat = 300.0 // standard card width boundary
+                                                let segmentWidth = cardWidth / 5.0
+                                                var index = Int(xPos / segmentWidth)
+                                                if index < 0 { index = 0 }
+                                                if index > 4 { index = 4 }
+                                                
+                                                if reactionHoveredIndex != index {
+                                                    reactionHoveredIndex = index
+                                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                                }
+                                            }
+                                            .onEnded { value in
+                                                let duration = Date().timeIntervalSince(touchStartTime ?? Date())
+                                                touchStartTime = nil
+                                                
+                                                if !isLongPressActive || duration < 0.15 {
+                                                    // Quick tap flips the card!
+                                                    NotificationCenter.default.post(name: NSNotification.Name("FlipDashboardCard"), object: nil)
+                                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                                        reactionCardScale = 1.0
+                                                        showReactions = false
+                                                        isLongPressActive = false
+                                                        reactionHoveredIndex = nil
+                                                    }
+                                                } else {
+                                                    // Released after long press! Send hovered emoji
+                                                    if let hoveredIdx = reactionHoveredIndex {
+                                                        let emojisList = ["❤️", "🔥", "✨", "😘", "💩"]
+                                                        let selectedEmoji = emojisList[hoveredIdx]
+                                                        
+                                                        // Trigger fullscreen explosion
+                                                        triggerEmojiBurst(selectedEmoji)
+                                                        
+                                                        // Show Locket-style edge floating badge
+                                                        activeReactionBadge = selectedEmoji
+                                                        reactionBadgeAngle = Double.random(in: -15...15)
+                                                        withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+                                                            showReactionBadge = true
+                                                            reactionBadgeScale = 1.2
+                                                        }
+                                                        
+                                                        // Bounce effect
+                                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                                reactionBadgeScale = 1.0
+                                                            }
+                                                        }
+                                                        
+                                                        // Auto-hide the edge reaction badge after 4 seconds
+                                                        let currentBadge = selectedEmoji
+                                                        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+                                                            if activeReactionBadge == currentBadge {
+                                                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                                                    reactionBadgeScale = 0.0
+                                                                    showReactionBadge = false
+                                                                }
+                                                            }
+                                                        }
+                                                        
+                                                        // Sync love burst to server in background
+                                                        Task {
+                                                            try? await auth.triggerServerLoveBurst()
+                                                        }
+                                                    }
+                                                    
+                                                    // Reset card scale and hide reactions
+                                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                                        reactionCardScale = 1.0
+                                                        showReactions = false
+                                                        isLongPressActive = false
+                                                        reactionHoveredIndex = nil
+                                                    }
                                                 }
                                             }
                                     )
                                 
+                                // Locket-Style Edge Floating Reaction Badge
+                                if let badge = activeReactionBadge, showReactionBadge {
+                                    Text(badge)
+                                        .font(.system(size: 42))
+                                        .padding(8)
+                                        .background(.ultraThinMaterial)
+                                        .clipShape(Circle())
+                                        .overlay(Circle().stroke(Color.white.opacity(0.3), lineWidth: 1.2))
+                                        .shadow(color: .black.opacity(0.3), radius: 6, y: 4)
+                                        .rotationEffect(.degrees(reactionBadgeAngle))
+                                        .scaleEffect(reactionBadgeScale)
+                                        .offset(x: 130, y: -130) // Overlap perfectly at the top-right corner!
+                                        .transition(.scale(scale: 0.3).combined(with: .opacity))
+                                        .zIndex(210)
+                                }
+                                
                                 if showReactions {
                                     // Glassmorphic Capsule Reaction Overlay
                                     HStack(spacing: 20) {
-                                        ForEach(["❤️", "🔥", "✨", "😘", "💩"], id: \.self) { emoji in
-                                            Button {
-                                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                                triggerEmojiBurst(emoji)
-                                                
-                                                // Sync love burst to server in background
-                                                Task {
-                                                    try? await auth.triggerServerLoveBurst()
-                                                }
-                                                
-                                                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                                                    showReactions = false
-                                                    reactionCardScale = 1.0
-                                                }
-                                            } label: {
-                                                Text(emoji)
-                                                    .font(.system(size: 38))
-                                                    .scaleEffect(1.0)
-                                                    .shadow(color: .black.opacity(0.3), radius: 4)
-                                            }
-                                            .buttonStyle(PlainButtonStyle())
+                                        ForEach(Array(["❤️", "🔥", "✨", "😘", "💩"].enumerated()), id: \.offset) { index, emoji in
+                                            Text(emoji)
+                                                .font(.system(size: 38))
+                                                .scaleEffect(reactionHoveredIndex == index ? 1.45 : 1.0)
+                                                .animation(.spring(response: 0.2, dampingFraction: 0.6), value: reactionHoveredIndex)
+                                                .shadow(color: .black.opacity(0.3), radius: 4)
                                         }
                                     }
                                     .padding(.horizontal, 24)
@@ -610,6 +708,88 @@ struct MainDashboardView: View {
                                 }
                             }
                             .padding(.top, 5)
+                            
+                            // 🎂 USER's Birthday Card
+                            if let user = auth.currentUser, user.isBirthdayToday {
+                                VStack(spacing: 8) {
+                                    Text("🎂 Happy Birthday! 🎉")
+                                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                                        .foregroundColor(.orange)
+                                        .shadow(color: .orange.opacity(0.4), radius: 5)
+                                    
+                                    Text("Wishing you a beautiful year filled with love, magic, and countless happy Glimpses together!")
+                                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                                        .foregroundColor(.white.opacity(0.85))
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, 10)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 16)
+                                .background(
+                                    LinearGradient(colors: [.orange.opacity(0.18), .red.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                )
+                                .cornerRadius(20)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .stroke(Color.orange.opacity(0.45), lineWidth: 1.2)
+                                )
+                                .shadow(color: Color.orange.opacity(0.15), radius: 8, y: 3)
+                                .padding(.top, 8)
+                            }
+                            
+                            // 🎂 PARTNER's Birthday Card
+                            if let partner = auth.partner, partner.isBirthdayToday {
+                                VStack(spacing: 12) {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "gift.fill")
+                                            .foregroundColor(.pink)
+                                            .font(.system(size: 22))
+                                            .shadow(color: .pink.opacity(0.4), radius: 5)
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("It's \(partner.name)'s Birthday Today! 🎂")
+                                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                                .foregroundColor(.pink)
+                                            Text("Don't forget to wish them a magical day!")
+                                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                                .foregroundColor(.white.opacity(0.6))
+                                        }
+                                        Spacer()
+                                    }
+                                    
+                                    Button {
+                                        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                                        auth.selectedTab = 3
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "heart.fill")
+                                            Text("Send Birthday Wishes")
+                                        }
+                                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(Color.pink)
+                                        .cornerRadius(12)
+                                        .shadow(color: Color.pink.opacity(0.35), radius: 5)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 16)
+                                .background(
+                                    LinearGradient(colors: [.pink.opacity(0.18), .electricPurple.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                )
+                                .cornerRadius(20)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .stroke(Color.pink.opacity(0.45), lineWidth: 1.2)
+                                )
+                                .shadow(color: Color.pink.opacity(0.15), radius: 8, y: 3)
+                                .padding(.top, 8)
+                            }
                             
                             // Standalone Anniversary / Days of Love Card (Interactive & Haptic!)
                             if let anniversary = auth.anniversaryDate {

@@ -206,6 +206,11 @@ struct PartnerMapView: View {
                 isShowingPhoto.toggle()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("FlipDashboardCard"))) { _ in
+            withAnimation(.easeInOut(duration: 0.5)) {
+                isShowingPhoto.toggle()
+            }
+        }
         .onAppear {
             updateLocalAddress()
             updateMapPosition()

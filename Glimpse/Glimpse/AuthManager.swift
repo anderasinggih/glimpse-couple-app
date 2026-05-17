@@ -13,6 +13,7 @@ class AuthManager {
     var currentUser: GlimpseUser?
     var partner: GlimpseUser?
     var anniversaryDate: Date?
+    var pairedDate: Date?
     var disconnectRequestedBy: Int?
     var coupleActive = false
     var invitedBy: Int?
@@ -118,6 +119,7 @@ class AuthManager {
             self.currentUser = responseData.user
             self.partner = responseData.partner_data
             self.anniversaryDate = responseData.anniversaryDate
+            self.pairedDate = responseData.pairedDate
             self.disconnectRequestedBy = responseData.disconnect_requested_by
             self.coupleActive = responseData.couple_active ?? false
             self.invitedBy = responseData.invited_by
@@ -490,7 +492,7 @@ class AuthManager {
         return try JSONDecoder().decode(ChatMessage.self, from: data)
     }
 
-    func updateProfile(name: String?, email: String?, photo: UIImage?) async throws {
+    func updateProfile(name: String?, email: String?, bornDate: String?, photo: UIImage?) async throws {
         guard let url = URL(string: "\(baseURL)/user/update") else { return }
         guard let token = userToken else { return }
         
@@ -513,6 +515,12 @@ class AuthManager {
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
             body.append("Content-Disposition: form-data; name=\"email\"\r\n\r\n".data(using: .utf8)!)
             body.append("\(email)\r\n".data(using: .utf8)!)
+        }
+        
+        if let bornDate = bornDate {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"born_date\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(bornDate)\r\n".data(using: .utf8)!)
         }
         
         if let photo = photo, let imageData = photo.compressedForApp(maxDimension: 400, targetBytes: 100_000) {
@@ -600,7 +608,7 @@ class AuthManager {
         }
     }
     
-    func register(name: String, email: String, password: String) async throws {
+    func register(name: String, email: String, bornDate: String?, password: String) async throws {
         guard let url = URL(string: "\(baseURL)/register") else { return }
         
         var request = URLRequest(url: url)
@@ -608,7 +616,10 @@ class AuthManager {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         
-        let body = ["name": name, "email": email, "password": password]
+        var body: [String: Any] = ["name": name, "email": email, "password": password]
+        if let bd = bornDate {
+            body["born_date"] = bd
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -1177,6 +1188,7 @@ class AuthManager {
             self.currentUser = responseData.user
             self.partner = responseData.partner_data
             self.anniversaryDate = responseData.anniversaryDate
+            self.pairedDate = responseData.pairedDate
             self.disconnectRequestedBy = responseData.disconnect_requested_by
             self.coupleActive = responseData.couple_active ?? false
             self.invitedBy = responseData.invited_by

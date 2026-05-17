@@ -17,6 +17,7 @@ struct GlimpseUser: Codable, Identifiable {
     let name: String
     let email: String
     let profile_photo_url: String
+    let born_date: String?
     let latitude: Double?
     let longitude: Double?
     let location_name: String?
@@ -44,12 +45,25 @@ struct GlimpseUser: Codable, Identifiable {
         guard last_updated != nil else { return true }
         return Calendar.current.dateComponents([.minute], from: lastUpdatedDate, to: Date()).minute ?? 0 > 3
     }
+    
+    var isBirthdayToday: Bool {
+        guard let bdStr = born_date else { return false }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let date = formatter.date(from: bdStr) else { return false }
+        
+        let currentComponents = Calendar.current.dateComponents([.day, .month], from: Date())
+        let birthComponents = Calendar.current.dateComponents([.day, .month], from: date)
+        
+        return currentComponents.day == birthComponents.day && currentComponents.month == birthComponents.month
+    }
 }
 
 struct CoupleResponse: Codable { 
     let user: GlimpseUser
     let partner_data: GlimpseUser?
     let anniversary_start_date: String?
+    let paired_at: String?
     let disconnect_requested_by: Int?
     let couple_active: Bool?
     let invited_by: Int?
@@ -58,6 +72,22 @@ struct CoupleResponse: Codable {
     let highest_together_streak: Int?
     let total_meetings: Int?
     let love_burst_timestamp: Double?
+    
+    var pairedDate: Date? {
+        guard let paired = paired_at else { return nil }
+        let isoFormatter = ISO8601DateFormatter()
+        if let date = isoFormatter.date(from: paired) {
+            return date
+        }
+        let dbFormatter = DateFormatter()
+        dbFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        dbFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dbFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        if let date = dbFormatter.date(from: paired) {
+            return date
+        }
+        return nil
+    }
     
     var anniversaryDate: Date? {
         guard let start = anniversary_start_date else { return nil }
@@ -97,6 +127,7 @@ extension GlimpseUser {
         name: "Anderas",
         email: "anderas@glimpse.com",
         profile_photo_url: "https://ui-avatars.com/api/?name=Anderas",
+        born_date: "1999-05-18",
         latitude: -6.9740,
         longitude: 107.6303,
         location_name: "My Home",
@@ -116,6 +147,7 @@ extension GlimpseUser {
         name: "Unknown",
         email: "unknown@glimpse.com",
         profile_photo_url: "https://ui-avatars.com/api/?name=Unknown",
+        born_date: nil,
         latitude: 0.0,
         longitude: 0.0,
         location_name: "Unknown Location",

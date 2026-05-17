@@ -123,7 +123,7 @@ struct ProfileView: View {
                                         Button {
                                             isShowingDisconnectConfirmation = true
                                         } label: {
-                                            CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: formattedPairedDate(auth.anniversaryDate ?? Date()), color: .activeCyan)
+                                            CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: formattedPairedDate(auth.pairedDate ?? Date()), color: .activeCyan)
                                         }
                                     }
                                     
@@ -618,6 +618,9 @@ struct EditProfileView: View {
     @Bindable var auth: AuthManager
     @State private var name = ""
     @State private var email = ""
+    @State private var bornDate = Calendar.current.date(byAdding: .year, value: -18, to: Date()) ?? Date()
+    @State private var bornDateSelected = false
+    @State private var showDatePicker = false
     @State private var selectedItem: PhotosPickerItem?
     @State private var selectedImage: UIImage?
     @State private var isSaving = false
@@ -628,6 +631,16 @@ struct EditProfileView: View {
         self.auth = auth
         _name = State(initialValue: auth.currentUser?.name ?? "")
         _email = State(initialValue: auth.currentUser?.email ?? "")
+        
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        if let bdStr = auth.currentUser?.born_date, let date = formatter.date(from: bdStr) {
+            _bornDate = State(initialValue: date)
+            _bornDateSelected = State(initialValue: true)
+        } else {
+            _bornDate = State(initialValue: Calendar.current.date(byAdding: .year, value: -18, to: Date()) ?? Date())
+            _bornDateSelected = State(initialValue: false)
+        }
     }
     
     private func formattedUrl(_ urlString: String) -> String {
@@ -710,6 +723,31 @@ struct EditProfileView: View {
                                 email = String(newValue.prefix(100))
                             }
                         }
+                    
+                    // Date of Birth Row
+                    Button(action: {
+                        showDatePicker = true
+                    }) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "calendar")
+                                .foregroundColor(.white.opacity(0.6))
+                                .frame(width: 20)
+                            
+                            Text(bornDateSelected ? bornDate.formatted(date: .long, time: .omitted) : "Date of Birth")
+                                .foregroundColor(bornDateSelected ? .white : .white.opacity(0.4))
+                                .font(.system(size: 15))
+                            
+                            Spacer()
+                            
+                            Text(bornDateSelected ? "Edit" : "Select")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.electricPurple)
+                        }
+                        .padding()
+                        .background(Color.white.opacity(0.05))
+                        .cornerRadius(12)
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
                 .padding(.horizontal)
                 
@@ -736,13 +774,57 @@ struct EditProfileView: View {
                 Spacer()
             }
         }
+        .sheet(isPresented: $showDatePicker) {
+            ZStack {
+                Color.deepVelvet.ignoresSafeArea()
+                
+                VStack(spacing: 20) {
+                    HStack {
+                        Text("Select Date of Birth")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        Spacer()
+                        Button("Done") {
+                            bornDateSelected = true
+                            showDatePicker = false
+                        }
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.electricPurple)
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 24)
+                    
+                    DatePicker(
+                        "",
+                        selection: $bornDate,
+                        in: ...Date(),
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.wheel)
+                    .labelsHidden()
+                    .colorScheme(.dark)
+                    .padding(.horizontal)
+                    .onChange(of: bornDate) { _, _ in
+                        bornDateSelected = true
+                    }
+                    
+                    Spacer()
+                }
+            }
+            .presentationDetents([.height(300)])
+            .presentationDragIndicator(.visible)
+        }
     }
     
     private func saveProfile() {
         isSaving = true
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let dateStr = bornDateSelected ? formatter.string(from: bornDate) : nil
+        
         Task {
             do {
-                try await auth.updateProfile(name: name, email: email, photo: selectedImage)
+                try await auth.updateProfile(name: name, email: email, bornDate: dateStr, photo: selectedImage)
                 dismiss()
             } catch {
                 print("Failed to save: \(error)")

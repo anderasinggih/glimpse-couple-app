@@ -5,6 +5,9 @@ struct SignupView: View {
     @State private var name = ""
     @State private var email = ""
     @State private var password = ""
+    @State private var bornDate = Calendar.current.date(byAdding: .year, value: -18, to: Date()) ?? Date()
+    @State private var bornDateSelected = false
+    @State private var showDatePicker = false
     @State private var isLoading = false
     @State private var errorMessage = ""
     
@@ -66,6 +69,36 @@ struct SignupView: View {
                         .focused($focusedField, equals: .password)
                         .submitLabel(.done)
                         .onTapGesture { focusedField = .password }
+                    
+                    // Date of Birth Row
+                    Button(action: {
+                        focusedField = nil
+                        showDatePicker = true
+                    }) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "calendar")
+                                .foregroundColor(.white.opacity(0.6))
+                                .frame(width: 20)
+                            
+                            Text(bornDateSelected ? bornDate.formatted(date: .long, time: .omitted) : "Date of Birth")
+                                .foregroundColor(bornDateSelected ? .white : .white.opacity(0.4))
+                                .font(.system(size: 15))
+                            
+                            Spacer()
+                            
+                            Text(bornDateSelected ? "Edit" : "Select")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.electricPurple)
+                        }
+                        .padding()
+                        .background(Color.white.opacity(0.06))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 1.2)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
                 .onSubmit {
                     if focusedField == .name { focusedField = .email }
@@ -112,6 +145,46 @@ struct SignupView: View {
             .padding(.top, 40)
         }
         .navigationBarBackButtonHidden(true)
+        .sheet(isPresented: $showDatePicker) {
+            ZStack {
+                Color.deepVelvet.ignoresSafeArea()
+                
+                VStack(spacing: 20) {
+                    HStack {
+                        Text("Select Date of Birth")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        Spacer()
+                        Button("Done") {
+                            bornDateSelected = true
+                            showDatePicker = false
+                        }
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.electricPurple)
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 24)
+                    
+                    DatePicker(
+                        "",
+                        selection: $bornDate,
+                        in: ...Date(),
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.wheel)
+                    .labelsHidden()
+                    .colorScheme(.dark)
+                    .padding(.horizontal)
+                    .onChange(of: bornDate) { _, _ in
+                        bornDateSelected = true
+                    }
+                    
+                    Spacer()
+                }
+            }
+            .presentationDetents([.height(300)])
+            .presentationDragIndicator(.visible)
+        }
     }
     
     private func validate() -> Bool {
@@ -134,10 +207,16 @@ struct SignupView: View {
         hideKeyboard()
         isLoading = true
         errorMessage = ""
+        
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let dateStr = bornDateSelected ? formatter.string(from: bornDate) : nil
+        
         do {
             try await AuthManager.shared.register(
                 name: name.trimmingCharacters(in: .whitespaces),
                 email: email.lowercased().trimmingCharacters(in: .whitespaces),
+                bornDate: dateStr,
                 password: password
             )
         } catch {
