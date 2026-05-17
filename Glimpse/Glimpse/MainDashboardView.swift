@@ -164,6 +164,7 @@ struct MainDashboardView: View {
             .zIndex(999)
         }
         .onAppear {
+            LiveLocationManager.shared.startTracking()
             Task {
                 try? await auth.fetchState()
                 _ = try? await auth.fetchFlashes()

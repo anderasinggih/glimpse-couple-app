@@ -313,6 +313,45 @@ class AuthManager {
         }
     }
     
+    func pushLocationAndStatus(latitude: Double?, longitude: Double?, locationName: String?) {
+        guard isAuthenticated else { return }
+        
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        let batteryLevel = Int(UIDevice.current.batteryLevel * 100)
+        let isCharging = UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full
+        
+        Task {
+            guard let url = URL(string: "\(baseURL)/glimpse/status") else { return }
+            guard let token = userToken else { return }
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.addValue("application/json", forHTTPHeaderField: "Accept")
+            
+            var body: [String: Any] = [
+                "battery_level": batteryLevel,
+                "is_charging": isCharging
+            ]
+            
+            if let lat = latitude {
+                body["latitude"] = lat
+            }
+            if let lon = longitude {
+                body["longitude"] = lon
+            }
+            if let loc = locationName {
+                body["location_name"] = loc
+            }
+            
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            
+            // Perform the silent background upload
+            _ = try? await URLSession.shared.data(for: request)
+        }
+    }
+    
     func fetchMessages() async throws -> [ChatMessage] {
         guard let url = URL(string: "\(baseURL)/glimpse/chat") else { return [] }
         guard let token = userToken else { return [] }
