@@ -321,22 +321,16 @@ struct FullPartnerMapView: View {
         .onDisappear {
             stopPolling()
         }
-        // Map Live Updates
+        // Map Live Updates (every 3 seconds for instant real-time synchronization!)
         .onReceive(timer) { _ in
-            guard let partner = auth.partner else { return }
-            
-            // Polling matches online status: Only poll if the partner is ONLINE!
-            // If they are offline, we DO NOT poll to save battery and network requests!
-            if !partner.isOffline {
-                Task {
-                    try? await auth.fetchState()
-                }
+            Task {
+                try? await auth.fetchState()
             }
         }
     }
     
     private func startPolling() {
-        timer = Timer.publish(every: 30.0, on: .main, in: .common)
+        timer = Timer.publish(every: 3.0, on: .main, in: .common)
         timerCancellable = timer.connect()
     }
     
