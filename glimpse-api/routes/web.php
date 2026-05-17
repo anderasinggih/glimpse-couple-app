@@ -141,15 +141,28 @@ Route::get('/debug-storage', function () {
 });
 
 Route::post('/admin/api', function (Request $request) {
-    // 1. Verify access token
+    // 1. Verify access token from database with a graceful fallback
     $token = trim($request->header('X-Admin-Token') ?: ($request->input('token') ?: ''));
-    $secretToken = trim(config('app.admin_token') ?: (env('ADMIN_TOKEN') ?: 'GLIMPSE-ADMIN-TOKEN-2026'));
-
-    // Strip optional quotes if somehow wrapped in stringified format
     $token = trim($token, '"\'');
-    $secretToken = trim($secretToken, '"\'');
 
-    if (!$secretToken || !$token || $token !== $secretToken) {
+    $isAuthorized = false;
+    
+    try {
+        $adminTokenRecord = DB::table('admin_tokens')->first();
+        if ($adminTokenRecord) {
+            $isAuthorized = password_verify($token, $adminTokenRecord->token_hash);
+        } else {
+            // Graceful fallback if table exists but empty
+            $isAuthorized = ($token === 'GLIMPSE-ADMIN-TOKEN-2026');
+        }
+    } catch (\Exception $e) {
+        // Safe fallback if migration has not been run yet
+        $secretToken = trim(config('app.admin_token') ?: (env('ADMIN_TOKEN') ?: 'GLIMPSE-ADMIN-TOKEN-2026'));
+        $secretToken = trim($secretToken, '"\'');
+        $isAuthorized = ($token === $secretToken);
+    }
+
+    if (!$isAuthorized || !$token) {
         return response()->json(['error' => 'Unauthorized. Invalid Admin Token.'], 401);
     }
 
@@ -181,6 +194,23 @@ Route::post('/admin/api', function (Request $request) {
                 'users' => $users,
                 'couples' => $couplesFormatted,
             ]);
+
+        case 'change_admin_token':
+            $newToken = trim($request->input('new_token') ?: '');
+            if (empty($newToken)) {
+                return response()->json(['error' => 'New token cannot be empty.'], 400);
+            }
+            
+            DB::table('admin_tokens')->updateOrInsert(
+                ['id' => 1],
+                [
+                    'token_hash' => password_hash($newToken, PASSWORD_BCRYPT),
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]
+            );
+            
+            return response()->json(['success' => true, 'message' => 'Admin token changed successfully! Please log in again using your new token.']);
 
         case 'update_battery':
             $userId = $request->input('user_id');

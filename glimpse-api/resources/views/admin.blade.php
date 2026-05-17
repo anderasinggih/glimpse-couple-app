@@ -618,6 +618,24 @@
                                 </button>
                             </div>
                         </div>
+
+                        <!-- God Command 5: Secure Token Changer -->
+                        <div class="p-4 bg-slate-950/40 border border-white/5 rounded-xl space-y-4 flex flex-col justify-between">
+                            <div>
+                                <span class="block font-bold text-white text-sm">Secure Admin Token Changer</span>
+                                <span class="block text-xs text-white/50 mt-1">Directly update and re-hash the master Admin Access Token in the database. Instantly updates validation.</span>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-[10px] text-white/50 uppercase font-semibold mb-1">New Access Token</label>
+                                    <input type="password" id="dewaNewTokenInput" placeholder="Enter new secret token..." class="w-full px-3 py-2 rounded-lg border border-white/10 bg-slate-900 text-white text-xs focus:outline-none focus:border-activeCyan">
+                                </div>
+                                <button onclick="executeChangeAdminToken()" class="w-full py-2 rounded-lg bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 font-bold text-xs transition-all flex items-center justify-center space-x-2">
+                                    <span>Update Admin Token</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1254,6 +1272,40 @@
             const confirmation = confirm(`Run system engine database vacuuming & orphans purge?`);
             if (confirmation) {
                 dewaApiCall('database_optimize', {});
+            }
+        }
+
+        async function executeChangeAdminToken() {
+            const newToken = document.getElementById('dewaNewTokenInput').value.trim();
+            if (!newToken) {
+                alert("Please enter a new access token!");
+                return;
+            }
+            const confirmation = confirm(`DEWA COMMAND: Change Master Admin Token?\n\nYou will be logged out and must log in again with the new token.`);
+            if (confirmation) {
+                const token = localStorage.getItem('glimpse_admin_token');
+                try {
+                    const response = await fetch('/admin/api', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-Admin-Token': token
+                        },
+                        body: JSON.stringify({ action: 'change_admin_token', new_token: newToken })
+                    });
+
+                    const data = await response.json();
+                    if (response.ok) {
+                        alert(`Dewa Success: ${data.message}`);
+                        handleLogout(); // Automatically log out
+                    } else {
+                        alert(`Dewa Error: ${data.error || 'Request failed'}`);
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert(`Network failure during Dewa command execution.`);
+                }
             }
         }
 
