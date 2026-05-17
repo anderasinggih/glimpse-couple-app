@@ -254,13 +254,7 @@ struct ChatView: View {
             if let newMsg = notification.object as? ChatMessage {
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
                     if !self.messages.contains(where: { $0.id == newMsg.id }) {
-                        self.messages.append(newMsg)
-                        
-                        // Play soft "ting" sound (1103) and tactile "klek" haptic (.rigid) for live incoming messages
-                        if let partner = auth.partner, newMsg.sender_id == partner.id {
-                            AudioServicesPlaySystemSound(1103)
-                            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                        }
+                         self.messages.append(newMsg)
                     }
                 }
             }

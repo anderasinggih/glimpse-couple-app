@@ -598,8 +598,9 @@ class AuthManager {
         // 1. Send automatic flash attachment message
         _ = try? await sendChatMessage(text: "📷 Sent a Flash! [FLASH_ATTACHMENT]")
         
-        // 2. Refresh state after upload to reflect changes
+        // 2. Refresh state and flashes after upload to reflect changes
         try? await fetchState()
+        _ = try? await fetchFlashes()
     }
     
     func triggerServerLoveBurst() async throws {
@@ -649,10 +650,12 @@ class AuthManager {
               let host = urlComponents.host else { return }
         
         let appKey = "u1eadho8wbhzv2mcnlfy"
-        let wsPort = 8080
+        let isLocal = host.contains("localhost") || host.contains("127.0.0.1") || host.contains("192.168.")
         let wsScheme = urlComponents.scheme == "https" ? "wss" : "ws"
         
-        let wsUrlString = "\(wsScheme)://\(host):\(wsPort)/app/\(appKey)?protocol=7&client=js&version=8.4.0-reverb"
+        let wsUrlString = isLocal ?
+            "\(wsScheme)://\(host):8080/app/\(appKey)?protocol=7&client=js&version=8.4.0-reverb" :
+            "\(wsScheme)://\(host)/app/\(appKey)?protocol=7&client=js&version=8.4.0-reverb"
         guard let url = URL(string: wsUrlString) else { return }
         
         print("🔌 Connecting to WebSockets at: \(wsUrlString)")
@@ -736,6 +739,9 @@ class AuthManager {
                             self.partner = payload.user
                             // Trigger immediate local state notification
                             NotificationCenter.default.post(name: Notification.Name("GlimpseLiveStateUpdated"), object: nil)
+                            Task {
+                                try? await self.fetchFlashes()
+                            }
                         }
                     }
                 }
@@ -753,6 +759,12 @@ class AuthManager {
                                 self.latestFetchedMessages.append(payload.message)
                                 self.updateUnreadCount()
                                 NotificationCenter.default.post(name: Notification.Name("GlimpseChatMessageReceived"), object: payload.message)
+                                
+                                // Global sound & haptic alert for incoming messages from partner!
+                                if payload.message.sender_id != self.currentUser?.id {
+                                    AudioServicesPlaySystemSound(1103) // Soft ting
+                                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                                }
                             }
                         }
                     }
@@ -784,8 +796,10 @@ class AuthManager {
                     }
                     if let payload = try? JSONDecoder().decode(TypingPayload.self, from: eventData) {
                         DispatchQueue.main.async {
-                            // Update partner typing status in real-time!
-                            self.isPartnerTyping = payload.is_typing
+                            // Update partner typing status ONLY if it comes from the partner, not me!
+                            if payload.user_id != self.currentUser?.id {
+                                self.isPartnerTyping = payload.is_typing
+                            }
                         }
                     }
                 }
