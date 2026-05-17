@@ -92,8 +92,8 @@ struct ChatView: View {
                                     .padding(.top, 4)
                                 }
                                 
-                                // Space at bottom to prevent floating bar overlapping last message
-                                Spacer().frame(height: 95)
+                                // Larger bottom spacing to ensure the latest chat bubbles sit beautifully above the bottom transparent frosted panel
+                                Spacer().frame(height: isPartnerTyping ? 180 : 140)
                             }
                             .padding(.horizontal, 16)
                             .frame(maxWidth: .infinity, minHeight: 600)
@@ -104,8 +104,10 @@ struct ChatView: View {
                         }
                         .onChange(of: messages) { oldMessages, newMessages in
                             if let lastMsg = newMessages.last {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                                    proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                        proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                                    }
                                 }
                                 
                                 // Play soft "ting" sound (1103) and tactile "klek" haptic (.rigid) when partner message is received
@@ -151,8 +153,8 @@ struct ChatView: View {
                                 .padding(.bottom, 12)
                         }
                         .background(
-                            Color.deepVelvet.opacity(0.6)
-                                .background(.ultraThickMaterial)
+                            Color.white.opacity(0.01) // Super transparent base for see-through feel
+                                .background(.ultraThinMaterial) // Clean glassmorphic transparent blur
                                 .ignoresSafeArea(edges: .bottom)
                         )
                     }
@@ -370,7 +372,10 @@ struct ChatView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .background(Color.deepVelvet.opacity(0.65).background(.ultraThickMaterial))
+        .background(
+            Color.white.opacity(0.01) // Super transparent base for see-through feel
+                .background(.ultraThinMaterial) // Clean glassmorphic transparent blur
+        )
         .ignoresSafeArea(edges: .top)
     }
     
