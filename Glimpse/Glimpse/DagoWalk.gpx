@@ -1,8 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="Xcode" xmlns="http://www.topografix.com/GPX/1/1">
-    <wpt lat="-6.8850" lon="107.6135"></wpt>
-    <wpt lat="-6.8855" lon="107.6140"></wpt>
-    <wpt lat="-6.8860" lon="107.6145"></wpt>
-    <wpt lat="-6.8865" lon="107.6150"></wpt>
-    <wpt lat="-6.8870" lon="107.6155"></wpt>
+    <trk>
+        <name>Dago Walk</name>
+        <trkseg>
+            <trkpt lat="-6.8850" lon="107.6135">
+                <time>2026-05-18T00:00:00Z</time>
+            </trkpt>
+            <trkpt lat="-6.8855" lon="107.6140">
+                <time>2026-05-18T00:00:10Z</time>
+            </trkpt>
+            <trkpt lat="-6.8860" lon="107.6145">
+                <time>2026-05-18T00:00:20Z</time>
+            </trkpt>
+            <trkpt lat="-6.8865" lon="107.6150">
+                <time>2026-05-18T00:00:30Z</time>
+            </trkpt>
+            <trkpt lat="-6.8870" lon="107.6155">
+                <time>2026-05-18T00:00:40Z</time>
+            </trkpt>
+        </trkseg>
+    </trk>
 </gpx>
