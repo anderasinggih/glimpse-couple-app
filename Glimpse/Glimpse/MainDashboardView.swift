@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import AudioToolbox
 
 struct MainDashboardView: View {
     @State private var auth = AuthManager.shared
@@ -525,6 +526,9 @@ struct MainDashboardView: View {
         
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
+        
+        // Play satisfying native soft bubble pop "plup" sound effect
+        AudioServicesPlaySystemSound(1306)
         
         withAnimation(.easeOut(duration: 1.0)) {
             if let idx = self.popHearts.firstIndex(where: { $0.id == heartId }) {
