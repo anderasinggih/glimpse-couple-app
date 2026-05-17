@@ -121,10 +121,9 @@ struct FullPartnerMapView: View {
                             // 1. Bottom Layer: Outer Neon Glow
                             MapPolyline(coordinates: wavyCoords)
                                 .stroke(
-                                    LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
+                                    LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
                                     style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
                                 )
-                                .opacity(0.4)
                             
                             // 2. Top Layer: Core Saturated Line
                             MapPolyline(coordinates: wavyCoords)
