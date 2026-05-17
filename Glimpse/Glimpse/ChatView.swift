@@ -14,6 +14,16 @@ struct ChatView: View {
     // To track when to push status (every 8 ticks of the 1.5s timer = ~12s)
     @State private var tickCount = 0
     @State private var isPartnerTyping = false
+    @State private var isSearchingChat = false
+    @State private var searchQuery = ""
+    
+    var filteredMessages: [ChatMessage] {
+        let cleanQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleanQuery.isEmpty {
+            return messages
+        }
+        return messages.filter { $0.message.localizedCaseInsensitiveContains(cleanQuery) }
+    }
     
     var body: some View {
         ZStack {
@@ -36,10 +46,10 @@ struct ChatView: View {
                     ScrollViewReader { proxy in
                         ScrollView {
                             VStack(spacing: 12) {
-                                // Top space to offset first message below the frosted header
-                                Spacer().frame(height: 110)
+                                // Top space to offset first message below the frosted header (height matches whether search is expanded)
+                                Spacer().frame(height: isSearchingChat ? 165 : 110)
                                 
-                                ForEach(Array(messages.enumerated()), id: \.element.id) { index, msg in
+                                ForEach(Array(filteredMessages.enumerated()), id: \.element.id) { index, msg in
                                     VStack(spacing: 12) {
                                         if shouldShowDateHeader(for: index) {
                                             dateHeaderBadge(for: msg)
@@ -51,6 +61,21 @@ struct ChatView: View {
                                                 removal: .opacity
                                             ))
                                     }
+                                }
+                                
+                                // Beautiful Glassmorphic "No Results" state when query returns nothing
+                                if !searchQuery.isEmpty && filteredMessages.isEmpty {
+                                    VStack(spacing: 12) {
+                                        Image(systemName: "magnifyingglass.circle.fill")
+                                            .font(.system(size: 44))
+                                            .foregroundColor(.white.opacity(0.25))
+                                        Text("No results for \"\(searchQuery)\"")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(.white.opacity(0.5))
+                                    }
+                                    .padding(.vertical, 40)
+                                    .frame(maxWidth: .infinity)
+                                    .transition(.opacity.combined(with: .scale))
                                 }
                                 
                                 if isPartnerTyping {
@@ -213,80 +238,138 @@ struct ChatView: View {
     
     // PREMIUM TINY HEADER WITH INTEGRATED BLUR EFFECT (Bleeds to top edge)
     private func chatHeader(partner: GlimpseUser) -> some View {
-        HStack(spacing: 14) {
-            // Profile Photo (Small circle)
-            AsyncImage(url: URL(string: formattedUrl(partner.profile_photo_url))) { image in
-                image.resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
-                Color.white.opacity(0.1)
-            }
-            .frame(width: 44, height: 44)
-            .clipShape(Circle())
-            .overlay(Circle().stroke(Color.electricPurple.opacity(0.3), lineWidth: 1.5))
-            
-            // Partner Details (Tiny & Compact)
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 7) {
-                    Text(partner.name)
-                        .font(.system(size: 16.5, weight: .bold))
-                        .foregroundColor(.white)
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                // Profile Photo (Small circle)
+                AsyncImage(url: URL(string: formattedUrl(partner.profile_photo_url))) { image in
+                    image.resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Color.white.opacity(0.1)
+                }
+                .frame(width: 44, height: 44)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.electricPurple.opacity(0.3), lineWidth: 1.5))
+                
+                // Partner Details (Tiny & Compact)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 7) {
+                        Text(partner.name)
+                            .font(.system(size: 16.5, weight: .bold))
+                            .foregroundColor(.white)
+                        
+                        // Online Indicator Dot
+                        Circle()
+                            .fill(partner.isOffline ? Color.gray : Color.green)
+                            .frame(width: 7, height: 7)
+                    }
                     
-                    // Online Indicator Dot
-                    Circle()
-                        .fill(partner.isOffline ? Color.gray : Color.green)
-                        .frame(width: 7, height: 7)
+                    // Status, Location, and Battery
+                    HStack(spacing: 10) {
+                        // 1. Online / Offline Status
+                        Text(partner.isOffline ? "Offline" : "Online")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white.opacity(0.55))
+                        
+                        Text("•")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.3))
+                        
+                         // 2. Location (Tap to redirect to Map screen)
+                        HStack(spacing: 3) {
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 9.5))
+                            Text(partner.location_name ?? "Unknown")
+                                .font(.system(size: 11, weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .foregroundColor(.electricPurple.opacity(0.95))
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                auth.selectedTab = 1 // Switch to map tab
+                            }
+                        }
+                        
+                        Text("•")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.3))
+                        
+                        // 3. Battery with Charging Support
+                        HStack(spacing: 3) {
+                            Image(systemName: partner.is_charging == true ? "battery.100.bolt" : "battery.75")
+                                .font(.system(size: 11))
+                                .foregroundColor(partner.is_charging == true ? .green : (partner.battery_level ?? 100 > 20 ? .white.opacity(0.7) : .red))
+                            Text("\(partner.battery_level ?? 100)%")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundColor(.white.opacity(0.7))
+                    }
                 }
                 
-                // Status, Location, and Battery
-                HStack(spacing: 10) {
-                    // 1. Online / Offline Status
-                    Text(partner.isOffline ? "Offline" : "Online")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.white.opacity(0.55))
-                    
-                    Text("•")
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.3))
-                    
-                     // 2. Location (Tap to redirect to Map screen)
-                    HStack(spacing: 3) {
-                        Image(systemName: "location.fill")
-                            .font(.system(size: 9.5))
-                        Text(partner.location_name ?? "Unknown")
-                            .font(.system(size: 11, weight: .medium))
-                            .lineLimit(1)
-                    }
-                    .foregroundColor(.electricPurple.opacity(0.95))
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                            auth.selectedTab = 1 // Switch to map tab
+                Spacer()
+                
+                // PREMIUM FIND CHAT BUTTON (WhatsApp style)
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        isSearchingChat.toggle()
+                        if !isSearchingChat {
+                            searchQuery = ""
                         }
                     }
-                    
-                    Text("•")
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.3))
-                    
-                    // 3. Battery with Charging Support
-                    HStack(spacing: 3) {
-                        Image(systemName: partner.is_charging == true ? "battery.100.bolt" : "battery.75")
-                            .font(.system(size: 11))
-                            .foregroundColor(partner.is_charging == true ? .green : (partner.battery_level ?? 100 > 20 ? .white.opacity(0.7) : .red))
-                        Text("\(partner.battery_level ?? 100)%")
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                    .foregroundColor(.white.opacity(0.7))
+                } label: {
+                    Image(systemName: isSearchingChat ? "xmark.circle.fill" : "magnifyingglass")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(isSearchingChat ? .electricPurple : .white.opacity(0.8))
+                        .padding(8)
+                        .background(Color.white.opacity(isSearchingChat ? 0.15 : 0.05))
+                        .clipShape(Circle())
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 50)
+            .padding(.bottom, 12)
             
-            Spacer()
+            // EXPANDABLE SEARCH BAR PANEL
+            if isSearchingChat {
+                HStack(spacing: 10) {
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.4))
+                        
+                        TextField("Search in chat...", text: $searchQuery)
+                            .font(.system(size: 14))
+                            .foregroundColor(.white)
+                            .tint(.electricPurple)
+                            .submitLabel(.search)
+                        
+                        if !searchQuery.isEmpty {
+                            Button {
+                                searchQuery = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.white.opacity(0.5))
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.black.opacity(0.2))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 50)
-        .padding(.bottom, 12)
         .background(Color.deepVelvet.opacity(0.65).background(.ultraThickMaterial))
         .ignoresSafeArea(edges: .top)
     }
@@ -489,11 +572,12 @@ struct ChatView: View {
     
     // FORMAT DATE TO WHATSAPP STYLE LABELS ("Today", "Yesterday", or "16 May 2026")
     private func shouldShowDateHeader(for index: Int) -> Bool {
-        guard index < messages.count else { return false }
+        let msgList = filteredMessages
+        guard index < msgList.count else { return false }
         if index == 0 { return true }
         
-        let currentMsg = messages[index]
-        let prevMsg = messages[index - 1]
+        let currentMsg = msgList[index]
+        let prevMsg = msgList[index - 1]
         
         guard let currentRaw = currentMsg.created_at, let prevRaw = prevMsg.created_at else { return false }
         
