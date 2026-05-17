@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 struct MainDashboardView: View {
     @State private var auth = AuthManager.shared
