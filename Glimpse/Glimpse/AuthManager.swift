@@ -17,6 +17,7 @@ class AuthManager {
     var invitedBy: Int?
     var isTogether = false
     var togetherStreak = 0
+    var highestTogetherStreak = 0
     var totalMeetings = 0
     var lastLoveBurstTimestamp: Double = 0.0
     var showInviteDeclinedAlert = false
@@ -115,6 +116,7 @@ class AuthManager {
             self.invitedBy = responseData.invited_by
             self.isTogether = responseData.is_together ?? false
             self.togetherStreak = responseData.together_streak ?? 0
+            self.highestTogetherStreak = responseData.highest_together_streak ?? 0
             self.totalMeetings = responseData.total_meetings ?? 0
             self.lastLoveBurstTimestamp = responseData.love_burst_timestamp ?? 0.0
             
@@ -1140,6 +1142,7 @@ class AuthManager {
             self.invitedBy = responseData.invited_by
             self.isTogether = responseData.is_together ?? false
             self.togetherStreak = responseData.together_streak ?? 0
+            self.highestTogetherStreak = responseData.highest_together_streak ?? 0
             self.totalMeetings = responseData.total_meetings ?? 0
             self.lastLoveBurstTimestamp = responseData.love_burst_timestamp ?? 0.0
             

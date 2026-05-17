@@ -55,6 +55,7 @@ struct CoupleResponse: Codable {
     let invited_by: Int?
     let is_together: Bool?
     let together_streak: Int?
+    let highest_together_streak: Int?
     let total_meetings: Int?
     let love_burst_timestamp: Double?
     

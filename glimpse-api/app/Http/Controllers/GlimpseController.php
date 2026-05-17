@@ -120,6 +120,7 @@ class GlimpseController extends Controller
             'invited_by' => $couple && $couple->invited_by !== null ? (int)$couple->invited_by : null,
             'is_together' => $isTogether,
             'together_streak' => (int)$togetherStreak,
+            'highest_together_streak' => $couple ? (int)$couple->highest_together_streak : 0,
             'total_meetings' => (int)$totalMeetings,
             'love_burst_timestamp' => $loveBurstTimestamp,
         ]);
@@ -543,6 +544,11 @@ class GlimpseController extends Controller
                     } else {
                         $couple->together_streak = 1;
                     }
+                    
+                    if ($couple->together_streak > $couple->highest_together_streak) {
+                        $couple->highest_together_streak = $couple->together_streak;
+                    }
+                    
                     $couple->total_meetings += 1;
                     $couple->last_meeting_date = $today;
                     $couple->save();

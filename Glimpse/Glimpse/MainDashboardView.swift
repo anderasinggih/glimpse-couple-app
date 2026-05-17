@@ -43,6 +43,58 @@ struct MainDashboardView: View {
         }
     }
     
+    private var streakFlameColors: [Color] {
+        let count = auth.togetherStreak
+        if count >= 15 {
+            return [.white, .activeCyan]
+        } else if count >= 7 {
+            return [.electricPurple, Color(hex: "FF4D94")]
+        } else if count >= 3 {
+            return [.red, .pink]
+        } else {
+            return [.orange, .yellow]
+        }
+    }
+    
+    private var streakGlowColor: Color {
+        let count = auth.togetherStreak
+        if count >= 15 {
+            return .activeCyan
+        } else if count >= 7 {
+            return .electricPurple
+        } else if count >= 3 {
+            return .red
+        } else {
+            return .orange
+        }
+    }
+
+    private var streakPulseAmount: CGFloat {
+        let count = auth.togetherStreak
+        if count >= 15 {
+            return streakPulse ? 1.4 : 0.8
+        } else if count >= 7 {
+            return streakPulse ? 1.3 : 0.85
+        } else if count >= 3 {
+            return streakPulse ? 1.22 : 0.9
+        } else {
+            return streakPulse ? 1.15 : 0.95
+        }
+    }
+    
+    private var streakAnimationDuration: Double {
+        let count = auth.togetherStreak
+        if count >= 15 {
+            return 0.4
+        } else if count >= 7 {
+            return 0.6
+        } else if count >= 3 {
+            return 0.8
+        } else {
+            return 1.1
+        }
+    }
+    
     var body: some View {
         @Bindable var bindableAuth = auth
         return ZStack(alignment: .top) {
@@ -391,18 +443,19 @@ struct MainDashboardView: View {
                                     HStack(spacing: 12) {
                                         ZStack {
                                             Circle()
-                                                .fill(LinearGradient(colors: [Color.red.opacity(0.25), Color.orange.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                                .fill(LinearGradient(colors: streakFlameColors.map { $0.opacity(0.2) }, startPoint: .topLeading, endPoint: .bottomTrailing))
                                                 .frame(width: 44, height: 44)
-                                                .shadow(color: .red.opacity(0.4), radius: 6)
+                                                .shadow(color: streakGlowColor.opacity(0.3), radius: 6)
                                             
                                             Image(systemName: "flame.fill")
                                                 .font(.title2)
-                                                .foregroundColor(.orange)
-                                                .shadow(color: .orange, radius: 8)
-                                                .shadow(color: .red, radius: 12)
-                                                .scaleEffect(streakPulse ? 1.18 : 0.92)
+                                                .foregroundStyle(LinearGradient(colors: streakFlameColors, startPoint: .top, endPoint: .bottom))
+                                                .shadow(color: streakGlowColor, radius: 8)
+                                                .shadow(color: .white.opacity(auth.togetherStreak >= 15 ? 0.8 : 0.0), radius: 10)
+                                                .scaleEffect(streakPulseAmount)
+                                                .id(auth.togetherStreak) // Forces animation restart when streak updates!
                                                 .onAppear {
-                                                    withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                                                    withAnimation(.easeInOut(duration: streakAnimationDuration).repeatForever(autoreverses: true)) {
                                                         streakPulse = true
                                                     }
                                                 }
@@ -447,6 +500,26 @@ struct MainDashboardView: View {
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 }
+                                
+                                Divider()
+                                    .background(Color.white.opacity(0.08))
+                                    .padding(.vertical, 4)
+                                
+                                HStack {
+                                    Image(systemName: "crown.fill")
+                                        .foregroundColor(.yellow)
+                                        .font(.system(size: 13, weight: .bold))
+                                        .shadow(color: .yellow.opacity(0.4), radius: 4)
+                                    Text("Highest Streak Together")
+                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.white.opacity(0.6))
+                                    Spacer()
+                                    Text("\(auth.highestTogetherStreak) days")
+                                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                                        .foregroundColor(.yellow)
+                                        .shadow(color: .yellow.opacity(0.6), radius: 8)
+                                }
+                                .padding(.horizontal, 4)
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
