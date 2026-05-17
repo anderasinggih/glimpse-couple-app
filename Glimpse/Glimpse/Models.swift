@@ -106,7 +106,8 @@ extension GlimpseUser {
         last_updated: ISO8601DateFormatter().string(from: Date()),
         invite_code: "GLMP-1234",
         couple_id: nil,
-        last_seen_message_id: nil
+        last_seen_message_id: nil,
+        location_history: nil
     )
     
     static let mockPartner = GlimpseUser(
@@ -124,7 +125,8 @@ extension GlimpseUser {
         last_updated: ISO8601DateFormatter().string(from: Date()),
         invite_code: "UNKNOWN",
         couple_id: nil,
-        last_seen_message_id: nil
+        last_seen_message_id: nil,
+        location_history: nil
     )
 }
 
