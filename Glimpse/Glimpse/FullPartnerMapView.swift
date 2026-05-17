@@ -409,6 +409,11 @@ struct FullPartnerMapView: View {
         let midLon = (start.longitude + end.longitude) / 2.0 + pLon * arcStrength
         let midpoint = CLLocationCoordinate2D(latitude: midLat, longitude: midLon)
         
+        // Update bottom overlay info card instantly at start for zero latency!
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+            currentlyFocusedTarget = targetFocus
+        }
+        
         Task {
             // --- STAGE 1: SMOOTH 3D ARC TO MIDPOINT (UPWARD GLIDE) ---
             // Swoop up to midpoint with a beautiful 3D tilt and rotating angle
@@ -445,9 +450,6 @@ struct FullPartnerMapView: View {
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             
             await MainActor.run {
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
-                    currentlyFocusedTarget = targetFocus
-                }
                 isFlying = false
             }
         }
