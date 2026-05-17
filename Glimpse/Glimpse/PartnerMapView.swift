@@ -285,6 +285,29 @@ struct PartnerOverlayCard: View {
     let locationOverride: String?
     let isMinimal: Bool
     
+    private var distanceText: String? {
+        guard let currentUser = AuthManager.shared.currentUser,
+              let myLat = currentUser.latitude, myLat != 0.0,
+              let myLon = currentUser.longitude, myLon != 0.0,
+              let partnerLat = user.latitude, partnerLat != 0.0,
+              let partnerLon = user.longitude, partnerLon != 0.0 else {
+            return nil
+        }
+        
+        let myLoc = CLLocation(latitude: myLat, longitude: myLon)
+        let partnerLoc = CLLocation(latitude: partnerLat, longitude: partnerLon)
+        let distanceInMeters = myLoc.distance(from: partnerLoc)
+        
+        if distanceInMeters < 100 {
+            return "Right next to you"
+        } else if distanceInMeters < 1000 {
+            return String(format: "%.0fm away", distanceInMeters)
+        } else {
+            let distanceInKm = distanceInMeters / 1000.0
+            return String(format: "%.1fkm away", distanceInKm)
+        }
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: isMinimal ? 4 : 12) {
             if !isMinimal {
@@ -293,18 +316,30 @@ struct PartnerOverlayCard: View {
                         Text(user.name)
                             .font(.system(size: 18, weight: .bold))
                         
-                        if user.isOffline {
-                            Text("Last sync \(timeAgo(from: user.lastUpdatedDate)) (Offline)")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.5))
-                        } else {
-                            HStack(spacing: 4) {
-                                Circle()
-                                    .fill(Color.green)
-                                    .frame(width: 6, height: 6)
-                                Text("Live Syncing (Online)")
+                        HStack(spacing: 8) {
+                            if user.isOffline {
+                                Text("Offline")
                                     .font(.caption)
-                                    .foregroundColor(.green)
+                                    .foregroundColor(.white.opacity(0.5))
+                            } else {
+                                HStack(spacing: 4) {
+                                    Circle()
+                                        .fill(Color.green)
+                                        .frame(width: 6, height: 6)
+                                    Text("Live")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
+                                }
+                            }
+                            
+                            if let dist = distanceText {
+                                Text("•")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.3))
+                                
+                                Text(dist)
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.activeCyan)
                             }
                         }
                     }
