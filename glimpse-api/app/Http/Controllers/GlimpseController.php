@@ -95,7 +95,7 @@ class GlimpseController extends Controller
                 'latest_photo_url' => $latestPhotoUrl,
                 'last_updated' => $user->updated_at->toIso8601String(),
                 'last_seen_message_id' => $user->last_seen_message_id !== null ? (int)$user->last_seen_message_id : null,
-                'location_history' => $user->location_history ?? [],
+                'location_history' => $this->getFilteredHistory($user->location_history),
             ],
             'partner_data' => $partner ? [
                 'id' => (int)$partner->id,
@@ -112,7 +112,7 @@ class GlimpseController extends Controller
                 'latest_photo_url' => $partnerLatestPhotoUrl,
                 'last_updated' => $partner->updated_at->toIso8601String(),
                 'last_seen_message_id' => $partner->last_seen_message_id !== null ? (int)$partner->last_seen_message_id : null,
-                'location_history' => $partner->location_history ?? [],
+                'location_history' => $this->getFilteredHistory($partner->location_history),
             ] : null,
             'anniversary_start_date' => $couple ? $couple->anniversary_start_date : null,
             'disconnect_requested_by' => $couple && $couple->disconnect_requested_by !== null ? (int)$couple->disconnect_requested_by : null,
@@ -546,12 +546,29 @@ class GlimpseController extends Controller
             'timestamp' => now()->timestamp
         ];
 
+        // ⏱️ Zenly Trail Decay: Auto-delete coordinates older than 3 hours (10,800 seconds)
+        $threeHoursAgo = now()->timestamp - 10800;
+        $history = array_filter($history, function($entry) use ($threeHoursAgo) {
+            return isset($entry['timestamp']) && $entry['timestamp'] >= $threeHoursAgo;
+        });
+        $history = array_values($history);
+
         // Keep last 30 coordinates for the footprints trail
         if (count($history) > 30) {
             array_shift($history);
         }
 
         $user->location_history = $history;
+    }
+
+    private function getFilteredHistory($history)
+    {
+        if (empty($history)) return [];
+        $threeHoursAgo = now()->timestamp - 10800;
+        $filtered = array_filter($history, function($entry) use ($threeHoursAgo) {
+            return isset($entry['timestamp']) && $entry['timestamp'] >= $threeHoursAgo;
+        });
+        return array_values($filtered);
     }
 
     public function sendLoveBurst(Request $request)
