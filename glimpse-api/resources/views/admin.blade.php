@@ -56,8 +56,8 @@
         <div class="absolute top-[40%] right-[20%] w-[400px] h-[400px] rounded-full bg-activeCyan/5 blur-[90px]"></div>
     </div>
 
-    <!-- ================= LOCK SCREEN (Token Verification Portal) ================= -->
-    <div id="lockScreen" class="fixed inset-0 z-50 flex items-center justify-center bg-deepVelvet/95 backdrop-blur-md transition-all duration-500">
+    <!-- ================= LOCK SCREEN (Token Verification Portal - Hidden by default) ================= -->
+    <div id="lockScreen" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-deepVelvet/95 backdrop-blur-md transition-all duration-500">
         <div class="w-full max-w-md p-8 mx-4 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl relative overflow-hidden">
             <!-- Glass Header Accent -->
             <div class="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-electricPurple via-activeCyan to-royalPurple"></div>
@@ -752,13 +752,8 @@
 
         // Check if already authenticated on load
         window.addEventListener('DOMContentLoaded', () => {
-            const savedToken = localStorage.getItem('glimpse_admin_token');
-            if (savedToken && savedToken !== 'undefined' && savedToken !== 'null' && savedToken.trim() !== '') {
-                document.getElementById('adminToken').value = savedToken.trim();
-                verifyAndLogin(savedToken.trim(), true); // Silent auto-login
-            } else {
-                localStorage.removeItem('glimpse_admin_token');
-            }
+            // 🔓 Admin login check completely bypassed by User Request!
+            verifyAndLogin('', true);
         });
 
         function handleLogin(event) {

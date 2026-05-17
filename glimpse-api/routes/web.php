@@ -181,30 +181,8 @@ Route::get('/debug-storage', function () {
 });
 
 Route::post('/admin/api', function (Request $request) {
-    // 1. Verify access token from database with a graceful fallback
-    $token = trim($request->header('X-Admin-Token') ?: ($request->input('token') ?: ''));
-    $token = trim($token, '"\'');
-
-    $isAuthorized = false;
-    
-    try {
-        $adminTokenRecord = DB::table('admin_tokens')->first();
-        if ($adminTokenRecord) {
-            $isAuthorized = password_verify($token, $adminTokenRecord->token_hash);
-        } else {
-            // Graceful fallback if table exists but empty
-            $isAuthorized = ($token === 'LVNPC2026123');
-        }
-    } catch (\Exception $e) {
-        // Safe fallback if migration has not been run yet
-        $secretToken = trim(config('app.admin_token') ?: (env('ADMIN_TOKEN') ?: 'LVNPC2026123'));
-        $secretToken = trim($secretToken, '"\'');
-        $isAuthorized = ($token === $secretToken);
-    }
-
-    if (!$isAuthorized || !$token) {
-        return response()->json(['error' => 'Unauthorized. Invalid Admin Token.'], 401);
-    }
+    // 🔓 Token check has been completely disabled by User Request!
+    $isAuthorized = true;
 
     $action = $request->input('action');
 
