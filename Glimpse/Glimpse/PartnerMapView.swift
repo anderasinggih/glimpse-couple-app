@@ -464,14 +464,21 @@ struct CachedImageView: View {
         }
     }
     
+    private func cacheFileURL(for urlStr: String) -> URL? {
+        guard let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") else { return nil }
+        let cleanName = urlStr.components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
+        return groupURL.appendingPathComponent("img_cache_\(cleanName).jpg")
+    }
+    
     private func loadImage() async {
         let finalUrlStr = formattedUrl()
-        let cacheKey = "img_cache_\(finalUrlStr)"
-        let sharedDefaults = UserDefaults(suiteName: "group.glimpse.app")
+        guard let fileURL = cacheFileURL(for: finalUrlStr) else { return }
         
-        // 1. Cek Cache dulu
-        if let data = sharedDefaults?.data(forKey: cacheKey), let cached = UIImage(data: data) {
-            self.uiImage = cached
+        // 1. Cek Cache file
+        if let data = try? Data(contentsOf: fileURL), let cached = UIImage(data: data) {
+            await MainActor.run {
+                self.uiImage = cached
+            }
             return
         }
         
@@ -480,7 +487,8 @@ struct CachedImageView: View {
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
             if let fetched = UIImage(data: data) {
-                sharedDefaults?.set(data, forKey: cacheKey)
+                // Simpan ke file cache
+                try? data.write(to: fileURL)
                 await MainActor.run {
                     self.uiImage = fetched
                 }
