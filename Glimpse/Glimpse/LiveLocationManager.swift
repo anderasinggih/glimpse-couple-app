@@ -58,6 +58,13 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         motionActivityManager.stopActivityUpdates()
     }
     
+    // MARK: - Elite Debug Logging Helper (Zero overhead in App Store release build!)
+    private func log(_ message: String) {
+        #if DEBUG
+        print("[⚡️ Glimpse GPS Debug] \(message)")
+        #endif
+    }
+    
     // MARK: - CoreMotion (Motion Detection)
     private func startMotionTracking() {
         guard CMMotionActivityManager.isActivityAvailable() else { return }
@@ -70,6 +77,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                 if #available(iOS 15.0, *) {
                     if self.locationManager.location?.sourceInformation?.isSimulatedBySoftware == true {
                         self.locationManager.startUpdatingLocation()
+                        self.log("🛸 Deteksi Xcode Simulator: GPS dibiarkan aktif untuk simulasi.")
                         return
                     }
                 }
@@ -77,13 +85,19 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                 if activity.stationary {
                     if !self.isStationary {
                         self.isStationary = true
-                        print("[Glimpse GPS] Device is stationary. Stopping GPS updates to conserve battery.")
+                        self.log("🛑 Sensor Gerak (Stationary): HP terdeteksi DIAM di tempat. Menidurkan GPS demi hemat baterai!")
                         self.locationManager.stopUpdatingLocation()
                     }
                 } else if activity.walking || activity.running || activity.automotive || activity.cycling {
                     if self.isStationary {
                         self.isStationary = false
-                        print("[Glimpse GPS] Device is moving. Resuming active GPS tracking.")
+                        var tipeGerak = "bergerak"
+                        if activity.walking { tipeGerak = "jalan kaki 🚶‍♂️" }
+                        else if activity.running { tipeGerak = "berlari 🏃‍♂️" }
+                        else if activity.automotive { tipeGerak = "berkendara 🚗" }
+                        else if activity.cycling { tipeGerak = "sepeda 🚴‍♂️" }
+                        
+                        self.log("🏃‍♂️ Sensor Gerak (Moving): HP terdeteksi \(tipeGerak). Membangunkan GPS kembali secara real-time!")
                         self.locationManager.startUpdatingLocation()
                     }
                 }
@@ -100,12 +114,11 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             
             Task { @MainActor in
                 if isUsingWiFi {
-                    // Check SSID/BSSID and lock coordinates if possible
                     self.fetchCurrentWiFiAndLock()
                 } else {
                     // Disconnected from Wi-Fi: Resume standard GPS tracking
                     if self.currentWiFiBSSID != nil {
-                        print("[Glimpse WiFi] Disconnected from Wi-Fi network. Resuming standard GPS tracking.")
+                        self.log("📴 Wi-Fi Terputus: Lepas dari jangkar Wi-Fi. Mengaktifkan kembali chip GPS aktif!")
                         self.currentWiFiBSSID = nil
                         self.locationManager.startUpdatingLocation()
                     }
@@ -128,7 +141,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                 let bssid = net.bssid
                 self.currentWiFiBSSID = bssid
                 
-                print("[Glimpse WiFi] Anchored to Wi-Fi BSSID: \(bssid)")
+                self.log("📶 Wi-Fi Terhubung: Tersambung ke BSSID: \(bssid)")
                 
                 // If we already have a cached location for this Wi-Fi, lock to it (unless simulated!)
                 if let cached = self.cachedWiFiLocations[bssid] {
@@ -140,7 +153,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                     }
                     
                     if shouldStop {
-                        print("[Glimpse WiFi] Using cached coordinates for Wi-Fi. Stopping GPS to save 99% battery.")
+                        self.log("😴 GPS Dinonaktifkan: Terkunci pada cache koordinat Wi-Fi. Menghemat baterai hingga 99%!")
                         self.locationManager.stopUpdatingLocation()
                     }
                     
@@ -150,7 +163,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                     // Otherwise, get current coordinate first to cache it (unless simulated!)
                     if let currentLoc = self.locationManager.location {
                         self.cachedWiFiLocations[bssid] = currentLoc.coordinate
-                        print("[Glimpse WiFi] Cached location for BSSID: \(bssid)")
+                        self.log("💾 Wi-Fi Caching: Koordinat lokasi baru disimpan untuk Wi-Fi BSSID: \(bssid)")
                         
                         var shouldStop = true
                         if #available(iOS 15.0, *) {
@@ -160,6 +173,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                         }
                         
                         if shouldStop {
+                            self.log("😴 GPS Dinonaktifkan: Titik Wi-Fi berhasil di-cache. Menidurkan GPS!")
                             self.locationManager.stopUpdatingLocation()
                         }
                     }
@@ -175,7 +189,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         // Cache WiFi location if we just connected (but bypass if simulated!)
         if let bssid = currentWiFiBSSID, cachedWiFiLocations[bssid] == nil {
             cachedWiFiLocations[bssid] = location.coordinate
-            print("[Glimpse WiFi] Cached location for BSSID: \(bssid) on active GPS update.")
+            self.log("💾 Wi-Fi Caching (GPS Lock): Menyimpan koordinat Wi-Fi BSSID \(bssid) dari satelit GPS aktif.")
             
             var shouldStop = true
             if #available(iOS 15.0, *) {
@@ -185,6 +199,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             }
             
             if shouldStop {
+                self.log("😴 GPS Dinonaktifkan: Wi-Fi terdaftar dari pembacaan satelit. Menidurkan GPS!")
                 locationManager.stopUpdatingLocation()
             }
         }
@@ -220,6 +235,8 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                     locationName = street.isEmpty ? subLoc : street
                 }
             }
+            
+            self.log("📤 GPS Uplink: Mengirim data ke server Laravel! (Lat: \(location.coordinate.latitude), Lon: \(location.coordinate.longitude), Nama: \(locationName ?? "Tidak Diketahui"), Jarak: \(Int(distanceMoved))m, Waktu: \(Int(timeElapsed))s)")
             
             // Upload dynamically to server!
             AuthManager.shared.pushLocationAndStatus(
