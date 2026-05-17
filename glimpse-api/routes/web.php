@@ -272,6 +272,7 @@ Route::post('/admin/api', function (Request $request) {
             
             return response()->json(['success' => true, 'message' => 'Admin token changed successfully! Please log in again using your new token.']);
 
+        case 'mock_battery':
         case 'update_battery':
             $userId = $request->input('user_id');
             $battery = (int)$request->input('battery_level');
@@ -284,6 +285,7 @@ Route::post('/admin/api', function (Request $request) {
 
             return response()->json(['success' => true, 'message' => "Battery updated successfully for {$user->name}."]);
 
+        case 'mock_location':
         case 'update_location':
             $userId = $request->input('user_id');
             $lat = (double)$request->input('latitude');

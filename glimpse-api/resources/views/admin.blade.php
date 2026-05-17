@@ -1019,7 +1019,7 @@
             const lon = parseFloat(document.getElementById('locModalLon').value);
             const name = document.getElementById('locModalName').value.trim();
 
-            adminApiCall('mock_location', { user_id: userId, latitude: lat, longitude: lon, location_name: name });
+            adminApiCall('update_location', { user_id: userId, latitude: lat, longitude: lon, location_name: name });
             closeModal('locationModal');
         }
 
@@ -1027,7 +1027,7 @@
             const userId = document.getElementById('battModalUserId').value;
             const val = document.getElementById('battModalSlider').value;
 
-            adminApiCall('mock_battery', { user_id: userId, battery_level: val });
+            adminApiCall('update_battery', { user_id: userId, battery_level: val });
             closeModal('batteryModal');
         }
 
