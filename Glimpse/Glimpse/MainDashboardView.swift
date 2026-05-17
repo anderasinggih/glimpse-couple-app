@@ -170,9 +170,11 @@ struct MainDashboardView: View {
             iOS26Background()
             
             // Main Scroll Content
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 20) {
-                    Spacer(minLength: 45)
+            ScrollViewReader { proxy in
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 20) {
+                        Spacer(minLength: 45)
+                            .id("SCROLL_TOP_ANCHOR")
                     
                     // Presence Interface (Interactive Flip Card)
                     // Presence Interface (Interactive Flip Card)
@@ -447,7 +449,7 @@ struct MainDashboardView: View {
                                         .padding(.vertical, 20)
                                         .frame(maxWidth: .infinity)
                                 } else {
-                                    let visibleFlashes = showAllFlashes ? auth.flashes : Array(auth.flashes.prefix(8))
+                                    let visibleFlashes = showAllFlashes ? auth.flashes : Array(auth.flashes.prefix(3))
                                     
                                     VStack(spacing: 12) {
                                         ForEach(visibleFlashes) { flash in
@@ -540,19 +542,8 @@ struct MainDashboardView: View {
                                                             }
                                                         }
                                                         
-                                                        // Location Detail Row
-                                                        if let locName = flash.location_name {
-                                                            HStack(spacing: 8) {
-                                                                Image(systemName: "mappin.circle.fill")
-                                                                    .foregroundColor(.activeCyan)
-                                                                    .font(.system(size: 13))
-                                                                    .shadow(color: .activeCyan.opacity(0.5), radius: 4)
-                                                                Text(locName)
-                                                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                                                    .foregroundColor(.white)
-                                                            }
-                                                            .padding(.top, 4)
-                                                        }
+                                                        // Location Detail Row (with background fallback resolver)
+                                                        FlashLocationRow(flash: flash)
                                                         
                                                         // Kabar / Status Note Row
                                                         if let note = flash.status_note, !note.isEmpty {
@@ -582,7 +573,7 @@ struct MainDashboardView: View {
                                     }
                                     
                                     // "See More" / "See Less" Button
-                                    if auth.flashes.count > 8 {
+                                    if auth.flashes.count > 3 {
                                         Button {
                                             withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
                                                 showAllFlashes.toggle()
@@ -746,7 +737,16 @@ struct MainDashboardView: View {
             }
             .refreshable {
                 try? await auth.fetchState()
+                _ = try? await auth.fetchFlashes()
             }
+            .onChange(of: auth.selectedTab) { oldValue, newValue in
+                if newValue == 0 { // Home tab
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                        proxy.scrollTo("SCROLL_TOP_ANCHOR", anchor: .top)
+                    }
+                }
+            }
+            } // Close ScrollViewReader
         }
     }
     
@@ -815,6 +815,53 @@ struct PopHeart: Identifiable {
     var color: Color
     var opacity: Double
     var rotation: Double
+}
+
+struct FlashLocationRow: View {
+    let flash: GlimpseFlash
+    @State private var resolvedAddress: String? = nil
+    
+    var body: some View {
+        Group {
+            if let address = flash.location_name ?? resolvedAddress {
+                HStack(spacing: 8) {
+                    Image(systemName: "mappin.circle.fill")
+                        .foregroundColor(.activeCyan)
+                        .font(.system(size: 13))
+                        .shadow(color: .activeCyan.opacity(0.5), radius: 4)
+                    Text(address)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
+                }
+                .padding(.top, 4)
+                .transition(.opacity.combined(with: .move(edge: .leading)))
+            }
+        }
+        .task {
+            if flash.location_name == nil {
+                if let lat = flash.latitude, lat != 0.0,
+                   let lon = flash.longitude, lon != 0.0 {
+                    let location = CLLocation(latitude: lat, longitude: lon)
+                    let geocoder = CLGeocoder()
+                    if let placemarks = try? await geocoder.reverseGeocodeLocation(location),
+                       let placemark = placemarks.first {
+                        let street = placemark.thoroughfare ?? ""
+                        let subLoc = placemark.subLocality ?? placemark.locality ?? ""
+                        
+                        await MainActor.run {
+                            withAnimation(.easeOut(duration: 0.3)) {
+                                if !street.isEmpty && !subLoc.isEmpty {
+                                    self.resolvedAddress = "\(street), \(subLoc)"
+                                } else {
+                                    self.resolvedAddress = street.isEmpty ? subLoc : street
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 #Preview {

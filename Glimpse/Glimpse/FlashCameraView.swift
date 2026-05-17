@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import CoreLocation
+import AudioToolbox
 
 struct FlashCameraView: View {
     @State private var model = GlimpseCameraModel()
@@ -10,6 +11,7 @@ struct FlashCameraView: View {
     @State private var isProcessing = false
     @State private var errorMessage: String?
     @State private var isShowingError = false
+    @State private var isUploadSuccess = false
     @State private var auth = AuthManager.shared
     @Environment(\.dismiss) var dismiss
     
@@ -169,14 +171,14 @@ struct FlashCameraView: View {
                                             .stroke(Color.white.opacity(0.1), lineWidth: 1)
                                     )
                                     .onChange(of: statusNote) { oldValue, newValue in
-                                        if newValue.count > 140 {
-                                            statusNote = String(newValue.prefix(140))
+                                        if newValue.count > 30 {
+                                            statusNote = String(newValue.prefix(30))
                                         }
                                     }
                                 
-                                Text("\(statusNote.count)/140")
+                                Text("\(statusNote.count)/30")
                                     .font(.system(size: 10, design: .monospaced))
-                                    .foregroundColor(statusNote.count > 130 ? .red : .white.opacity(0.5))
+                                    .foregroundColor(statusNote.count > 25 ? .red : .white.opacity(0.5))
                                     .padding(.horizontal, 8)
                             }
                             .padding(.horizontal, 30)
@@ -239,6 +241,49 @@ struct FlashCameraView: View {
                     }
                 }
                 .ignoresSafeArea(.keyboard, edges: .bottom)
+            }
+            
+            if isUploadSuccess {
+                ZStack {
+                    Color.black.opacity(0.65)
+                        .ignoresSafeArea()
+                    
+                    VStack(spacing: 24) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.vividMint.opacity(0.12))
+                                .frame(width: 120, height: 120)
+                            
+                            Circle()
+                                .stroke(Color.vividMint, lineWidth: 3)
+                                .frame(width: 80, height: 80)
+                            
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 36, weight: .bold))
+                                .foregroundColor(.vividMint)
+                        }
+                        
+                        VStack(spacing: 8) {
+                            Text("Flash Shared!")
+                                .font(.system(size: 24, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                            
+                            Text("Sent to your partner")
+                                .font(.system(size: 15))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                    }
+                    .padding(32)
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(28)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 28)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.3), radius: 20, y: 10)
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .zIndex(999)
             }
         }
         .onAppear {
@@ -429,22 +474,44 @@ struct FlashCameraView: View {
         Task {
             var address: String? = nil
             
-            // PERFORM REVERSE GEOCODING
+            // PERFORM REVERSE GEOCODING WITH A STRICT 1.0 SECOND TIMEOUT
             if let lat = lat, let lon = lon {
                 let location = CLLocation(latitude: lat, longitude: lon)
                 let geocoder = CLGeocoder()
                 
-                if let placemarks = try? await geocoder.reverseGeocodeLocation(location),
-                   let placemark = placemarks.first {
-                    // Combine street and sub-locality/city
-                    let street = placemark.thoroughfare ?? ""
-                    let subLoc = placemark.subLocality ?? placemark.locality ?? ""
-                    
-                    if !street.isEmpty && !subLoc.isEmpty {
-                        address = "\(street), \(subLoc)"
-                    } else {
-                        address = street.isEmpty ? subLoc : street
+                address = await withTaskGroup(of: String?.self) { group in
+                    // Group task 1: Geocoding
+                    group.addTask {
+                        do {
+                            let placemarks = try await geocoder.reverseGeocodeLocation(location)
+                            if let placemark = placemarks.first {
+                                let street = placemark.thoroughfare ?? ""
+                                let subLoc = placemark.subLocality ?? placemark.locality ?? ""
+                                if !street.isEmpty && !subLoc.isEmpty {
+                                    return "\(street), \(subLoc)"
+                                } else {
+                                    return street.isEmpty ? subLoc : street
+                                }
+                            }
+                        } catch {
+                            print("Geocoding failed/canceled: \(error)")
+                        }
+                        return nil
                     }
+                    
+                    // Group task 2: Strict Timeout (1.0 second)
+                    group.addTask {
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        geocoder.cancelGeocode()
+                        return nil
+                    }
+                    
+                    // Race and pick the first completed result
+                    if let result = await group.next() {
+                        group.cancelAll()
+                        return result
+                    }
+                    return nil
                 }
             }
             
@@ -457,9 +524,31 @@ struct FlashCameraView: View {
                     note: statusNote.isEmpty ? nil : statusNote,
                     locationName: address
                 )
-                capturedImage = nil
-                statusNote = ""
-                dismiss() // Close camera after success
+                
+                // SUCCESS MICRO-INTERACTION: Haptics, Sound, & Animation
+                await MainActor.run {
+                    // 1. Play signature "Sent" system sound (1004)
+                    AudioServicesPlaySystemSound(1004)
+                    
+                    // 2. Play signature success haptic vibration
+                    let generator = UINotificationFeedbackGenerator()
+                    generator.notificationOccurred(.success)
+                    
+                    // 3. Trigger full-screen success animation state
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+                        isUploadSuccess = true
+                    }
+                }
+                
+                // 4. Delay for 1.5 seconds to let the user enjoy the gorgeous success state!
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                
+                await MainActor.run {
+                    capturedImage = nil
+                    statusNote = ""
+                    isUploadSuccess = false
+                    dismiss() // Close camera after success
+                }
             } catch {
                 print("Upload failed: \(error)")
                 errorMessage = error.localizedDescription
@@ -705,14 +794,14 @@ struct StatusInputView: View {
                         .stroke(Color.white.opacity(0.1), lineWidth: 1)
                 )
                 .onChange(of: text) { oldValue, newValue in
-                    if newValue.count > 140 {
-                        text = String(newValue.prefix(140))
+                    if newValue.count > 30 {
+                        text = String(newValue.prefix(30))
                     }
                 }
             
-            Text("\(text.count)/140")
+            Text("\(text.count)/30")
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(text.count > 130 ? .red : .white.opacity(0.5))
+                .foregroundColor(text.count > 25 ? .red : .white.opacity(0.5))
                 .padding(.horizontal, 8)
         }
         .padding(.horizontal, 30)
