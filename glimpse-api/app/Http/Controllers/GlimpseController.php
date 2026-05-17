@@ -286,16 +286,22 @@ class GlimpseController extends Controller
         if ($request->has('location_name')) $user->location_name = $request->location_name;
 
         if ($request->hasFile('photo')) {
-            // Delete old photo if exists
-            if ($user->latest_photo_url) {
-                Storage::disk('public')->delete(str_replace('/storage/', '', $user->latest_photo_url));
-            }
-
             $path = $request->file('photo')->store('glimpse_photos', 'public');
             $user->latest_photo_url = Storage::url($path);
             $user->save();
 
             if ($user->couple_id) {
+                \App\Models\Flash::create([
+                    'couple_id' => $user->couple_id,
+                    'sender_id' => $user->id,
+                    'photo_url' => $user->latest_photo_url,
+                    'latitude' => $user->latitude,
+                    'longitude' => $user->longitude,
+                    'location_name' => $user->location_name,
+                    'status_note' => $user->status_note,
+                    'battery_level' => $user->battery_level
+                ]);
+                
                 broadcast(new PartnerStateUpdated($user))->toOthers();
             }
 
@@ -307,6 +313,39 @@ class GlimpseController extends Controller
         }
 
         return response()->json(['message' => 'No photo uploaded'], 400);
+    }
+
+    public function getFlashes(Request $request)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json([]);
+        }
+
+        $flashes = \App\Models\Flash::where('couple_id', $user->couple_id)
+            ->with('sender')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($flash) {
+                $photoUrl = $flash->photo_url;
+                if ($photoUrl && !str_starts_with($photoUrl, 'http')) {
+                    $photoUrl = url($photoUrl);
+                }
+                return [
+                    'id' => $flash->id,
+                    'sender_id' => $flash->sender_id,
+                    'sender_name' => $flash->sender->name,
+                    'photo_url' => $photoUrl,
+                    'latitude' => (double)$flash->latitude,
+                    'longitude' => (double)$flash->longitude,
+                    'location_name' => $flash->location_name,
+                    'status_note' => $flash->status_note,
+                    'battery_level' => $flash->battery_level,
+                    'created_at' => $flash->created_at->toIso8601String()
+                ];
+            });
+
+        return response()->json($flashes);
     }
 
     public function getMessages(Request $request)

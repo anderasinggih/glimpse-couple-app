@@ -97,3 +97,25 @@ struct ChatMessage: Codable, Identifiable, Equatable {
     let created_at: String?
     let updated_at: String?
 }
+
+struct GlimpseFlash: Codable, Identifiable {
+    let id: Int
+    let sender_id: Int
+    let sender_name: String
+    let photo_url: String
+    let latitude: Double?
+    let longitude: Double?
+    let location_name: String?
+    let status_note: String?
+    let battery_level: Int?
+    let created_at: String
+    
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude ?? 0, longitude: longitude ?? 0)
+    }
+    
+    var createdDate: Date {
+        let formatter = ISO8601DateFormatter()
+        return formatter.date(from: created_at) ?? Date()
+    }
+}

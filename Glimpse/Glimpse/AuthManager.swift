@@ -31,6 +31,7 @@ class AuthManager {
     
     var unreadMessagesCount = 0
     var latestFetchedMessages: [ChatMessage] = []
+    var flashes: [GlimpseFlash] = []
     
     var userToken: String? {
         UserDefaults.standard.string(forKey: "auth_token")
@@ -123,10 +124,11 @@ class AuthManager {
                 WidgetCenter.shared.reloadAllTimelines()
             }
             
-            // Fetch messages to update unread count whenever state is fetched
+            // Fetch messages and flashes whenever state is fetched
             if self.coupleActive {
                 Task {
                     _ = try? await self.fetchMessages()
+                    _ = try? await self.fetchFlashes()
                 }
             }
         }
@@ -298,6 +300,27 @@ class AuthManager {
         await MainActor.run {
             self.latestFetchedMessages = decoded
             self.updateUnreadCount()
+        }
+        return decoded
+    }
+    
+    func fetchFlashes() async throws -> [GlimpseFlash] {
+        guard let url = URL(string: "\(baseURL)/glimpse/flashes") else { return [] }
+        guard let token = userToken else { return [] }
+        
+        var request = URLRequest(url: url)
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            return []
+        }
+        
+        let decoded = try JSONDecoder().decode([GlimpseFlash].self, from: data)
+        await MainActor.run {
+            self.flashes = decoded
         }
         return decoded
     }

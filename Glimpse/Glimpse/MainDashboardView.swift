@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import AudioToolbox
+import MapKit
 
 struct MainDashboardView: View {
     @State private var auth = AuthManager.shared
@@ -8,6 +9,7 @@ struct MainDashboardView: View {
     @State private var streakPulse = false
     @State private var lastSeenLoveBurstTimestamp: Double = 0.0
     @State private var popHearts: [PopHeart] = []
+    @State private var expandedFlashId: Int? = nil
     private let dashboardPollTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
     
     var body: some View {
@@ -374,6 +376,156 @@ struct MainDashboardView: View {
                             .padding(.vertical, 16)
                             .liquidGlass()
                             .padding(.top, 5)
+                            
+                            // Flash History Accordion List Card
+                            VStack(alignment: .leading, spacing: 16) {
+                                HStack {
+                                    Image(systemName: "photo.stack.fill")
+                                        .foregroundColor(.activeCyan)
+                                        .font(.system(size: 18))
+                                    Text("Flash History")
+                                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                                        .foregroundColor(.white)
+                                    Spacer()
+                                    Text("\(auth.flashes.count) captures")
+                                        .font(.caption)
+                                        .foregroundColor(.white.opacity(0.5))
+                                }
+                                
+                                if auth.flashes.isEmpty {
+                                    Text("No past Flash records found. Take a Flash photo to build your memory board!")
+                                        .font(.caption)
+                                        .foregroundColor(.white.opacity(0.4))
+                                        .multilineTextAlignment(.center)
+                                        .padding(.vertical, 20)
+                                        .frame(maxWidth: .infinity)
+                                } else {
+                                    VStack(spacing: 12) {
+                                        ForEach(auth.flashes) { flash in
+                                            let isExpanded = expandedFlashId == flash.id
+                                            let isMe = flash.sender_id == auth.currentUser?.id
+                                            
+                                            VStack(spacing: 0) {
+                                                // HEADER ROW
+                                                Button {
+                                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                                                        if isExpanded {
+                                                            expandedFlashId = nil
+                                                        } else {
+                                                            expandedFlashId = flash.id
+                                                        }
+                                                    }
+                                                } label: {
+                                                    HStack {
+                                                        VStack(alignment: .leading, spacing: 4) {
+                                                            HStack(spacing: 6) {
+                                                                Circle()
+                                                                    .fill(isMe ? Color.electricPurple : Color.activeCyan)
+                                                                    .frame(width: 6, height: 6)
+                                                                
+                                                                Text(isMe ? "You" : flash.sender_name)
+                                                                    .font(.system(size: 13, weight: .bold))
+                                                                    .foregroundColor(.white)
+                                                            }
+                                                            
+                                                            Text(formatFlashTime(flash.createdDate))
+                                                                .font(.system(size: 11))
+                                                                .foregroundColor(.white.opacity(0.5))
+                                                        }
+                                                        
+                                                        Spacer()
+                                                        
+                                                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                                            .font(.system(size: 12, weight: .bold))
+                                                            .foregroundColor(.white.opacity(0.5))
+                                                    }
+                                                    .padding(.horizontal, 14)
+                                                    .padding(.vertical, 12)
+                                                    .background(Color.white.opacity(0.03))
+                                                }
+                                                .buttonStyle(PlainButtonStyle())
+                                                
+                                                // CONTENT BODY (EXPANDABLE)
+                                                if isExpanded {
+                                                    VStack(alignment: .leading, spacing: 12) {
+                                                        // Photo Row
+                                                        CachedImageView(urlString: flash.photo_url)
+                                                            .frame(height: 250)
+                                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                                            .overlay(
+                                                                RoundedRectangle(cornerRadius: 12)
+                                                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                                            )
+                                                            
+                                                        // Location Detail Row
+                                                        if let locName = flash.location_name {
+                                                            HStack(spacing: 8) {
+                                                                Image(systemName: "mappin.circle.fill")
+                                                                    .foregroundColor(.activeCyan)
+                                                                Text(locName)
+                                                                    .font(.system(size: 13, weight: .medium))
+                                                                    .foregroundColor(.white)
+                                                            }
+                                                        }
+                                                        
+                                                        // Kabar / Status Note Row
+                                                        if let note = flash.status_note, !note.isEmpty {
+                                                            Text("\"\(note)\"")
+                                                                .font(.system(size: 13, weight: .regular))
+                                                                .italic()
+                                                                .foregroundColor(.white.opacity(0.8))
+                                                                .padding(.horizontal, 8)
+                                                                .padding(.vertical, 6)
+                                                                .background(Color.white.opacity(0.04))
+                                                                .cornerRadius(6)
+                                                        }
+                                                        
+                                                        // Map View Row
+                                                        if let lat = flash.latitude, lat != 0.0,
+                                                           let lon = flash.longitude, lon != 0.0 {
+                                                            Map(initialPosition: .region(MKCoordinateRegion(
+                                                                center: flash.coordinate,
+                                                                span: MKCoordinateSpan(latitudeDelta: 0.003, longitudeDelta: 0.003)
+                                                            ))) {
+                                                                Annotation(flash.sender_name, coordinate: flash.coordinate) {
+                                                                    ZStack {
+                                                                        Circle()
+                                                                            .fill(isMe ? Color.electricPurple.opacity(0.3) : Color.activeCyan.opacity(0.3))
+                                                                            .frame(width: 40, height: 40)
+                                                                        
+                                                                        Circle()
+                                                                            .stroke(isMe ? Color.electricPurple : Color.activeCyan, lineWidth: 2)
+                                                                            .frame(width: 24, height: 24)
+                                                                    }
+                                                                }
+                                                            }
+                                                            .frame(height: 140)
+                                                            .cornerRadius(12)
+                                                            .overlay(
+                                                                RoundedRectangle(cornerRadius: 12)
+                                                                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                                                            )
+                                                        }
+                                                    }
+                                                    .padding(14)
+                                                    .background(Color.white.opacity(0.01))
+                                                    .transition(.opacity.combined(with: .move(edge: .top)))
+                                                }
+                                            }
+                                            .background(Color.black.opacity(0.2))
+                                            .cornerRadius(12)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 16)
+                            .liquidGlass()
+                            .padding(.top, 10)
                         } else {
                             // PENDING CONNECTION STATES
                             if auth.invitedBy == auth.currentUser?.id {
@@ -541,6 +693,13 @@ struct MainDashboardView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             self.popHearts.removeAll(where: { $0.id == heartId })
         }
+    }
+    
+    private func formatFlashTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 }
 
