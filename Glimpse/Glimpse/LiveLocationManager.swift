@@ -194,6 +194,13 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
         
+        // Detect and set status if simulated
+        if #available(iOS 15.0, *) {
+            if location.sourceInformation?.isSimulatedBySoftware == true {
+                LiveDebugLogger.shared.setGPSStatus("Xcode Simulator Active 🛸")
+            }
+        }
+        
         // Cache WiFi location if we just connected (but bypass if simulated!)
         if let bssid = currentWiFiBSSID, cachedWiFiLocations[bssid] == nil {
             cachedWiFiLocations[bssid] = location.coordinate
