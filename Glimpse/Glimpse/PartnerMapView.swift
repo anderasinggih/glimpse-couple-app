@@ -5,8 +5,10 @@ struct PartnerMapView: View {
     let user: GlimpseUser
     @State private var position: MapCameraPosition
     @State private var isShowingPhoto = true
-    
     @State private var localAddress: String? = nil
+    
+    // Auto-rotation timer every 10 seconds
+    private let autoRotateTimer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
     
     init(user: GlimpseUser) {
         self.user = user
@@ -37,7 +39,7 @@ struct PartnerMapView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .transition(.asymmetric(insertion: .identity, removal: .identity))
+                .transition(.opacity)
             } else {
                 // MAP SIDE
                 Map(position: $position, interactionModes: []) { // Interaction disabled
@@ -54,7 +56,7 @@ struct PartnerMapView: View {
                     }
                 }
                 .mapStyle(.hybrid(elevation: .realistic))
-                .transition(.asymmetric(insertion: .identity, removal: .identity))
+                .transition(.opacity)
                 .onChange(of: user.latitude) {
                     withAnimation(.easeInOut(duration: 1.0)) {
                         position = .region(MKCoordinateRegion(
@@ -71,7 +73,12 @@ struct PartnerMapView: View {
                 .padding(12)
         }
         .onTapGesture {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                isShowingPhoto.toggle()
+            }
+        }
+        .onReceive(autoRotateTimer) { _ in
+            withAnimation(.easeInOut(duration: 0.5)) {
                 isShowingPhoto.toggle()
             }
         }
