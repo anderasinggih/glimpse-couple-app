@@ -48,9 +48,27 @@ struct FlashCameraView: View {
             if capturedImage == nil {
                 // --- CAMERA TAKING MODE ---
                 VStack(spacing: 0) {
-                    headerSection
-                        .padding(.top, 10)
-                        .zIndex(10)
+                    // Sleek Top Bar with Close button
+                    HStack {
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(12)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Circle())
+                                .overlay(
+                                    Circle().stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                )
+                        }
+                        .padding(.leading, 20)
+                        
+                        Spacer()
+                    }
+                    .padding(.top, 10)
+                    .zIndex(10)
                     
                     Spacer()
                     
@@ -124,8 +142,36 @@ struct FlashCameraView: View {
                         )
                         .padding(.bottom, 40)
                     } else {
-                        captureButton
-                            .padding(.bottom, 40)
+                        HStack(spacing: 36) {
+                            // Flash Toggle
+                            Button { model.toggleFlash() } label: {
+                                Image(systemName: model.flashMode == .on ? "bolt.fill" : "bolt.slash.fill")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundColor(model.flashMode == .on ? .yellow : .white)
+                                    .frame(width: 50, height: 50)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Circle())
+                                    .overlay(
+                                        Circle().stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                    )
+                            }
+                            
+                            captureButton
+                            
+                            // Camera Switch
+                            Button { model.switchCamera() } label: {
+                                Image(systemName: "camera.rotate")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .frame(width: 50, height: 50)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Circle())
+                                    .overlay(
+                                        Circle().stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                    )
+                            }
+                        }
+                        .padding(.bottom, 40)
                     }
                 }
             } else if let image = capturedImage {
@@ -297,34 +343,7 @@ struct FlashCameraView: View {
         }
     }
     
-    private var headerSection: some View {
-        ZStack {
-            HStack(spacing: 12) {
-                Spacer()
-                
-                // Flash Toggle
-                Button { model.toggleFlash() } label: {
-                    Image(systemName: model.flashMode == .on ? "bolt.fill" : "bolt.slash.fill")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(model.flashMode == .on ? .yellow : .white)
-                        .padding(10)
-                        .background(.ultraThinMaterial)
-                        .clipShape(Circle())
-                }
-                
-                // Camera Switch
-                Button { model.switchCamera() } label: {
-                    Image(systemName: "camera.rotate")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(10)
-                        .background(.ultraThinMaterial)
-                        .clipShape(Circle())
-                }
-            }
-            .padding(.trailing, 20)
-        }
-    }
+    // Removed headerSection and placed camera controls in the bottom HStack next to shutter
     
     private func loadingFrame(size: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: 28)
