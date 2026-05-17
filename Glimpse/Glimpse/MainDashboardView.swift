@@ -551,11 +551,10 @@ struct MainDashboardView: View {
                                                     VStack(alignment: .leading, spacing: 12) {
                                                         HStack(spacing: 8) {
                                                             // Left side: Photo (1:1 Ratio - Sebelahan)
-                                                            Color.clear
+                                                            CachedImageView(urlString: flash.photo_url)
+                                                                .aspectRatio(contentMode: .fill)
+                                                                .frame(maxWidth: .infinity, maxHeight: .infinity)
                                                                 .aspectRatio(1.0, contentMode: .fit)
-                                                                .overlay(
-                                                                    CachedImageView(urlString: flash.photo_url)
-                                                                )
                                                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                                                 .overlay(
                                                                     RoundedRectangle(cornerRadius: 12)
@@ -582,6 +581,7 @@ struct MainDashboardView: View {
                                                                         }
                                                                     }
                                                                 }
+                                                                .frame(maxWidth: .infinity, maxHeight: .infinity)
                                                                 .aspectRatio(1.0, contentMode: .fit)
                                                                 .cornerRadius(12)
                                                                 .overlay(
@@ -590,6 +590,7 @@ struct MainDashboardView: View {
                                                                 )
                                                             }
                                                         }
+                                                        .frame(height: 155)
                                                         
                                                         // Location Detail Row (with background fallback resolver)
                                                         FlashLocationRow(flash: flash)
