@@ -532,6 +532,15 @@ struct CachedImageView: View {
         }
     }
     
+    private func localCachesDirectoryURL(for urlStr: String) -> URL? {
+        let cleanName = urlStr.components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
+        let filename = "img_cache_\(cleanName).jpg"
+        if let cachesURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
+            return cachesURL.appendingPathComponent(filename)
+        }
+        return nil
+    }
+    
     private func cacheFileURL(for urlStr: String) -> URL? {
         let cleanName = urlStr.components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
         let filename = "img_cache_\(cleanName).jpg"
@@ -552,7 +561,7 @@ struct CachedImageView: View {
         let finalUrlStr = formattedUrl()
         guard let fileURL = cacheFileURL(for: finalUrlStr) else { return }
         
-        // 1. Cek Cache file
+        // 1. Cek primary Cache file
         if let data = try? Data(contentsOf: fileURL), let cached = UIImage(data: data) {
             await MainActor.run {
                 self.uiImage = cached
@@ -560,13 +569,31 @@ struct CachedImageView: View {
             return
         }
         
-        // 2. Fetch jika belum ada di cache
+        // 2. Cek local fallback Cache file
+        if let fallbackURL = localCachesDirectoryURL(for: finalUrlStr),
+           let data = try? Data(contentsOf: fallbackURL),
+           let cached = UIImage(data: data) {
+            await MainActor.run {
+                self.uiImage = cached
+            }
+            return
+        }
+        
+        // 3. Fetch jika belum ada di cache
         guard let url = URL(string: finalUrlStr) else { return }
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
             if let fetched = UIImage(data: data) {
-                // Simpan ke file cache
-                try? data.write(to: fileURL)
+                // Simpan ke primary App Group file cache
+                do {
+                    try data.write(to: fileURL)
+                } catch {
+                    // Simpan ke local fallback cache jika primary gagal
+                    if let fallbackURL = localCachesDirectoryURL(for: finalUrlStr) {
+                        try? data.write(to: fallbackURL)
+                    }
+                }
+                
                 await MainActor.run {
                     self.uiImage = fetched
                 }

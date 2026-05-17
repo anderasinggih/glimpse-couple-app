@@ -47,7 +47,7 @@ struct ChatView: View {
                     ScrollViewReader { proxy in
                         ZStack(alignment: .bottomTrailing) {
                             ScrollView {
-                            VStack(spacing: 12) {
+                            LazyVStack(spacing: 12) {
                                 // Top space to offset first message below the frosted header (height matches whether search is expanded)
                                 Spacer().frame(height: isSearchingChat ? 165 : 110)
                                 
