@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var auth = AuthManager.shared
+    @State private var permissionManager = PermissionManager.shared
     @State private var showSplash = true
     
     var body: some View {
@@ -21,7 +22,11 @@ struct ContentView: View {
             } else {
                 Group {
                     if auth.isAuthenticated {
-                        MainDashboardView()
+                        if permissionManager.hasAllPermissions {
+                            MainDashboardView()
+                        } else {
+                            PermissionGateView()
+                        }
                     } else {
                         OnboardingView()
                     }
