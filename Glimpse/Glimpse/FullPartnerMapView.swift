@@ -323,7 +323,7 @@ struct FullPartnerMapView: View {
                     .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
                     .animation(.spring(response: 0.45, dampingFraction: 0.8), value: currentlyFocusedTarget)
                     .padding(.horizontal, 12)
-                    .padding(.bottom, 30)
+                    .padding(.bottom, 8)
                     .shadow(color: Color.black.opacity(0.25), radius: 10, y: 5)
                 }
             } else {
