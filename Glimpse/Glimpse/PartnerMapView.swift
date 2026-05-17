@@ -9,6 +9,7 @@ struct PartnerMapView: View {
     @State private var localAddress: String? = nil
     @State private var auth = AuthManager.shared
     @State private var mapPulse = false
+    @State private var wavePhase = 0.0
     
     // Auto-rotation timer every 10 seconds
     private let autoRotateTimer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
@@ -107,13 +108,20 @@ struct PartnerMapView: View {
                         if let currentUser = auth.currentUser,
                            let userLat = user.latitude, userLat != 0.0,
                            let myLat = currentUser.latitude, myLat != 0.0 {
-                            MapPolyline(coordinates: generateWavyCoordinates(from: currentUser.coordinate, to: user.coordinate))
+                            let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: user.coordinate, phase: wavePhase)
+                            let colors = getShiftingColors(phase: wavePhase)
+                            
+                            // 1. Bottom Layer: Outer Neon Glow
+                            MapPolyline(coordinates: wavyCoords)
                                 .stroke(
-                                    LinearGradient(
-                                        colors: [.electricPurple, .pink, .activeCyan],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    ),
+                                    LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
+                                    style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
+                                )
+                            
+                            // 2. Top Layer: Core Saturated Line
+                            MapPolyline(coordinates: wavyCoords)
+                                .stroke(
+                                    LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
                                     style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
                                 )
                         }
@@ -189,6 +197,9 @@ struct PartnerMapView: View {
         .onAppear {
             updateLocalAddress()
             updateMapPosition()
+            withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
+                wavePhase = 2 * .pi
+            }
         }
         .onChange(of: user.latitude) {
             updateLocalAddress()
@@ -259,7 +270,21 @@ struct PartnerMapView: View {
         }
     }
     
-    private func generateWavyCoordinates(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D) -> [CLLocationCoordinate2D] {
+    private func getShiftingColors(phase: Double) -> [Color] {
+        let baseHue = phase / (2 * .pi)
+        return [
+            Color(hue: baseHue, saturation: 0.9, brightness: 0.95),
+            Color(hue: (baseHue + 0.33).truncatingRemainder(dividingBy: 1.0), saturation: 0.9, brightness: 0.95),
+            Color(hue: (baseHue + 0.66).truncatingRemainder(dividingBy: 1.0), saturation: 0.9, brightness: 0.95),
+            Color(hue: baseHue, saturation: 0.9, brightness: 0.95)
+        ]
+    }
+    
+    private func generateWavyCoordinates(
+        from start: CLLocationCoordinate2D,
+        to end: CLLocationCoordinate2D,
+        phase: Double
+    ) -> [CLLocationCoordinate2D] {
         let pointsCount = 60
         var coordinates: [CLLocationCoordinate2D] = []
         
@@ -274,8 +299,9 @@ struct PartnerMapView: View {
         let pLat = -dLon / distance
         let pLon = dLat / distance
         
-        let amplitude = distance * 0.035
-        let waveFrequency = 6.0
+        // Dynamic low frequency and smooth waves like a gentle audio signal
+        let waveFrequency = 4.0
+        let amplitude = distance * 0.05
         
         for i in 0...pointsCount {
             let t = Double(i) / Double(pointsCount)
@@ -283,7 +309,7 @@ struct PartnerMapView: View {
             let linearLon = start.longitude + dLon * t
             
             let envelope = sin(t * Double.pi)
-            let wave = sin(t * Double.pi * waveFrequency) * amplitude * envelope
+            let wave = sin(t * Double.pi * waveFrequency - phase) * amplitude * envelope
             
             let waveLat = linearLat + pLat * wave
             let waveLon = linearLon + pLon * wave

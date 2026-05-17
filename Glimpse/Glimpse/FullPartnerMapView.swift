@@ -152,20 +152,7 @@ struct FullPartnerMapView: View {
                             let endLoc = CLLocation(latitude: partner.coordinate.latitude, longitude: partner.coordinate.longitude)
                             let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
                             
-                            // Concept A Color Spectrum
-                            let colors: [Color] = {
-                                if distanceInKm <= 1.0 {
-                                    // DEKAT: Rose Pink & Crimson Red (warm passion)
-                                    return [Color(red: 1.0, green: 0.2, blue: 0.5), Color(red: 1.0, green: 0.1, blue: 0.3)]
-                                } else if distanceInKm >= 10.0 {
-                                    // JAUH: Neon Cyan & Electric Blue (steady aurora connection)
-                                    return [Color.activeCyan, Color(red: 0.0, green: 0.6, blue: 1.0)]
-                                } else {
-                                    // SEDANG: Electric Purple, Magenta & Rose gradient
-                                    return [Color.electricPurple, Color(red: 0.9, green: 0.2, blue: 0.8), Color(red: 1.0, green: 0.2, blue: 0.5)]
-                                }
-                            }()
-                            
+                            let colors = getShiftingColors(phase: wavePhase)
                             let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: partner.coordinate, distanceInKm: distanceInKm, phase: wavePhase)
                             
                             // 1. Bottom Layer: Outer Neon Glow
@@ -366,7 +353,7 @@ struct FullPartnerMapView: View {
         .onAppear {
             startPolling()
             triggerImmediateSync()
-            withAnimation(.linear(duration: 2.0).repeatForever(autoreverses: false)) {
+            withAnimation(.linear(duration: 4.5).repeatForever(autoreverses: false)) {
                 wavePhase = 2 * .pi
             }
         }
@@ -462,6 +449,16 @@ struct FullPartnerMapView: View {
         }
     }
 
+    private func getShiftingColors(phase: Double) -> [Color] {
+        let baseHue = phase / (2 * .pi)
+        return [
+            Color(hue: baseHue, saturation: 0.9, brightness: 0.95),
+            Color(hue: (baseHue + 0.33).truncatingRemainder(dividingBy: 1.0), saturation: 0.9, brightness: 0.95),
+            Color(hue: (baseHue + 0.66).truncatingRemainder(dividingBy: 1.0), saturation: 0.9, brightness: 0.95),
+            Color(hue: baseHue, saturation: 0.9, brightness: 0.95)
+        ]
+    }
+
     private func generateWavyCoordinates(
         from start: CLLocationCoordinate2D,
         to end: CLLocationCoordinate2D,
@@ -482,19 +479,18 @@ struct FullPartnerMapView: View {
         let pLat = -dLon / distance
         let pLon = dLat / distance
         
-        // Closer distance -> Higher frequency (excited debaran), larger relative amplitude
-        // Farther distance -> Lower frequency (aurora calm), smooth wide waves
+        // Dynamic low frequency and smooth waves like a gentle audio signal
         let waveFrequency: Double = {
             if distanceInKm <= 1.0 {
-                return 10.0 // Fast excited waves
+                return 5.0
             } else if distanceInKm >= 10.0 {
-                return 4.0  // Wide slow calm waves
+                return 2.0
             } else {
-                return 7.0  // Moderate waves
+                return 3.5
             }
         }()
         
-        let amplitude = distance * 0.035
+        let amplitude = distance * 0.05
         
         for i in 0...pointsCount {
             let t = Double(i) / Double(pointsCount)
