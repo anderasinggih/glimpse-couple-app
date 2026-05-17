@@ -2,6 +2,8 @@ import SwiftUI
 
 struct MainDashboardView: View {
     @State private var auth = AuthManager.shared
+    @State private var togetherAnimation = false
+    @State private var streakPulse = false
     
     var body: some View {
         @Bindable var bindableAuth = auth
@@ -169,9 +171,148 @@ struct MainDashboardView: View {
                                 .padding(.bottom, 5)
                             }
                             
+                            if auth.isTogether {
+                                VStack(spacing: 16) {
+                                    HStack {
+                                        Image(systemName: "sparkles")
+                                            .foregroundColor(.yellow)
+                                            .font(.title3)
+                                        Text("TOGETHER RIGHT NOW")
+                                            .font(.system(size: 14, weight: .black, design: .rounded))
+                                            .foregroundColor(.white)
+                                            .tracking(2.0)
+                                        Image(systemName: "sparkles")
+                                            .foregroundColor(.yellow)
+                                            .font(.title3)
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 6)
+                                    .background(Color.black.opacity(0.3))
+                                    .cornerRadius(12)
+                                    
+                                    // Animated overlapping avatars
+                                    HStack(spacing: -15) {
+                                        // Self Profile Photo
+                                        CachedImageView(urlString: auth.currentUser?.profile_photo_url ?? "")
+                                            .frame(width: 60, height: 60)
+                                            .clipShape(Circle())
+                                            .overlay(Circle().stroke(Color.electricPurple, lineWidth: 2))
+                                            .shadow(color: .electricPurple.opacity(0.5), radius: 10)
+                                            .offset(x: togetherAnimation ? 5 : -5)
+                                        
+                                        // Neon Pulsing Heart in Between
+                                        Image(systemName: "heart.fill")
+                                            .font(.system(size: 26))
+                                            .foregroundColor(.red)
+                                            .scaleEffect(togetherAnimation ? 1.25 : 0.85)
+                                            .shadow(color: .red, radius: 12)
+                                            .zIndex(10)
+                                        
+                                        // Partner Profile Photo
+                                        CachedImageView(urlString: partner.profile_photo_url)
+                                            .frame(width: 60, height: 60)
+                                            .clipShape(Circle())
+                                            .overlay(Circle().stroke(Color.activeCyan, lineWidth: 2))
+                                            .shadow(color: .activeCyan.opacity(0.5), radius: 10)
+                                            .offset(x: togetherAnimation ? -5 : 5)
+                                    }
+                                    .onAppear {
+                                        withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                                            togetherAnimation = true
+                                        }
+                                    }
+                                    
+                                    Text("You are physically close! Love is in the air.")
+                                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                                        .foregroundColor(.white.opacity(0.8))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 20)
+                                .background {
+                                    ZStack {
+                                        Color.deepVelvet.opacity(0.4)
+                                        LinearGradient(colors: [.electricPurple.opacity(0.15), .activeCyan.opacity(0.15)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                    }
+                                }
+                                .cornerRadius(24)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 24)
+                                        .stroke(
+                                            LinearGradient(colors: [.electricPurple.opacity(0.5), .activeCyan.opacity(0.5)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                            lineWidth: 1.5
+                                        )
+                                )
+                                .shadow(color: .electricPurple.opacity(0.3), radius: 15)
+                                .padding(.bottom, 10)
+                            }
+                            
                             PartnerMapView(user: partner)
                                 .aspectRatio(1, contentMode: .fit)
                                 .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
+                            
+                            // Together Streak & Meeting Counters Card
+                            HStack(spacing: 16) {
+                                // Left Side: Streak
+                                HStack(spacing: 12) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(LinearGradient(colors: [Color.orange.opacity(0.2), Color.red.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                            .frame(width: 44, height: 44)
+                                        
+                                        Image(systemName: "flame.fill")
+                                            .font(.title2)
+                                            .foregroundColor(.orange)
+                                            .scaleEffect(streakPulse ? 1.15 : 0.95)
+                                            .onAppear {
+                                                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                                                    streakPulse = true
+                                                }
+                                            }
+                                    }
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("\(auth.togetherStreak)")
+                                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                                            .foregroundColor(.white)
+                                        Text("Together Streak")
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundColor(.white.opacity(0.5))
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                
+                                // Divider line
+                                RoundedRectangle(cornerRadius: 1)
+                                    .fill(Color.white.opacity(0.1))
+                                    .frame(width: 1, height: 35)
+                                
+                                // Right Side: Total Meetings
+                                HStack(spacing: 12) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(LinearGradient(colors: [Color.electricPurple.opacity(0.2), Color.royalPurple.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                            .frame(width: 44, height: 44)
+                                        
+                                        Image(systemName: "heart.text.square.fill")
+                                            .font(.title2)
+                                            .foregroundColor(.electricPurple)
+                                    }
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("\(auth.totalMeetings)")
+                                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                                            .foregroundColor(.white)
+                                        Text("Days Met")
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundColor(.white.opacity(0.5))
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 16)
+                            .liquidGlass()
+                            .padding(.top, 5)
                         } else {
                             // PENDING CONNECTION STATES
                             if auth.invitedBy == auth.currentUser?.id {

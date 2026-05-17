@@ -40,6 +40,9 @@ struct CoupleResponse: Codable {
     let disconnect_requested_by: Int?
     let couple_active: Bool?
     let invited_by: Int?
+    let is_together: Bool?
+    let together_streak: Int?
+    let total_meetings: Int?
     
     var anniversaryDate: Date? {
         guard let start = anniversary_start_date else { return nil }

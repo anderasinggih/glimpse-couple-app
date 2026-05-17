@@ -13,6 +13,9 @@ class AuthManager {
     var disconnectRequestedBy: Int?
     var coupleActive = false
     var invitedBy: Int?
+    var isTogether = false
+    var togetherStreak = 0
+    var totalMeetings = 0
     var showInviteDeclinedAlert = false
     private var _selectedTab = 0
     var selectedTab: Int {
@@ -71,6 +74,9 @@ class AuthManager {
             self.disconnectRequestedBy = responseData.disconnect_requested_by
             self.coupleActive = responseData.couple_active ?? false
             self.invitedBy = responseData.invited_by
+            self.isTogether = responseData.is_together ?? false
+            self.togetherStreak = responseData.together_streak ?? 0
+            self.totalMeetings = responseData.total_meetings ?? 0
             
             if wasPending && isNowDisconnected {
                 self.showInviteDeclinedAlert = true

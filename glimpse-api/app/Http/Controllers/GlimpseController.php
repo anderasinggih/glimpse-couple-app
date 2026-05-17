@@ -46,6 +46,32 @@ class GlimpseController extends Controller
             $partnerData = $partner->toArray();
             $partnerData['profile_photo_url'] = $partnerPhotoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($partner->name);
         }
+
+        $togetherStreak = 0;
+        $totalMeetings = 0;
+        $isTogether = false;
+
+        if ($couple) {
+            $today = now()->toDateString();
+            $yesterday = now()->subDay()->toDateString();
+
+            // Reset streak if last meeting was before yesterday and not today
+            if ($couple->last_meeting_date && $couple->last_meeting_date !== $today && $couple->last_meeting_date !== $yesterday) {
+                $couple->together_streak = 0;
+                $couple->save();
+            }
+
+            $togetherStreak = $couple->together_streak;
+            $totalMeetings = $couple->total_meetings;
+
+            if ($partner) {
+                $isTogether = $this->checkAndRecordMeeting($user, $partner);
+                $couple->refresh();
+                $togetherStreak = $couple->together_streak;
+                $totalMeetings = $couple->total_meetings;
+            }
+        }
+
         return response()->json([
             'user' => [
                 'id' => $user->id,
@@ -81,7 +107,10 @@ class GlimpseController extends Controller
             'anniversary_start_date' => $couple ? $couple->anniversary_start_date : null,
             'disconnect_requested_by' => $couple ? $couple->disconnect_requested_by : null,
             'couple_active' => $couple ? (bool) $couple->is_active : false,
-            'invited_by' => $couple ? $couple->invited_by : null
+            'invited_by' => $couple ? $couple->invited_by : null,
+            'is_together' => $isTogether,
+            'together_streak' => $togetherStreak,
+            'total_meetings' => $totalMeetings,
         ]);
     }
 
@@ -342,5 +371,52 @@ class GlimpseController extends Controller
             'message' => 'Status updated successfully!',
             'user' => $user
         ]);
+    }
+
+    private function checkAndRecordMeeting($user, $partner)
+    {
+        if (!$user || !$partner || !$user->couple_id) return false;
+        if (!$user->latitude || !$user->longitude || !$partner->latitude || !$partner->longitude) return false;
+
+        $lat1 = (double)$user->latitude;
+        $lon1 = (double)$user->longitude;
+        $lat2 = (double)$partner->latitude;
+        $lon2 = (double)$partner->longitude;
+
+        $earthRadius = 6371000; // meters
+        $latFrom = deg2rad($lat1);
+        $lonFrom = deg2rad($lon1);
+        $latTo = deg2rad($lat2);
+        $lonTo = deg2rad($lon2);
+        $latDelta = $latTo - $latFrom;
+        $lonDelta = $lonTo - $lonFrom;
+        $angle = 2 * asin(sqrt(pow(sin($latDelta / 2), 2) + cos($latFrom) * cos($latTo) * pow(sin($lonDelta / 2), 2)));
+        $distance = $angle * $earthRadius;
+
+        $isTogether = ($distance <= 100); // 100 meters threshold
+
+        if ($isTogether) {
+            $couple = \App\Models\Couple::find($user->couple_id);
+            if ($couple) {
+                $today = now()->toDateString();
+                $yesterday = now()->subDay()->toDateString();
+
+                if ($couple->last_meeting_date !== $today) {
+                    if ($couple->last_meeting_date === $yesterday) {
+                        $couple->together_streak += 1;
+                    } else {
+                        $couple->together_streak = 1;
+                    }
+                    $couple->total_meetings += 1;
+                    $couple->last_meeting_date = $today;
+                    $couple->save();
+                    
+                    // Broadcast meeting milestone event
+                    broadcast(new PartnerStateUpdated($user))->toOthers();
+                }
+            }
+        }
+
+        return $isTogether;
     }
 }
