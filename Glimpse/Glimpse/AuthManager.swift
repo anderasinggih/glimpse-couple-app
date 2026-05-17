@@ -8,6 +8,7 @@ class AuthManager {
     static let shared = AuthManager()
     
     var isAuthenticated = false
+    var isInitialStateLoaded = false
     var currentUser: GlimpseUser?
     var partner: GlimpseUser?
     var anniversaryDate: Date?
@@ -93,6 +94,8 @@ class AuthManager {
             if wasPending && isNowDisconnected {
                 self.showInviteDeclinedAlert = true
             }
+            
+            self.isInitialStateLoaded = true
             
             // SAVE DATA FOR WIDGET
             let sharedDefaults = UserDefaults(suiteName: "group.glimpse.app")

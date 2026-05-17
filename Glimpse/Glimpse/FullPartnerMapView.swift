@@ -21,8 +21,19 @@ struct FullPartnerMapView: View {
     }
     
     var body: some View {
-        ZStack(alignment: .top) {
-            if let partner = auth.partner {
+            if !auth.isInitialStateLoaded {
+                // PRESTIGE LOADING / SHIMMERING STATE
+                VStack(spacing: 20) {
+                    ProgressView()
+                        .tint(.electricPurple)
+                        .scaleEffect(1.3)
+                    Text("Loading map space...")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundColor(.white.opacity(0.5))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.deepVelvet)
+            } else if let partner = auth.partner {
                 // Full Screen Map with Pulsing Partner Marker
                 Map(position: $position) {
                     if auth.isTogether, let currentUser = auth.currentUser {
@@ -206,14 +217,24 @@ struct FullPartnerMapView: View {
                         .shadow(color: Color.black.opacity(0.25), radius: 10, y: 5)
                 }
             } else {
-                // Not Connected / No Partner View
-                VStack(spacing: 15) {
-                    Image(systemName: "map.fill")
-                        .font(.system(size: 60))
-                        .foregroundColor(.white.opacity(0.3))
-                    Text("Find your partner first")
-                        .font(.headline)
-                        .foregroundColor(.white.opacity(0.8))
+                // Not Connected / No Partner View (Beautiful, minimalist box-less state)
+                VStack(spacing: 16) {
+                    Image(systemName: "map")
+                        .font(.system(size: 56, weight: .light))
+                        .foregroundColor(.white.opacity(0.35))
+                        .shadow(color: .electricPurple.opacity(0.15), radius: 8)
+                    
+                    VStack(spacing: 8) {
+                        Text("No Location Sharing")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        
+                        Text("Connect with your partner first to share and see live coordinates on the map!")
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundColor(.white.opacity(0.5))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.deepVelvet)

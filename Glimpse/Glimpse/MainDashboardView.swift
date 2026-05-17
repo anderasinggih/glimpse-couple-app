@@ -215,7 +215,19 @@ struct MainDashboardView: View {
                     
                     // Presence Interface (Interactive Flip Card)
                     // Presence Interface (Interactive Flip Card)
-                    if let partner = auth.partner {
+                    if !auth.isInitialStateLoaded {
+                        // PRESTIGE LOADING / SHIMMERING STATE
+                        VStack(spacing: 20) {
+                            ProgressView()
+                                .tint(.electricPurple)
+                                .scaleEffect(1.3)
+                            Text("Loading Glimpse space...")
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .foregroundColor(.white.opacity(0.5))
+                        }
+                        .padding(.vertical, 120)
+                        .frame(maxWidth: .infinity)
+                    } else if let partner = auth.partner {
                         if auth.coupleActive {
                             if let reqBy = auth.disconnectRequestedBy, reqBy == partner.id {
                                 VStack(spacing: 12) {
@@ -734,38 +746,42 @@ struct MainDashboardView: View {
                             }
                         }
                     } else {
-                        VStack(spacing: 20) {
-                            Image(systemName: "person.2.slash.fill")
-                                .font(.system(size: 60))
-                                .foregroundColor(.white.opacity(0.3))
+                        VStack(spacing: 16) {
+                            Image(systemName: "person.2.slash")
+                                .font(.system(size: 56, weight: .light))
+                                .foregroundColor(.white.opacity(0.35))
+                                .shadow(color: .electricPurple.opacity(0.15), radius: 8)
                             
-                            Text("No Partner Yet")
-                                .font(.title2.bold())
-                                .foregroundColor(.white)
-                            
-                            Text("Go to the Profile tab and enter your partner's invite code to start sharing your Glimpse!")
-                                .font(.subheadline)
-                                .foregroundColor(.white.opacity(0.6))
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 20)
+                            VStack(spacing: 8) {
+                                Text("No Partner Connected")
+                                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                                
+                                Text("Go to your Profile and enter your partner's invite code to start sharing your Glimpse!")
+                                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                                    .foregroundColor(.white.opacity(0.5))
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 24)
+                            }
                             
                             Button {
-                                withAnimation { auth.selectedTab = 4 }
+                                withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+                                    auth.selectedTab = 4
+                                }
                             } label: {
                                 Text("Connect Partner")
-                                    .font(.headline)
-                                    .padding(.horizontal, 30)
+                                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                                    .foregroundColor(.deepVelvet)
+                                    .padding(.horizontal, 24)
                                     .padding(.vertical, 12)
                                     .background(Color.electricPurple)
-                                    .foregroundColor(.white)
-                                    .clipShape(Capsule())
+                                    .cornerRadius(20)
+                                    .shadow(color: .electricPurple.opacity(0.35), radius: 8)
                             }
-                            .padding(.top, 10)
+                            .padding(.top, 8)
                         }
+                        .padding(.vertical, 80)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 60)
-                        .glassmorphic()
-                        .padding(.top, 40)
                     }
                     
                     Spacer(minLength: 100)
