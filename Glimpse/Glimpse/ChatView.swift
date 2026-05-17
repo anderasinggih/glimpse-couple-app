@@ -203,9 +203,11 @@ struct ChatView: View {
                             }
                         }
                         .onReceive(auth.chatTabDoubleTapPublisher) { _ in
-                            if let lastMsg = messages.last {
-                                withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
-                                    proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                                if let lastMsg = messages.last {
+                                    withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                                        proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                                    }
                                 }
                             }
                         }

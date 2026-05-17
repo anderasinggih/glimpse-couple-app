@@ -13,6 +13,8 @@ struct MainDashboardView: View {
     @State private var visibleFlashLimit: Int = 4
     @State private var streakCardBounce = false
     @State private var anniversaryCardBounce = false
+    @State private var showReactions = false
+    @State private var reactionCardScale: CGFloat = 1.0
     @State private var pollCounter = 0
     @State private var currentTime = Date()
     private let dashboardPollTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
@@ -182,6 +184,19 @@ struct MainDashboardView: View {
                 }
             )
             
+            if showReactions {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                            showReactions = false
+                            reactionCardScale = 1.0
+                        }
+                    }
+                    .zIndex(190)
+            }
+            
             // MASTER HEADER (Like app.blade.php)
             if auth.selectedTab != 3 {
                 BrandingHeader()
@@ -195,17 +210,24 @@ struct MainDashboardView: View {
             ZStack {
                 ForEach(popHearts) { heart in
                     ZStack {
-                        Image(systemName: heart.systemName)
-                            .font(.system(size: 44, weight: .bold))
-                            .foregroundColor(heart.color.opacity(0.2))
-                            .scaleEffect(heart.scale + 0.2)
-                            .blur(radius: 6)
-                        
-                        Image(systemName: heart.systemName)
-                            .font(.system(size: 44, weight: .bold))
-                            .foregroundColor(heart.color)
-                            .shadow(color: heart.color.opacity(0.8), radius: 10)
-                            .scaleEffect(heart.scale)
+                        if let emoji = heart.emojiString {
+                            Text(emoji)
+                                .font(.system(size: 55))
+                                .scaleEffect(heart.scale)
+                                .shadow(color: .black.opacity(0.3), radius: 6)
+                        } else if let sysName = heart.systemName {
+                            Image(systemName: sysName)
+                                .font(.system(size: 44, weight: .bold))
+                                .foregroundColor(heart.color.opacity(0.2))
+                                .scaleEffect(heart.scale + 0.2)
+                                .blur(radius: 6)
+                            
+                            Image(systemName: sysName)
+                                .font(.system(size: 44, weight: .bold))
+                                .foregroundColor(heart.color)
+                                .shadow(color: heart.color.opacity(0.8), radius: 10)
+                                .scaleEffect(heart.scale)
+                        }
                     }
                     .rotationEffect(.degrees(heart.rotation))
                     .opacity(heart.opacity)
@@ -428,9 +450,64 @@ struct MainDashboardView: View {
                                 .padding(.bottom, 12)
                             }
                             
-                            PartnerMapView(user: partner)
-                                .aspectRatio(1, contentMode: .fit)
-                                .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
+                            ZStack {
+                                PartnerMapView(user: partner)
+                                    .aspectRatio(1, contentMode: .fit)
+                                    .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
+                                    .scaleEffect(reactionCardScale)
+                                    .gesture(
+                                        LongPressGesture(minimumDuration: 0.5)
+                                            .onEnded { _ in
+                                                UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                                                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                                                    reactionCardScale = 0.95
+                                                    showReactions = true
+                                                }
+                                            }
+                                    )
+                                
+                                if showReactions {
+                                    // Glassmorphic Capsule Reaction Overlay
+                                    HStack(spacing: 20) {
+                                        ForEach(["❤️", "🔥", "✨", "😘", "💩"], id: \.self) { emoji in
+                                            Button {
+                                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                                triggerEmojiBurst(emoji)
+                                                
+                                                // Sync love burst to server in background
+                                                Task {
+                                                    try? await auth.triggerServerLoveBurst()
+                                                }
+                                                
+                                                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                                    showReactions = false
+                                                    reactionCardScale = 1.0
+                                                }
+                                            } label: {
+                                                Text(emoji)
+                                                    .font(.system(size: 38))
+                                                    .scaleEffect(1.0)
+                                                    .shadow(color: .black.opacity(0.3), radius: 4)
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                        }
+                                    }
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 14)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(LinearGradient(colors: [.white.opacity(0.4), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
+                                    )
+                                    .shadow(color: .black.opacity(0.4), radius: 15, y: 10)
+                                    .transition(.asymmetric(
+                                        insertion: .scale(scale: 0.8, anchor: .center).combined(with: .opacity),
+                                        removal: .scale(scale: 0.8, anchor: .center).combined(with: .opacity)
+                                    ))
+                                    .zIndex(200)
+                                }
+                            }
                             
                             // Together Streak & Meeting Counters Card (Interactive & Haptic!)
                             VStack(spacing: 12) {
@@ -1011,7 +1088,51 @@ struct MainDashboardView: View {
                 color: color,
                 opacity: 1.0,
                 rotation: Double.random(in: -45...45),
-                systemName: shape
+                systemName: shape,
+                emojiString: nil
+            )
+            
+            self.popHearts.append(particle)
+            
+            // Animate outwards radially!
+            withAnimation(.spring(response: 0.8, dampingFraction: 0.6, blendDuration: 0)) {
+                if let idx = self.popHearts.firstIndex(where: { $0.id == heartId }) {
+                    self.popHearts[idx].x = cos(angle) * radius
+                    self.popHearts[idx].y = sin(angle) * radius
+                    self.popHearts[idx].opacity = 0.0
+                    self.popHearts[idx].scale *= 1.4
+                    self.popHearts[idx].rotation += Double.random(in: -90...90)
+                }
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                self.popHearts.removeAll(where: { $0.id == heartId })
+            }
+        }
+    }
+    
+    private func triggerEmojiBurst(_ emoji: String) {
+        let haptic = UINotificationFeedbackGenerator()
+        haptic.notificationOccurred(.success) // 📳 Premium Success Haptic Explosion!
+        
+        // System pop sound effect
+        AudioServicesPlaySystemSound(1306)
+        
+        for _ in 0..<15 {
+            let heartId = UUID()
+            let angle = Double.random(in: 0...(2 * Double.pi))
+            let radius = CGFloat.random(in: 80...250)
+            
+            let particle = PopHeart(
+                id: heartId,
+                x: 0,
+                y: 0,
+                scale: CGFloat.random(in: 0.5...1.2),
+                color: .clear,
+                opacity: 1.0,
+                rotation: Double.random(in: -45...45),
+                systemName: nil,
+                emojiString: emoji
             )
             
             self.popHearts.append(particle)
@@ -1065,7 +1186,8 @@ struct PopHeart: Identifiable {
     var color: Color
     var opacity: Double
     var rotation: Double
-    var systemName: String
+    var systemName: String?
+    var emojiString: String?
 }
 
 struct FlashLocationRow: View {
