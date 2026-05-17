@@ -275,6 +275,15 @@ struct ChatView: View {
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatMessageReceived"))) { notification in
             if let newMsg = notification.object as? ChatMessage {
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                    // 1. If we sent this message, check if we have an optimistic temp bubble (ID < 0) and reconcile it instantly
+                    if newMsg.sender_id == auth.currentUser?.id {
+                        if let tempIndex = self.messages.firstIndex(where: { $0.id < 0 }) {
+                            self.messages[tempIndex] = newMsg
+                            return
+                        }
+                    }
+                    
+                    // 2. Otherwise, append only if not already present
                     if !self.messages.contains(where: { $0.id == newMsg.id }) {
                          self.messages.append(newMsg)
                     }
@@ -684,7 +693,10 @@ struct ChatView: View {
                 
                 await MainActor.run {
                     // Reconcile and replace temporary optimistic message with server-confirmed message
-                    if let index = self.messages.firstIndex(where: { $0.id == tempId }) {
+                    if self.messages.contains(where: { $0.id == sentMsg.id }) {
+                        // The WebSocket already integrated and reconciled this message, clean up the optimistic ID
+                        self.messages.removeAll(where: { $0.id == tempId })
+                    } else if let index = self.messages.firstIndex(where: { $0.id == tempId }) {
                         withAnimation(.easeOut(duration: 0.2)) {
                             self.messages[index] = sentMsg
                         }
