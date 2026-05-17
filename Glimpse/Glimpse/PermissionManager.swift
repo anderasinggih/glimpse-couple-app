@@ -37,9 +37,9 @@ class PermissionManager {
     }
     
     func checkAllPermissions() {
-        // 1. Check Location Permission
+        // 1. Check Location Permission - MUST be "Always Allow" strictly!
         let locStatus = locationManager.authorizationStatus
-        isLocationGranted = (locStatus == .authorizedAlways || locStatus == .authorizedWhenInUse)
+        isLocationGranted = (locStatus == .authorizedAlways)
         
         // 2. Check CoreMotion Activity Permission
         let motionStatus = CMMotionActivityManager.authorizationStatus()
@@ -55,7 +55,7 @@ class PermissionManager {
     
     // Request Actions
     func requestLocation() {
-        locationManager.requestWhenInUseAuthorization()
+        locationManager.requestAlwaysAuthorization()
         // Re-check after small delay in case they interact
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             self.checkAllPermissions()

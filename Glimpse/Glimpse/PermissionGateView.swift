@@ -26,11 +26,11 @@ struct PermissionGateView: View {
                 
                 // Titles
                 VStack(spacing: 8) {
-                    Text("Perizinan Perangkat")
+                    Text("Device Permissions")
                         .font(.system(size: 26, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                     
-                    Text("Glimpse memerlukan akses hardware berikut agar sinkronisasi intim dengan pasanganmu berjalan 100% sempurna.")
+                    Text("Glimpse requires the following hardware access to ensure 100% seamless background synchronization and updates with your partner.")
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundColor(.white.opacity(0.6))
                         .multilineTextAlignment(.center)
@@ -41,10 +41,10 @@ struct PermissionGateView: View {
                 
                 // Permissions List
                 VStack(spacing: 16) {
-                    // 1. Location
+                    // 1. Location (Must be "Always" / Selalu)
                     permissionRow(
-                        title: "Pelacakan Lokasi",
-                        description: "Mengetahui keberadaan pasanganmu secara background di peta.",
+                        title: "Location Tracking (Always)",
+                        description: "Used to synchronize real-time background location updates with your partner.",
                         systemIcon: "location.circle.fill",
                         color: .activeCyan,
                         isGranted: permissionManager.isLocationGranted,
@@ -53,8 +53,8 @@ struct PermissionGateView: View {
                     
                     // 2. CoreMotion Activity
                     permissionRow(
-                        title: "Gerakan & Aktivitas",
-                        description: "Mendeteksi apakah kamu sedang berjalan, menyetir, atau diam.",
+                        title: "Motion & Activity",
+                        description: "Detects whether you are walking, driving, or stationary to update your status.",
                         systemIcon: "figure.walk.circle.fill",
                         color: .electricPurple,
                         isGranted: permissionManager.isMotionGranted,
@@ -63,8 +63,8 @@ struct PermissionGateView: View {
                     
                     // 3. Notifications
                     permissionRow(
-                        title: "Notifikasi Instan",
-                        description: "Menerima sinyal cinta, kilatan Flash, dan pesan chat intim.",
+                        title: "Push Notifications",
+                        description: "Enables instant delivery of love bursts, flashes, and intimate chat messages.",
                         systemIcon: "bell.circle.fill",
                         color: .orange,
                         isGranted: permissionManager.isNotificationsGranted,
@@ -77,7 +77,7 @@ struct PermissionGateView: View {
                 
                 // Settings button for disabled states
                 VStack(spacing: 12) {
-                    Text("Jika tombol izin tidak merespons, silakan aktifkan manual melalui Pengaturan Sistem.")
+                    Text("If the permission prompt does not respond, please enable it manually inside System Settings.")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundColor(.white.opacity(0.4))
                         .multilineTextAlignment(.center)
@@ -90,7 +90,7 @@ struct PermissionGateView: View {
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "gearshape.fill")
-                            Text("Buka Pengaturan Sistem")
+                            Text("Open System Settings")
                         }
                         .font(.system(size: 15, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
@@ -108,9 +108,22 @@ struct PermissionGateView: View {
                 }
                 .opacity(animateItems ? 1.0 : 0.0)
                 .offset(y: animateItems ? 0 : 20)
+                
+                // Author & Copyright Footer
+                VStack(spacing: 4) {
+                    Text("Designed & Developed by Lovinpeace")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.35))
+                    
+                    Text("© 2026 Glimpse. All rights reserved.")
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.25))
+                }
+                .padding(.bottom, 8)
+                .opacity(animateItems ? 1.0 : 0.0)
             }
-            .padding(.top, 40)
-            .padding(.bottom, 20)
+            .padding(.top, 30)
+            .padding(.bottom, 10)
         }
         .onAppear {
             withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
@@ -154,7 +167,7 @@ struct PermissionGateView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(.green)
-                    Text("Diizinkan")
+                    Text("Granted")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundColor(.green)
                 }
@@ -172,7 +185,7 @@ struct PermissionGateView: View {
                     generator.impactOccurred()
                     requestAction()
                 } label: {
-                    Text("Izinkan")
+                    Text("Grant")
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .foregroundColor(.black)
                         .padding(.horizontal, 16)
