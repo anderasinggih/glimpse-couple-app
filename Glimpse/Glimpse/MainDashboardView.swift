@@ -22,6 +22,8 @@ struct MainDashboardView: View {
     @State private var showReactionBadge = false
     @State private var reactionBadgeScale: CGFloat = 0.0
     @State private var reactionBadgeAngle: Double = 0.0
+    @State private var edgeReactions: [EdgeReaction] = []
+    @State private var isSuppressingGlobalLoveBurst = false
     @State private var pollCounter = 0
     @State private var currentTime = Date()
     private let dashboardPollTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
@@ -517,8 +519,8 @@ struct MainDashboardView: View {
                                                         let emojisList = ["❤️", "🔥", "✨", "😘", "💩"]
                                                         let selectedEmoji = emojisList[hoveredIdx]
                                                         
-                                                        // Trigger fullscreen explosion
-                                                        triggerEmojiBurst(selectedEmoji)
+                                                        // Trigger elegant card-edge sparkles instead of fullscreen burst
+                                                        triggerEdgeReactionAnimation(selectedEmoji)
                                                         
                                                         // Show Locket-style edge floating badge
                                                         activeReactionBadge = selectedEmoji
@@ -546,6 +548,9 @@ struct MainDashboardView: View {
                                                             }
                                                         }
                                                         
+                                                        // Prevent the subsequent WebSocket broadcast from triggering double full-screen sparkles!
+                                                        isSuppressingGlobalLoveBurst = true
+                                                        
                                                         // Sync love burst to server in background
                                                         Task {
                                                             try? await auth.triggerServerLoveBurst()
@@ -562,6 +567,18 @@ struct MainDashboardView: View {
                                                 }
                                             }
                                     )
+                                
+                                // Rising Edge Reaction Sparkles (Floating gracefully from bottom to top along borders)
+                                ForEach(edgeReactions) { particle in
+                                    Text(particle.emoji)
+                                        .font(.system(size: 34))
+                                        .scaleEffect(particle.scale)
+                                        .rotationEffect(.degrees(particle.rotation))
+                                        .opacity(particle.opacity)
+                                        .offset(x: particle.x, y: particle.y)
+                                        .shadow(color: .black.opacity(0.2), radius: 4)
+                                        .zIndex(205)
+                                }
                                 
                                 // Locket-Style Edge Floating Reaction Badge
                                 if let badge = activeReactionBadge, showReactionBadge {
@@ -1334,6 +1351,68 @@ struct MainDashboardView: View {
         }
     }
     
+    private func triggerEdgeReactionAnimation(_ emoji: String) {
+        let haptic = UIImpactFeedbackGenerator(style: .medium)
+        haptic.impactOccurred()
+        
+        // Soft pop sound effect
+        AudioServicesPlaySystemSound(1306)
+        
+        // Spawn 6 particles along the edges (3 left, 3 right)
+        for i in 0..<6 {
+            let isLeft = i % 2 == 0
+            let particleId = UUID()
+            
+            // Random horizontal positioning near the borders
+            let baseX: CGFloat = isLeft ? -140 : 140
+            let randomXOffset = CGFloat.random(in: -15...15)
+            
+            let initialY: CGFloat = 160 // Bottom of card
+            let targetY: CGFloat = -180  // Floats above top of card
+            
+            let delay = Double(i) * 0.08 // Elegant staggered cascade
+            
+            let particle = EdgeReaction(
+                id: particleId,
+                emoji: emoji,
+                x: baseX + randomXOffset,
+                y: initialY,
+                scale: CGFloat.random(in: 0.6...1.1),
+                opacity: 0.0,
+                rotation: Double.random(in: -30...30)
+            )
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                self.edgeReactions.append(particle)
+                
+                // Animate rising up and fading out along the edges
+                withAnimation(.spring(response: 1.2, dampingFraction: 0.85, blendDuration: 0)) {
+                    if let idx = self.edgeReactions.firstIndex(where: { $0.id == particleId }) {
+                        self.edgeReactions[idx].y = targetY
+                        self.edgeReactions[idx].opacity = 1.0
+                        self.edgeReactions[idx].scale *= 1.2
+                        self.edgeReactions[idx].rotation += Double.random(in: -45...45)
+                    }
+                }
+                
+                // Fade out at the top
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    withAnimation(.easeOut(duration: 0.4)) {
+                        if let idx = self.edgeReactions.firstIndex(where: { $0.id == particleId }) {
+                            self.edgeReactions[idx].opacity = 0.0
+                            self.edgeReactions[idx].scale *= 0.8
+                        }
+                    }
+                }
+                
+                // Cleanup
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    self.edgeReactions.removeAll(where: { $0.id == particleId })
+                }
+            }
+        }
+    }
+    
     private func formatFlashTime(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
@@ -1415,6 +1494,16 @@ struct FlashLocationRow: View {
             }
         }
     }
+}
+
+struct EdgeReaction: Identifiable {
+    let id: UUID
+    let emoji: String
+    var x: CGFloat
+    var y: CGFloat
+    var scale: CGFloat
+    var opacity: Double
+    var rotation: Double
 }
 
 #Preview {
