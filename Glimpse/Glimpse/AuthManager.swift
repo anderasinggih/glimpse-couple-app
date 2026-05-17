@@ -32,7 +32,7 @@ class AuthManager {
         UserDefaults.standard.string(forKey: "auth_token")
     }
     
-    let baseURL = "http://192.168.0.103:8000/api"
+    let baseURL = "http://172.20.10.2:8000/api"
     
     init() {
         // FAST START: Don't do heavy work here
@@ -88,7 +88,7 @@ class AuthManager {
                     
                     if !urlString.hasPrefix("http") {
                         let cleanPath = urlString.hasPrefix("/") ? String(urlString.dropFirst()) : urlString
-                        let base = "http://192.168.0.103:8000"
+                        let base = "http://172.20.10.2:8000"
                         urlString = cleanPath.contains("storage/") ? "\(base)/\(cleanPath)" : "\(base)/storage/\(cleanPath)"
                     }
                     

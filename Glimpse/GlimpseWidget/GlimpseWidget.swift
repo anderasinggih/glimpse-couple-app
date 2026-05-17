@@ -20,7 +20,7 @@ struct GlimpseWidgetProvider: TimelineProvider {
         let photoUrlString = partner?.latest_photo_url ?? partner?.profile_photo_url
         if let urlString = photoUrlString {
             let cleanPath = urlString.hasPrefix("/") ? String(urlString.dropFirst()) : urlString
-            let finalUrlString = cleanPath.contains("http") ? urlString : (cleanPath.contains("storage/") ? "http://192.168.0.103:8000/\(cleanPath)" : "http://192.168.0.103:8000/storage/\(cleanPath)")
+            let finalUrlString = cleanPath.contains("http") ? urlString : (cleanPath.contains("storage/") ? "http://172.20.10.2:8000/\(cleanPath)" : "http://172.20.10.2:8000/storage/\(cleanPath)")
             
             let cacheKey = "img_cache_\(finalUrlString)"
             if let data = sharedDefaults?.data(forKey: cacheKey), let cachedImage = data.downsampledForWidget() {
@@ -46,7 +46,7 @@ struct GlimpseWidgetProvider: TimelineProvider {
         let photoUrlString = partner?.latest_photo_url ?? partner?.profile_photo_url
         if let urlString = photoUrlString {
             let cleanPath = urlString.hasPrefix("/") ? String(urlString.dropFirst()) : urlString
-            let finalUrlString = cleanPath.contains("http") ? urlString : (cleanPath.contains("storage/") ? "http://192.168.0.103:8000/\(cleanPath)" : "http://192.168.0.103:8000/storage/\(cleanPath)")
+            let finalUrlString = cleanPath.contains("http") ? urlString : (cleanPath.contains("storage/") ? "http://172.20.10.2:8000/\(cleanPath)" : "http://172.20.10.2:8000/storage/\(cleanPath)")
             
             let cacheKey = "img_cache_\(finalUrlString)"
             if let data = sharedDefaults?.data(forKey: cacheKey), let cachedImage = data.downsampledForWidget() {
