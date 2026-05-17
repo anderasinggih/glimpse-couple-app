@@ -2,9 +2,12 @@
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use App\Models\User;
 use App\Models\Couple;
 use App\Models\Message;
+use App\Models\Flash;
 
 Route::get('/', function () {
     return view('welcome');
