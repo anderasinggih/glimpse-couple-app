@@ -30,11 +30,6 @@ struct SplashScreenView: View {
                 Spacer()
                 
                 VStack(spacing: 4) {
-                    Text("GLIMPSE SPACE")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .tracking(3)
-                        .foregroundColor(.white.opacity(0.3))
-                    
                     Text("Created by Lovinpeace")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundColor(.electricPurple.opacity(0.85))

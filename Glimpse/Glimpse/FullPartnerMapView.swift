@@ -257,6 +257,7 @@ struct FullPartnerMapView: View {
                         VStack(spacing: 12) {
                             // Satellite toggle
                             Button {
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                 withAnimation(.spring()) {
                                     isSatellite.toggle()
                                 }
@@ -273,6 +274,7 @@ struct FullPartnerMapView: View {
                             // Re-center Scope
                             // Re-center Scope
                             Button {
+                                UISelectionFeedbackGenerator().selectionChanged()
                                 guard !isFlying else { return }
                                 guard let currentUser = auth.currentUser else { return }
                                 

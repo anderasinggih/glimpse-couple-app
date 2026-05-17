@@ -11,6 +11,8 @@ struct MainDashboardView: View {
     @State private var popHearts: [PopHeart] = []
     @State private var expandedFlashId: Int? = nil
     @State private var visibleFlashLimit: Int = 4
+    @State private var streakCardBounce = false
+    @State private var anniversaryCardBounce = false
     @State private var pollCounter = 0
     @State private var currentTime = Date()
     private let dashboardPollTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
@@ -430,7 +432,7 @@ struct MainDashboardView: View {
                                 .aspectRatio(1, contentMode: .fit)
                                 .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
                             
-                            // Together Streak & Meeting Counters Card
+                            // Together Streak & Meeting Counters Card (Interactive & Haptic!)
                             VStack(spacing: 12) {
                                 HStack(spacing: 16) {
                                     // Left Side: Streak
@@ -518,9 +520,21 @@ struct MainDashboardView: View {
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
                             .liquidGlass()
+                            .scaleEffect(streakCardBounce ? 0.96 : 1.0)
+                            .onTapGesture {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
+                                    streakCardBounce = true
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
+                                        streakCardBounce = false
+                                    }
+                                }
+                            }
                             .padding(.top, 5)
                             
-                            // Standalone Anniversary / Days of Love Card
+                            // Standalone Anniversary / Days of Love Card (Interactive & Haptic!)
                             if let anniversary = auth.anniversaryDate {
                                 VStack(spacing: 8) {
                                     HStack(spacing: 10) {
@@ -542,6 +556,19 @@ struct MainDashboardView: View {
                                 .padding(.horizontal, 20)
                                 .padding(.vertical, 16)
                                 .liquidGlass()
+                                .scaleEffect(anniversaryCardBounce ? 0.96 : 1.0)
+                                .onTapGesture {
+                                    let generator = UINotificationFeedbackGenerator()
+                                    generator.notificationOccurred(.success)
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
+                                        anniversaryCardBounce = true
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
+                                            anniversaryCardBounce = false
+                                        }
+                                    }
+                                }
                                 .padding(.top, 5)
                             }
                             
@@ -582,6 +609,7 @@ struct MainDashboardView: View {
                                             VStack(spacing: 0) {
                                                 // HEADER ROW
                                                 Button {
+                                                    UISelectionFeedbackGenerator().selectionChanged()
                                                     withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
                                                         if isExpanded {
                                                             expandedFlashId = nil
