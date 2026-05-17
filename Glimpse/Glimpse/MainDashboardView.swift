@@ -549,8 +549,8 @@ struct MainDashboardView: View {
                                                 // CONTENT BODY (EXPANDABLE)
                                                 if isExpanded {
                                                     VStack(alignment: .leading, spacing: 12) {
-                                                        VStack(spacing: 12) {
-                                                            // Photo (1:1 Ratio - Gede Full Width)
+                                                        HStack(spacing: 8) {
+                                                            // Left side: Photo (1:1 Ratio - Sebelahan)
                                                             Color.clear
                                                                 .aspectRatio(1.0, contentMode: .fit)
                                                                 .overlay(
@@ -562,7 +562,7 @@ struct MainDashboardView: View {
                                                                         .stroke(Color.white.opacity(0.1), lineWidth: 1)
                                                                 )
                                                             
-                                                            // Map View (3:2 Ratio - Gede Full Width)
+                                                            // Right side: Map View (1:1 Ratio - Sebelahan)
                                                             if let lat = flash.latitude, lat != 0.0,
                                                                let lon = flash.longitude, lon != 0.0 {
                                                                 Map(initialPosition: .region(MKCoordinateRegion(
@@ -582,7 +582,7 @@ struct MainDashboardView: View {
                                                                         }
                                                                     }
                                                                 }
-                                                                .aspectRatio(1.5, contentMode: .fit)
+                                                                .aspectRatio(1.0, contentMode: .fit)
                                                                 .cornerRadius(12)
                                                                 .overlay(
                                                                     RoundedRectangle(cornerRadius: 12)
