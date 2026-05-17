@@ -341,45 +341,32 @@ struct FullPartnerMapView: View {
         let distance = startLoc.distance(from: endLoc)
         
         Task {
-            // --- STAGE 1: TAKEOFF, ZOOM OUT, TILT & ROTATE ---
-            // Stay at start point, but zoom out high, tilt to 3D, and rotate facing destination
+            // --- STAGE 1: INITIATE FLUID 3D FLY-OVER ---
+            // Swoop out, tilt to 65° and rotate to face destination, and glide in one continuous movement
             await MainActor.run {
-                withAnimation(.timingCurve(0.25, 1.0, 0.5, 1.0, duration: 1.5)) {
+                withAnimation(.spring(response: 2.8, dampingFraction: 0.85)) {
                     position = .camera(MapCamera(
-                        centerCoordinate: start,
-                        distance: max(3000.0, distance * 1.5),
+                        centerCoordinate: end,
+                        distance: max(3000.0, distance * 1.4),
                         heading: bearing,
                         pitch: 65.0
                     ))
                 }
             }
             
-            try? await Task.sleep(nanoseconds: 1_400_000_000) // 1.4 seconds takeoff phase
+            // Wait until camera is mid-flight (1.6s) before smoothly easing into the landing.
+            // Momentum is preserved natively by SwiftUI's spring physics.
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
             
-            // --- STAGE 2: CRUISE FLIGHT POV ---
-            // Glide smoothly across the map to the destination while staying in 3D
+            // --- STAGE 2: CUSHIONED 2D FLAT LANDING ---
+            // Settle on destination, smoothly flattening pitch back to 2D (0°) and facing North (0°)
             await MainActor.run {
-                withAnimation(.timingCurve(0.35, 0.0, 0.25, 1.0, duration: 1.8)) {
-                    position = .camera(MapCamera(
-                        centerCoordinate: end,
-                        distance: max(2000.0, distance * 1.2),
-                        heading: bearing,
-                        pitch: 60.0
-                    ))
-                }
-            }
-            
-            try? await Task.sleep(nanoseconds: 1_600_000_000) // 1.6 seconds cruise phase
-            
-            // --- STAGE 3: LANDING & FLATTEN TO 2D ---
-            // Settle close on destination, flatten pitch to 2D (0°), and reset heading to North (0°)
-            await MainActor.run {
-                withAnimation(.timingCurve(0.16, 1.0, 0.3, 1.0, duration: 1.6)) {
+                withAnimation(.spring(response: 1.8, dampingFraction: 0.9)) {
                     position = .camera(MapCamera(
                         centerCoordinate: end,
                         distance: 500.0, // Close details zoom
-                        heading: 0.0, // Face North like normal 2D map
-                        pitch: 0.0 // Return to flat 2D
+                        heading: 0.0, // Aligns North like normal 2D map
+                        pitch: 0.0 // Smooth flatten
                     ))
                 }
             }
