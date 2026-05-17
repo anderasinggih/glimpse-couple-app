@@ -13,6 +13,10 @@ class PermissionManager {
     var isMotionGranted = false
     var isNotificationsGranted = false
     
+    var isLocationWhenInUse: Bool {
+        return locationManager.authorizationStatus == .authorizedWhenInUse
+    }
+    
     // Checks if ALL required permissions are fully granted
     var hasAllPermissions: Bool {
         return isLocationGranted && isMotionGranted && isNotificationsGranted
@@ -55,7 +59,12 @@ class PermissionManager {
     
     // Request Actions
     func requestLocation() {
-        locationManager.requestAlwaysAuthorization()
+        let status = locationManager.authorizationStatus
+        if status == .notDetermined {
+            locationManager.requestAlwaysAuthorization()
+        } else {
+            openSettings()
+        }
         // Re-check after small delay in case they interact
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             self.checkAllPermissions()

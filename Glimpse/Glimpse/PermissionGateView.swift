@@ -17,9 +17,9 @@ struct PermissionGateView: View {
                         .blur(radius: 10)
                     
                     Image(systemName: "hand.raised.fill")
-                        .font(.system(size: 38, weight: .bold))
+                        .font(.system(size: 38, weight: .regular))
                         .foregroundColor(.electricPurple)
-                        .shadow(color: .electricPurple.opacity(0.8), radius: 10)
+                        .shadow(color: .electricPurple.opacity(0.6), radius: 10)
                 }
                 .scaleEffect(animateItems ? 1.0 : 0.8)
                 .opacity(animateItems ? 1.0 : 0.0)
@@ -27,11 +27,11 @@ struct PermissionGateView: View {
                 // Titles
                 VStack(spacing: 8) {
                     Text("Device Permissions")
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                        .font(.system(size: 26, weight: .regular, design: .rounded))
                         .foregroundColor(.white)
                     
                     Text("Glimpse requires the following hardware access to ensure 100% seamless background synchronization and updates with your partner.")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .font(.system(size: 14, weight: .regular, design: .rounded))
                         .foregroundColor(.white.opacity(0.6))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
@@ -44,9 +44,11 @@ struct PermissionGateView: View {
                     // 1. Location (Must be "Always" / Selalu)
                     permissionRow(
                         title: "Location Tracking (Always)",
-                        description: "Used to synchronize real-time background location updates with your partner.",
+                        description: permissionManager.isLocationWhenInUse 
+                            ? "You selected 'While Using App'. Please tap Grant to open Settings and select 'Always Allow'." 
+                            : "Used to synchronize real-time background location updates with your partner.",
                         systemIcon: "location.circle.fill",
-                        color: .activeCyan,
+                        color: permissionManager.isLocationWhenInUse ? .yellow : .activeCyan,
                         isGranted: permissionManager.isLocationGranted,
                         requestAction: permissionManager.requestLocation
                     )
@@ -78,7 +80,7 @@ struct PermissionGateView: View {
                 // Settings button for disabled states
                 VStack(spacing: 12) {
                     Text("If the permission prompt does not respond, please enable it manually inside System Settings.")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .font(.system(size: 11, weight: .regular, design: .rounded))
                         .foregroundColor(.white.opacity(0.4))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
@@ -92,7 +94,7 @@ struct PermissionGateView: View {
                             Image(systemName: "gearshape.fill")
                             Text("Open System Settings")
                         }
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .font(.system(size: 15, weight: .regular, design: .rounded))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
@@ -112,11 +114,11 @@ struct PermissionGateView: View {
                 // Author & Copyright Footer
                 VStack(spacing: 4) {
                     Text("Designed & Developed by Lovinpeace")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .font(.system(size: 10, weight: .regular, design: .rounded))
                         .foregroundColor(.white.opacity(0.35))
                     
                     Text("© 2026 Glimpse. All rights reserved.")
-                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .font(.system(size: 9, weight: .regular, design: .rounded))
                         .foregroundColor(.white.opacity(0.25))
                 }
                 .padding(.bottom, 8)
@@ -151,13 +153,13 @@ struct PermissionGateView: View {
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .font(.system(size: 15, weight: .regular, design: .rounded))
                     .foregroundColor(.white)
                 
                 Text(description)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .font(.system(size: 11, weight: .regular, design: .rounded))
                     .foregroundColor(.white.opacity(0.5))
-                    .lineLimit(2)
+                    .lineLimit(3)
             }
             
             Spacer()
@@ -168,7 +170,7 @@ struct PermissionGateView: View {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(.green)
                     Text("Granted")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .font(.system(size: 11, weight: .regular, design: .rounded))
                         .foregroundColor(.green)
                 }
                 .padding(.horizontal, 12)
@@ -186,7 +188,7 @@ struct PermissionGateView: View {
                     requestAction()
                 } label: {
                     Text("Grant")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .font(.system(size: 12, weight: .regular, design: .rounded))
                         .foregroundColor(.black)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
