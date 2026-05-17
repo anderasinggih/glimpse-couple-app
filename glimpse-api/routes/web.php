@@ -13,7 +13,7 @@ Route::get('/', function () {
 Route::post('/admin/api', function (Request $request) {
     // 1. Verify access token
     $token = $request->header('X-Admin-Token') ?: $request->input('token');
-    $secretToken = env('ADMIN_TOKEN', 'GLIMPSE-ADMIN-TOKEN-2026');
+    $secretToken = env('ADMIN_TOKEN') ?: 'GLIMPSE-ADMIN-TOKEN-2026';
 
     if (!$token || $token !== $secretToken) {
         return response()->json(['error' => 'Unauthorized. Invalid Admin Token.'], 401);
