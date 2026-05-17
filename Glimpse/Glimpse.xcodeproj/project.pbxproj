@@ -468,9 +468,9 @@
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Glimpse butuh akses lokasi selalu aktif agar peta pasangan Anda tetap terupdate secara pasif.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Glimpse butuh akses lokasi untuk menampilkan posisi Anda di peta pasangan.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "Glimpse butuh sensor gerak untuk menghemat baterai saat Anda sedang diam.";
-				INFOPLIST_KEY_UIBackgroundModes = location;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes = location;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -508,9 +508,9 @@
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Glimpse butuh akses lokasi selalu aktif agar peta pasangan Anda tetap terupdate secara pasif.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Glimpse butuh akses lokasi untuk menampilkan posisi Anda di peta pasangan.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "Glimpse butuh sensor gerak untuk menghemat baterai saat Anda sedang diam.";
-				INFOPLIST_KEY_UIBackgroundModes = location;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes = location;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
