@@ -41,125 +41,64 @@ struct PartnerMapView: View {
                                 .foregroundColor(.white.opacity(0.3))
                             )
                     }
+                    
+                    // Minimal mode card overlay fades inside the Photo container
+                    PartnerOverlayCard(user: user, locationOverride: localAddress, isMinimal: true)
+                        .padding(12)
+                        .frame(maxHeight: .infinity, alignment: .bottom)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .transition(.opacity)
             } else {
                 // MAP SIDE
-                Map(position: $position, interactionModes: []) {
-                    if auth.isTogether, let currentUser = auth.currentUser,
-                       let userLat = user.latitude, userLat != 0.0,
-                       let myLat = currentUser.latitude, myLat != 0.0 {
-                        Annotation("Together", coordinate: user.coordinate) {
-                            ZStack {
-                                Circle()
-                                    .fill(LinearGradient(colors: [.electricPurple.opacity(0.3), .activeCyan.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                    .frame(width: 90, height: 90)
-                                    .scaleEffect(mapPulse ? 1.25 : 0.85)
-                                    .blur(radius: 8)
-                                    .onAppear {
-                                        withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                                            mapPulse = true
-                                        }
-                                    }
-                                
-                                HStack(spacing: -8) {
-                                    CachedImageView(urlString: currentUser.profile_photo_url)
-                                        .frame(width: 38, height: 38)
-                                        .clipShape(Circle())
-                                        .overlay(Circle().stroke(Color.electricPurple, lineWidth: 1.5))
-                                        .shadow(color: .electricPurple.opacity(0.5), radius: 5)
-                                    
-                                    Image(systemName: "heart.fill")
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.red)
-                                        .scaleEffect(mapPulse ? 1.2 : 0.8)
-                                        .shadow(color: .red, radius: 4)
-                                        .zIndex(5)
-                                    
-                                    CachedImageView(urlString: user.profile_photo_url)
-                                        .frame(width: 38, height: 38)
-                                        .clipShape(Circle())
-                                        .overlay(Circle().stroke(Color.activeCyan, lineWidth: 1.5))
-                                        .shadow(color: .activeCyan.opacity(0.5), radius: 5)
-                                }
-                                .padding(6)
-                                .background(.ultraThinMaterial)
-                                .cornerRadius(24)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 24)
-                                        .stroke(
-                                            LinearGradient(colors: [.white.opacity(0.5), .clear], startPoint: .topLeading, endPoint: .bottomTrailing),
-                                            lineWidth: 0.5
-                                        )
-                                )
-                            }
-                            .onTapGesture {
-                                withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
-                                    position = .region(MKCoordinateRegion(
-                                        center: user.coordinate,
-                                        span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
-                                    ))
-                                }
-                            }
-                        }
-                    } else {
-                        // Wavy Connecting line
-                        if let currentUser = auth.currentUser,
+                ZStack {
+                    Map(position: $position, interactionModes: []) {
+                        if auth.isTogether, let currentUser = auth.currentUser,
                            let userLat = user.latitude, userLat != 0.0,
                            let myLat = currentUser.latitude, myLat != 0.0 {
-                            let startLoc = CLLocation(latitude: currentUser.coordinate.latitude, longitude: currentUser.coordinate.longitude)
-                            let endLoc = CLLocation(latitude: user.coordinate.latitude, longitude: user.coordinate.longitude)
-                            let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
-                            
-                            let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: user.coordinate, phase: wavePhase)
-                            let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
-                            
-                            // 1. Bottom Layer: Outer Neon Glow
-                            MapPolyline(coordinates: wavyCoords)
-                                .stroke(
-                                    LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
-                                    style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
-                                )
-                            
-                            // 2. Top Layer: Core Saturated Line
-                            MapPolyline(coordinates: wavyCoords)
-                                .stroke(
-                                    LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
-                                    style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
-                                )
-                        }
-                        
-                        if let currentUser = auth.currentUser, let myLat = currentUser.latitude, myLat != 0.0 {
-                            Annotation("Me", coordinate: currentUser.coordinate) {
+                            Annotation("Together", coordinate: user.coordinate) {
                                 ZStack {
                                     Circle()
-                                        .fill(Color.electricPurple.opacity(0.2))
-                                        .frame(width: 60, height: 60)
-                                        .blur(radius: 10)
+                                        .fill(LinearGradient(colors: [.electricPurple.opacity(0.3), .activeCyan.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                        .frame(width: 90, height: 90)
+                                        .scaleEffect(mapPulse ? 1.25 : 0.85)
+                                        .blur(radius: 8)
+                                        .onAppear {
+                                            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                                                mapPulse = true
+                                            }
+                                        }
                                     
-                                    PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name)
-                                }
-                                .onTapGesture {
-                                    withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
-                                        position = .region(MKCoordinateRegion(
-                                            center: currentUser.coordinate,
-                                            span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
-                                        ))
+                                    HStack(spacing: -8) {
+                                        CachedImageView(urlString: currentUser.profile_photo_url)
+                                            .frame(width: 38, height: 38)
+                                            .clipShape(Circle())
+                                            .overlay(Circle().stroke(Color.electricPurple, lineWidth: 1.5))
+                                            .shadow(color: .electricPurple.opacity(0.5), radius: 5)
+                                        
+                                        Image(systemName: "heart.fill")
+                                            .font(.system(size: 16))
+                                            .foregroundColor(.red)
+                                            .scaleEffect(mapPulse ? 1.2 : 0.8)
+                                            .shadow(color: .red, radius: 4)
+                                            .zIndex(5)
+                                        
+                                        CachedImageView(urlString: user.profile_photo_url)
+                                            .frame(width: 38, height: 38)
+                                            .clipShape(Circle())
+                                            .overlay(Circle().stroke(Color.activeCyan, lineWidth: 1.5))
+                                            .shadow(color: .activeCyan.opacity(0.5), radius: 5)
                                     }
-                                }
-                            }
-                        }
-                        
-                        if let userLat = user.latitude, userLat != 0.0 {
-                            Annotation(user.name, coordinate: user.coordinate) {
-                                ZStack {
-                                    Circle()
-                                        .fill(Color.activeCyan.opacity(0.3))
-                                        .frame(width: 80, height: 80)
-                                        .blur(radius: 20)
-                                    
-                                    PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline, batteryLevel: user.battery_level, isCharging: user.is_charging, locationName: user.location_name)
+                                    .padding(6)
+                                    .background(.ultraThinMaterial)
+                                    .cornerRadius(24)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 24)
+                                            .stroke(
+                                                LinearGradient(colors: [.white.opacity(0.5), .clear], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                                lineWidth: 0.5
+                                            )
+                                    )
                                 }
                                 .onTapGesture {
                                     withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
@@ -170,24 +109,93 @@ struct PartnerMapView: View {
                                     }
                                 }
                             }
+                        } else {
+                            // Wavy Connecting line
+                            if let currentUser = auth.currentUser,
+                               let userLat = user.latitude, userLat != 0.0,
+                               let myLat = currentUser.latitude, myLat != 0.0 {
+                                let startLoc = CLLocation(latitude: currentUser.coordinate.latitude, longitude: currentUser.coordinate.longitude)
+                                let endLoc = CLLocation(latitude: user.coordinate.latitude, longitude: user.coordinate.longitude)
+                                let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
+                                
+                                let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: user.coordinate, phase: wavePhase)
+                                let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
+                                
+                                // 1. Bottom Layer: Outer Neon Glow
+                                MapPolyline(coordinates: wavyCoords)
+                                    .stroke(
+                                        LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
+                                        style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
+                                    )
+                                
+                                // 2. Top Layer: Core Saturated Line
+                                MapPolyline(coordinates: wavyCoords)
+                                    .stroke(
+                                        LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
+                                        style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+                                    )
+                            }
+                            
+                            if let currentUser = auth.currentUser, let myLat = currentUser.latitude, myLat != 0.0 {
+                                Annotation("Me", coordinate: currentUser.coordinate) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color.electricPurple.opacity(0.2))
+                                            .frame(width: 60, height: 60)
+                                            .blur(radius: 10)
+                                        
+                                        PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name)
+                                    }
+                                    .onTapGesture {
+                                        withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                                            position = .region(MKCoordinateRegion(
+                                                center: currentUser.coordinate,
+                                                span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                                            ))
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if let userLat = user.latitude, userLat != 0.0 {
+                                Annotation(user.name, coordinate: user.coordinate) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color.activeCyan.opacity(0.3))
+                                            .frame(width: 80, height: 80)
+                                            .blur(radius: 20)
+                                        
+                                        PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline, batteryLevel: user.battery_level, isCharging: user.is_charging, locationName: user.location_name)
+                                    }
+                                    .onTapGesture {
+                                        withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                                            position = .region(MKCoordinateRegion(
+                                                center: user.coordinate,
+                                                span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                                            ))
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
+                    .mapStyle(.hybrid(elevation: .realistic))
+                    .onChange(of: user.latitude) {
+                        updateMapPosition()
+                    }
+                    .onChange(of: user.last_updated) {
+                        updateMapPosition()
+                    }
+                    
+                    // Full mode card overlay fades inside the Map container
+                    PartnerOverlayCard(user: user, locationOverride: localAddress, isMinimal: false)
+                        .padding(12)
+                        .frame(maxHeight: .infinity, alignment: .bottom)
                 }
-                .mapStyle(.hybrid(elevation: .realistic))
                 .transition(.opacity)
-                .onChange(of: user.latitude) {
-                    updateMapPosition()
-                }
-                .onChange(of: user.last_updated) {
-                    updateMapPosition()
-                }
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 24))
-        .overlay(alignment: .bottom) {
-            PartnerOverlayCard(user: user, locationOverride: localAddress, isMinimal: isShowingPhoto)
-                .padding(12)
-        }
         .onTapGesture {
             withAnimation(.easeInOut(duration: 0.5)) {
                 isShowingPhoto.toggle()
