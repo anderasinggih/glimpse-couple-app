@@ -937,8 +937,10 @@
 
                 const avatar = u.profile_photo_url ? u.profile_photo_url : `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}`;
                 const coupleStatus = u.couple_id ? `<span class="text-activeCyan">Couple ID #${u.couple_id}</span>` : '<span class="text-rose-400">Single / Unpaired</span>';
-                const lat = u.latitude ? u.latitude.toFixed(6) : '-';
-                const lon = u.longitude ? u.longitude.toFixed(6) : '-';
+                const parsedLat = parseFloat(u.latitude);
+                const parsedLon = parseFloat(u.longitude);
+                const lat = !isNaN(parsedLat) ? parsedLat.toFixed(6) : '-';
+                const lon = !isNaN(parsedLon) ? parsedLon.toFixed(6) : '-';
                 const locName = u.location_name ? u.location_name : 'No GPS coordinates';
 
                 tr.innerHTML = `
