@@ -263,9 +263,20 @@ struct PartnerMapView: View {
     }
     
     private func timeAgo(from date: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        return formatter.localizedString(for: date, relativeTo: Date())
+        let interval = Date().timeIntervalSince(date)
+        if interval < 60 {
+            return "Just now"
+        }
+        let minutes = Int(interval / 60)
+        if minutes < 60 {
+            return "\(minutes)m ago"
+        }
+        let hours = minutes / 60
+        if hours < 24 {
+            return "\(hours)h ago"
+        }
+        let days = hours / 24
+        return "\(days)d ago"
     }
     
     private func formatImageUrlString(_ urlString: String) -> String {
@@ -496,7 +507,7 @@ struct PartnerOverlayCard: View {
                         Text(user.name)
                             .font(.system(size: 18, weight: .bold))
                         
-                        HStack(spacing: 8) {
+                        HStack(spacing: 6) {
                             if user.isOffline {
                                 Text("Offline")
                                     .font(.caption)
@@ -540,6 +551,8 @@ struct PartnerOverlayCard: View {
                                 }
                             }
                         }
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                     }
                     
                     Spacer()
@@ -602,9 +615,20 @@ struct PartnerOverlayCard: View {
     }
     
     private func timeAgo(from date: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        return formatter.localizedString(for: date, relativeTo: Date())
+        let interval = Date().timeIntervalSince(date)
+        if interval < 60 {
+            return "Just now"
+        }
+        let minutes = Int(interval / 60)
+        if minutes < 60 {
+            return "\(minutes)m ago"
+        }
+        let hours = minutes / 60
+        if hours < 24 {
+            return "\(hours)h ago"
+        }
+        let days = hours / 24
+        return "\(days)d ago"
     }
 }
 
