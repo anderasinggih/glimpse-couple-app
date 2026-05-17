@@ -80,6 +80,21 @@ struct FullPartnerMapView: View {
                             }
                         }
                     } else {
+                        // Wavy Connecting line
+                        if let currentUser = auth.currentUser,
+                           let partnerLat = partner.latitude, partnerLat != 0.0,
+                           let myLat = currentUser.latitude, myLat != 0.0 {
+                            MapPolyline(coordinates: generateWavyCoordinates(from: currentUser.coordinate, to: partner.coordinate))
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [.electricPurple, .pink, .activeCyan],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    ),
+                                    style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+                                )
+                        }
+                        
                         if let currentUser = auth.currentUser {
                             Annotation("Me", coordinate: currentUser.coordinate) {
                                 ZStack {
@@ -226,7 +241,7 @@ struct FullPartnerMapView: View {
     }
     
     private func startPolling() {
-        timer = Timer.publish(every: 3.0, on: .main, in: .common)
+        timer = Timer.publish(every: 30.0, on: .main, in: .common)
         timerCancellable = timer.connect()
     }
     
@@ -248,6 +263,41 @@ struct FullPartnerMapView: View {
                 }
             }
         }
+    }
+    
+    private func generateWavyCoordinates(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D) -> [CLLocationCoordinate2D] {
+        let pointsCount = 60
+        var coordinates: [CLLocationCoordinate2D] = []
+        
+        let dLat = end.latitude - start.latitude
+        let dLon = end.longitude - start.longitude
+        let distance = sqrt(dLat * dLat + dLon * dLon)
+        
+        if distance < 0.0001 {
+            return [start, end]
+        }
+        
+        let pLat = -dLon / distance
+        let pLon = dLat / distance
+        
+        let amplitude = distance * 0.035
+        let waveFrequency = 6.0
+        
+        for i in 0...pointsCount {
+            let t = Double(i) / Double(pointsCount)
+            let linearLat = start.latitude + dLat * t
+            let linearLon = start.longitude + dLon * t
+            
+            let envelope = sin(t * Double.pi)
+            let wave = sin(t * Double.pi * waveFrequency) * amplitude * envelope
+            
+            let waveLat = linearLat + pLat * wave
+            let waveLon = linearLon + pLon * wave
+            
+            coordinates.append(CLLocationCoordinate2D(latitude: waveLat, longitude: waveLon))
+        }
+        
+        return coordinates
     }
 }
 

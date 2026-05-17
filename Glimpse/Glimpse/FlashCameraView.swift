@@ -15,6 +15,17 @@ struct FlashCameraView: View {
     
     @FocusState private var isInputFocused: Bool
     
+    @State private var activeHintIndex = 0
+    @State private var hintTimer: Timer? = nil
+    
+    private let cameraHints = [
+        "Smile for your favorite person... 😊",
+        "Send a Glimpse to your partner... 💖",
+        "Capture this sweet moment... 📸",
+        "Let them see your beautiful smile... ✨",
+        "Thinking of you right now... 💭"
+    ]
+    
     var body: some View {
         let screenWidth = UIScreen.main.bounds.width
         let frameSize = screenWidth - 25
@@ -26,22 +37,23 @@ struct FlashCameraView: View {
                 iOS26Background().opacity(0.4)
             }
             .drawingGroup()
-            .ignoresSafeArea() // Ensure it covers status bar and bottom area
-            .ignoresSafeArea(.keyboard) 
+            .ignoresSafeArea()
+            .ignoresSafeArea(.keyboard)
+            .onTapGesture {
+                isInputFocused = false
+            }
             
-            // LAYER 2: The Camera/Preview Frame
-            VStack {
-                Spacer()
-                ZStack {
-                    if let image = capturedImage {
-                        // PREVIEW MODE: Only show the captured image (No Camera Logic here)
-                        Image(uiImage: image)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: frameSize, height: frameSize)
-                            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                    } else {
-                        // CAMERA MODE: Only show camera when no image is captured
+            if capturedImage == nil {
+                // --- CAMERA TAKING MODE ---
+                VStack(spacing: 0) {
+                    headerSection
+                        .padding(.top, 10)
+                        .zIndex(10)
+                    
+                    Spacer()
+                    
+                    // Camera Preview Frame
+                    ZStack {
                         if model.permissionStatus == .authorized {
                             if model.isInitialized {
                                 CameraPreview(session: model.session)
@@ -63,37 +75,188 @@ struct FlashCameraView: View {
                             permissionView(size: frameSize)
                         }
                     }
+                    .frame(width: frameSize, height: frameSize)
+                    .background(Color.black)
+                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .stroke(LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
+                    )
+                    .shadow(color: .electricPurple.opacity(0.2), radius: 30)
+                    
+                    // Rotating modern intimate camera hints
+                    Text(cameraHints[activeHintIndex])
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.9))
+                        .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 24)
+                        .id(activeHintIndex)
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .bottom)),
+                            removal: .opacity.combined(with: .move(edge: .top))
+                        ))
+                    
+                    Spacer()
+                    
+                    // Camera Footer (Find Partner info or Capture Button)
+                    if auth.partner == nil || !auth.coupleActive {
+                        VStack(spacing: 8) {
+                            Image(systemName: "person.badge.plus")
+                                .font(.title2)
+                                .foregroundColor(.white.opacity(0.6))
+                            Text("Find your partner first")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                            Text("Connect in the Profile tab to send a Glimpse.")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                        .padding(.horizontal, 30)
+                        .padding(.vertical, 20)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(20)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                        )
+                        .padding(.bottom, 40)
+                    } else {
+                        captureButton
+                            .padding(.bottom, 40)
+                    }
                 }
-                .frame(width: frameSize, height: frameSize)
-                .background(Color.black)
-                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .stroke(LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
-                )
-                .shadow(color: .electricPurple.opacity(0.2), radius: 30)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity)
-            .offset(y: -10)
-            
-            // LAYER 3: UI Overlays
-            headerSection
-                .zIndex(10)
-                .frame(maxHeight: .infinity, alignment: .top)
-            
-            VStack {
-                Spacer()
-                footerSection
-                    .padding(.bottom, 20)
+            } else if let image = capturedImage {
+                // --- POST-CAPTURE EDIT & UPLOAD MODE ---
+                ScrollView(showsIndicators: false) {
+                    ScrollViewReader { proxy in
+                        VStack(spacing: 24) {
+                            Spacer().frame(height: 20)
+                            
+                            // Compact Preview Photo (scaled to 260x260 to fit screen beautifully)
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 260, height: 260)
+                                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                        .stroke(LinearGradient(colors: [.white.opacity(0.3), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
+                                )
+                                .shadow(color: .electricPurple.opacity(0.3), radius: 15)
+                                .padding(.top, 10)
+                            
+                            Text("Add a caption to your Glimpse")
+                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                            
+                            // Captioned note text input - INLINED FOR 100% FOCUS ACCURACY
+                            VStack(alignment: .trailing, spacing: 6) {
+                                TextField("Add a note...", text: $statusNote)
+                                    .focused($isInputFocused)
+                                    .submitLabel(.send)
+                                    .onSubmit {
+                                        if !isUploading {
+                                            uploadPhoto(image)
+                                        }
+                                    }
+                                    .padding(16)
+                                    .background(.ultraThinMaterial)
+                                    .cornerRadius(18)
+                                    .foregroundColor(.white)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 18)
+                                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                    )
+                                    .onChange(of: statusNote) { oldValue, newValue in
+                                        if newValue.count > 140 {
+                                            statusNote = String(newValue.prefix(140))
+                                        }
+                                    }
+                                
+                                Text("\(statusNote.count)/140")
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundColor(statusNote.count > 130 ? .red : .white.opacity(0.5))
+                                    .padding(.horizontal, 8)
+                            }
+                            .padding(.horizontal, 30)
+                            .id("glimpse-input-field")
+                            
+                            // Send & Retake Actions
+                            VStack(spacing: 12) {
+                                Button {
+                                    uploadPhoto(image)
+                                } label: {
+                                    if isUploading {
+                                        ProgressView().tint(.deepVelvet)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 16)
+                                            .background(Color.electricPurple)
+                                            .cornerRadius(18)
+                                            .padding(.horizontal, 30)
+                                    } else {
+                                        Text("Send Glimpse")
+                                            .font(.headline)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 16)
+                                            .background(Color.electricPurple)
+                                            .foregroundColor(.deepVelvet)
+                                            .cornerRadius(18)
+                                            .padding(.horizontal, 30)
+                                    }
+                                }
+                                .disabled(isUploading)
+                                .id("send-button")
+                                
+                                Button {
+                                    capturedImage = nil
+                                    statusNote = ""
+                                    model.startSession()
+                                } label: {
+                                    Text("Retake Photo")
+                                        .font(.subheadline.bold())
+                                        .foregroundColor(.white.opacity(0.6))
+                                        .padding(.vertical, 8)
+                                }
+                            }
+                            
+                            Spacer().frame(height: 30)
+                        }
+                        .contentShape(Rectangle()) // Make the entire VStack body tappable to dismiss keyboard
+                        .onTapGesture {
+                            isInputFocused = false
+                        }
+                        .onChange(of: isInputFocused) { oldValue, newValue in
+                            if newValue {
+                                // AUTO-SCROLL to send button with a tiny delay to wait for keyboard height calculation
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                    withAnimation(.easeOut(duration: 0.35)) {
+                                        proxy.scrollTo("send-button", anchor: .bottom)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .ignoresSafeArea(.keyboard, edges: .bottom)
             }
         }
         .onAppear {
             UIDevice.current.isBatteryMonitoringEnabled = true
             model.startSession()
+            startHintTimer()
         }
         .onDisappear {
             model.stopSession()
+            stopHintTimer()
+        }
+        .onChange(of: capturedImage) { oldValue, newValue in
+            if newValue != nil {
+                // AUTO-FOCUS note input field with a tiny transition delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    isInputFocused = true
+                }
+            }
         }
         .alert("Upload Failed", isPresented: $isShowingError) {
             Button("OK", role: .cancel) { }
@@ -104,8 +267,6 @@ struct FlashCameraView: View {
     
     private var headerSection: some View {
         ZStack {
-            // Master branding is now handled by MainDashboardView shell
-            
             HStack(spacing: 12) {
                 Spacer()
                 
@@ -150,45 +311,13 @@ struct FlashCameraView: View {
         }
     }
     
-    private var footerSection: some View {
-        Group {
-            if auth.partner == nil || !auth.coupleActive {
-                VStack(spacing: 8) {
-                    Image(systemName: "person.badge.plus")
-                        .font(.title2)
-                        .foregroundColor(.white.opacity(0.6))
-                    Text("Find your partner first")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    Text("Connect in the Profile tab to send a Glimpse.")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.6))
-                }
-                .padding(.horizontal, 30)
-                .padding(.vertical, 20)
-                .background(.ultraThinMaterial)
-                .cornerRadius(20)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
-            } else if capturedImage == nil && model.permissionStatus == .authorized {
-                captureButton
-            } else if let image = capturedImage {
-                actionButtons(image)
-            }
-        }
-    }
-    
     private var captureButton: some View {
         Button {
             UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
             isProcessing = true
             model.capturePhoto { image in
-                // IMMEDIATELY stop camera hardware to free up resources for typing note
                 model.stopSession()
                 
-                // Move heavy processing to background task to prevent lag
                 Task.detached(priority: .userInitiated) {
                     let processed = await processCapturedImage(image)
                     await MainActor.run {
@@ -338,6 +467,20 @@ struct FlashCameraView: View {
             }
             isUploading = false
         }
+    }
+    
+    private func startHintTimer() {
+        hintTimer?.invalidate()
+        hintTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: true) { _ in
+            withAnimation {
+                activeHintIndex = (activeHintIndex + 1) % cameraHints.count
+            }
+        }
+    }
+    
+    private func stopHintTimer() {
+        hintTimer?.invalidate()
+        hintTimer = nil
     }
 }
 

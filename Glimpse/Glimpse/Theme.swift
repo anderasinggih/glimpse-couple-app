@@ -4,7 +4,11 @@ extension Color {
     // Dark Mode Palette
     static let deepVelvet = Color(hex: "0D001A")
     static let electricPurple = Color(hex: "BF80FF")
-    static let activeCyan = Color(hex: "00FFFF")
+    
+    static var activeCyan: Color {
+        let hex = UserDefaults.standard.string(forKey: "glimpse_theme_accent") ?? "00FFFF"
+        return Color(hex: hex)
+    }
     
     // Light Mode Palette
     static let lavenderMist = Color(hex: "F9F5FF")
@@ -13,7 +17,7 @@ extension Color {
     
     // Adaptive Colors - Static for performance
     static let adaptiveBackground = Color.deepVelvet
-    static let adaptiveAccent = Color.electricPurple
+    static var adaptiveAccent: Color { Color.activeCyan }
 }
 
 extension Color {

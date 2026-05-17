@@ -11,7 +11,9 @@ struct MainDashboardView: View {
     @State private var popHearts: [PopHeart] = []
     @State private var expandedFlashId: Int? = nil
     @State private var showAllFlashes: Bool = false
-    private let dashboardPollTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
+    @State private var pollCounter = 0
+    @State private var currentTime = Date()
+    private let dashboardPollTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
     
     var body: some View {
         @Bindable var bindableAuth = auth
@@ -24,7 +26,7 @@ struct MainDashboardView: View {
                 // Tab 0: Dashboard
                 dashboardView
                     .tabItem {
-                        Label("Home", systemImage: "house.fill")
+                        Label("Home", systemImage: "house")
                     }
                     .tag(0)
                 
@@ -34,7 +36,7 @@ struct MainDashboardView: View {
                         FullPartnerMapView(user: partner)
                     } else {
                         VStack(spacing: 15) {
-                            Image(systemName: "map.fill")
+                            Image(systemName: "map")
                                 .font(.system(size: 50))
                                 .foregroundColor(.white.opacity(0.3))
                             Text("Map is currently empty")
@@ -46,21 +48,21 @@ struct MainDashboardView: View {
                     }
                 }
                 .tabItem {
-                    Label("Map", systemImage: "map.fill")
+                    Label("Map", systemImage: "map")
                 }
                 .tag(1)
                 
                 // Tab 2: Flash
                 FlashCameraView()
                     .tabItem {
-                        Label("Flash", systemImage: "camera.fill")
+                        Label("Flash", systemImage: "camera")
                     }
                     .tag(2)
                 
                 // Tab 3: Chat
                 ChatView()
                     .tabItem {
-                        Label("Chat", systemImage: "bubble.left.and.bubble.right.fill")
+                        Label("Chat", systemImage: "bubble.left.and.bubble.right")
                     }
                     .badge(auth.unreadMessagesCount > 0 ? Text("\(auth.unreadMessagesCount)") : nil)
                     .tag(3)
@@ -68,13 +70,16 @@ struct MainDashboardView: View {
                 // Tab 4: Profile
                 ProfileView()
                     .tabItem {
-                        Label("Profile", systemImage: "person.fill")
+                        Label("Profile", systemImage: "person")
                     }
                     .tag(4)
             }
             .tint(.electricPurple)
             .simultaneousGesture(
                 DragGesture().onEnded { value in
+                    // Disable swipe-to-switch on Map tab (Tab 1) so user can pan the map freely
+                    guard auth.selectedTab != 1 else { return }
+                    
                     // SWIPE LOGIC
                     let threshold: CGFloat = 100
                     if value.translation.width > threshold {
@@ -129,17 +134,27 @@ struct MainDashboardView: View {
             .zIndex(999)
         }
         .onAppear {
-            Task { try? await auth.fetchState() }
-        }
-        .onReceive(dashboardPollTimer) { _ in
             Task {
                 try? await auth.fetchState()
-                
-                // Check if a new love burst was sent by partner
-                if auth.lastLoveBurstTimestamp > lastSeenLoveBurstTimestamp {
-                    lastSeenLoveBurstTimestamp = auth.lastLoveBurstTimestamp
-                    triggerLoveBurst()
+                _ = try? await auth.fetchFlashes()
+            }
+        }
+        .onReceive(dashboardPollTimer) { _ in
+            currentTime = Date()
+            pollCounter += 1
+            
+            // Backup fallback state sync every 30 seconds (WebSocket handles instant updates!)
+            if pollCounter % 30 == 0 {
+                Task {
+                    try? await auth.fetchState()
                 }
+            }
+        }
+        // React instantly to real-time Love Burst triggers via WebSocket
+        .onChange(of: auth.lastLoveBurstTimestamp) { oldValue, newValue in
+            if newValue > lastSeenLoveBurstTimestamp {
+                lastSeenLoveBurstTimestamp = newValue
+                triggerLoveBurst()
             }
         }
         .alert("Request Declined", isPresented: Bindable(auth).showInviteDeclinedAlert) {
@@ -312,86 +327,116 @@ struct MainDashboardView: View {
                                 .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
                             
                             // Together Streak & Meeting Counters Card
-                            HStack(spacing: 16) {
-                                // Left Side: Streak
-                                HStack(spacing: 12) {
-                                    ZStack {
-                                        Circle()
-                                            .fill(LinearGradient(colors: [Color.red.opacity(0.25), Color.orange.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                            .frame(width: 44, height: 44)
-                                            .shadow(color: .red.opacity(0.4), radius: 6)
-                                        
-                                        Image(systemName: "flame.fill")
-                                            .font(.title2)
-                                            .foregroundColor(.orange)
-                                            .shadow(color: .orange, radius: 8)
-                                            .shadow(color: .red, radius: 12)
-                                            .scaleEffect(streakPulse ? 1.18 : 0.92)
-                                            .onAppear {
-                                                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                                                    streakPulse = true
+                            VStack(spacing: 12) {
+                                HStack(spacing: 16) {
+                                    // Left Side: Streak
+                                    HStack(spacing: 12) {
+                                        ZStack {
+                                            Circle()
+                                                .fill(LinearGradient(colors: [Color.red.opacity(0.25), Color.orange.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                                .frame(width: 44, height: 44)
+                                                .shadow(color: .red.opacity(0.4), radius: 6)
+                                            
+                                            Image(systemName: "flame.fill")
+                                                .font(.title2)
+                                                .foregroundColor(.orange)
+                                                .shadow(color: .orange, radius: 8)
+                                                .shadow(color: .red, radius: 12)
+                                                .scaleEffect(streakPulse ? 1.18 : 0.92)
+                                                .onAppear {
+                                                    withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                                                        streakPulse = true
+                                                    }
                                                 }
-                                            }
-                                    }
-                                    
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("\(auth.togetherStreak)")
-                                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                                            .foregroundColor(.white)
-                                        Text("Together Streak")
-                                            .font(.system(size: 11, weight: .semibold))
-                                            .foregroundColor(.white.opacity(0.5))
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                
-                                // Divider line
-                                RoundedRectangle(cornerRadius: 1)
-                                    .fill(Color.white.opacity(0.1))
-                                    .frame(width: 1, height: 35)
-                                
-                                // Right Side: Total Meetings
-                                HStack(spacing: 12) {
-                                    ZStack {
-                                        Circle()
-                                            .fill(LinearGradient(colors: [Color.electricPurple.opacity(0.2), Color.royalPurple.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                            .frame(width: 44, height: 44)
+                                        }
                                         
-                                        Image(systemName: "heart.text.square.fill")
-                                            .font(.title2)
-                                            .foregroundColor(.electricPurple)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("\(auth.togetherStreak)")
+                                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                                .foregroundColor(.white)
+                                            Text("Together Streak")
+                                                .font(.system(size: 11, weight: .semibold))
+                                                .foregroundColor(.white.opacity(0.5))
+                                        }
                                     }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                                     
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("\(auth.totalMeetings)")
-                                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                                            .foregroundColor(.white)
-                                        Text("Days Met")
-                                            .font(.system(size: 11, weight: .semibold))
-                                            .foregroundColor(.white.opacity(0.5))
+                                    // Divider line
+                                    RoundedRectangle(cornerRadius: 1)
+                                        .fill(Color.white.opacity(0.1))
+                                        .frame(width: 1, height: 35)
+                                    
+                                    // Right Side: Total Meetings
+                                    HStack(spacing: 12) {
+                                        ZStack {
+                                            Circle()
+                                                .fill(LinearGradient(colors: [Color.electricPurple.opacity(0.2), Color.royalPurple.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                                .frame(width: 44, height: 44)
+                                            
+                                            Image(systemName: "heart.text.square.fill")
+                                                .font(.title2)
+                                                .foregroundColor(.electricPurple)
+                                        }
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("\(auth.totalMeetings)")
+                                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                                .foregroundColor(.white)
+                                            Text("Days Met")
+                                                .font(.system(size: 11, weight: .semibold))
+                                                .foregroundColor(.white.opacity(0.5))
+                                        }
                                     }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
                             .liquidGlass()
                             .padding(.top, 5)
                             
-                            // Flash History Accordion List Card
-                            VStack(alignment: .leading, spacing: 16) {
-                                HStack {
+                            // Standalone Anniversary / Days of Love Card
+                            if let anniversary = auth.anniversaryDate {
+                                VStack(spacing: 8) {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: "heart.calendar.fill")
+                                            .foregroundColor(.activeCyan)
+                                            .font(.system(size: 22))
+                                            .shadow(color: .activeCyan.opacity(0.4), radius: 5)
+                                        
+                                        Text(relationshipDurationText(from: anniversary))
+                                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                                            .foregroundColor(.activeCyan)
+                                    }
+                                    
+                                    Text("Days of Love")
+                                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                                        .foregroundColor(.white.opacity(0.5))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 16)
+                                .liquidGlass()
+                                .padding(.top, 5)
+                            }
+                            
+                            // Flash History Accordion List (No outer double container!)
+                            VStack(alignment: .leading, spacing: 14) {
+                                HStack(alignment: .firstTextBaseline, spacing: 6) {
                                     Image(systemName: "photo.stack.fill")
                                         .foregroundColor(.activeCyan)
-                                        .font(.system(size: 18))
+                                        .font(.system(size: 15))
                                         .shadow(color: .activeCyan.opacity(0.5), radius: 6)
                                     Text("Flash History")
-                                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                                        .font(.system(size: 15, weight: .bold, design: .rounded))
                                         .foregroundColor(.white)
+                                    Text("(Last 7 Days)")
+                                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.white.opacity(0.4))
                                     Spacer()
                                     Text("\(auth.flashes.count) captures")
                                         .font(.caption)
-                                        .foregroundColor(.white.opacity(0.5))
+                                        .foregroundColor(.white.opacity(0.4))
                                 }
                                 
                                 if auth.flashes.isEmpty {
@@ -453,34 +498,66 @@ struct MainDashboardView: View {
                                                 // CONTENT BODY (EXPANDABLE)
                                                 if isExpanded {
                                                     VStack(alignment: .leading, spacing: 12) {
-                                                        // Photo Row - RIGID 1:1 ASPECT RATIO
-                                                        Color.clear
-                                                            .aspectRatio(1.0, contentMode: .fit)
-                                                            .overlay(
-                                                                CachedImageView(urlString: flash.photo_url)
-                                                            )
-                                                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                                                            .overlay(
-                                                                RoundedRectangle(cornerRadius: 12)
-                                                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                                                            )
+                                                        HStack(spacing: 12) {
+                                                            // Left side: Photo (1:1 Ratio)
+                                                            Color.clear
+                                                                .aspectRatio(1.0, contentMode: .fit)
+                                                                .overlay(
+                                                                    CachedImageView(urlString: flash.photo_url)
+                                                                )
+                                                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                                                .overlay(
+                                                                    RoundedRectangle(cornerRadius: 12)
+                                                                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                                                )
                                                             
+                                                            // Right side: Map View (1:1 Ratio)
+                                                            if let lat = flash.latitude, lat != 0.0,
+                                                               let lon = flash.longitude, lon != 0.0 {
+                                                                Map(initialPosition: .region(MKCoordinateRegion(
+                                                                    center: flash.coordinate,
+                                                                    span: MKCoordinateSpan(latitudeDelta: 0.003, longitudeDelta: 0.003)
+                                                                ))) {
+                                                                    Annotation(flash.sender_name, coordinate: flash.coordinate) {
+                                                                        ZStack {
+                                                                            Circle()
+                                                                                .fill(isMe ? Color.electricPurple.opacity(0.3) : Color.activeCyan.opacity(0.3))
+                                                                                .frame(width: 32, height: 32)
+                                                                            
+                                                                            Circle()
+                                                                                .stroke(isMe ? Color.electricPurple : Color.activeCyan, lineWidth: 2)
+                                                                                .frame(width: 18, height: 18)
+                                                                                .shadow(color: isMe ? Color.electricPurple : Color.activeCyan, radius: 4)
+                                                                        }
+                                                                    }
+                                                                }
+                                                                .aspectRatio(1.0, contentMode: .fit)
+                                                                .cornerRadius(12)
+                                                                .overlay(
+                                                                    RoundedRectangle(cornerRadius: 12)
+                                                                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                                                )
+                                                            }
+                                                        }
+                                                        
                                                         // Location Detail Row
                                                         if let locName = flash.location_name {
                                                             HStack(spacing: 8) {
                                                                 Image(systemName: "mappin.circle.fill")
                                                                     .foregroundColor(.activeCyan)
+                                                                    .font(.system(size: 13))
                                                                     .shadow(color: .activeCyan.opacity(0.5), radius: 4)
                                                                 Text(locName)
                                                                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                                                                     .foregroundColor(.white)
                                                             }
+                                                            .padding(.top, 4)
                                                         }
                                                         
                                                         // Kabar / Status Note Row
                                                         if let note = flash.status_note, !note.isEmpty {
                                                             Text("\"\(note)\"")
-                                                                .font(.system(size: 13, weight: .regular))
+                                                                .font(.system(size: 13, weight: .regular, design: .rounded))
                                                                 .italic()
                                                                 .foregroundColor(.white.opacity(0.8))
                                                                 .padding(.horizontal, 10)
@@ -488,34 +565,6 @@ struct MainDashboardView: View {
                                                                 .frame(maxWidth: .infinity, alignment: .leading)
                                                                 .background(Color.white.opacity(0.04))
                                                                 .cornerRadius(8)
-                                                        }
-                                                        
-                                                        // Map View Row
-                                                        if let lat = flash.latitude, lat != 0.0,
-                                                           let lon = flash.longitude, lon != 0.0 {
-                                                            Map(initialPosition: .region(MKCoordinateRegion(
-                                                                center: flash.coordinate,
-                                                                span: MKCoordinateSpan(latitudeDelta: 0.003, longitudeDelta: 0.003)
-                                                            ))) {
-                                                                Annotation(flash.sender_name, coordinate: flash.coordinate) {
-                                                                    ZStack {
-                                                                        Circle()
-                                                                            .fill(isMe ? Color.electricPurple.opacity(0.3) : Color.activeCyan.opacity(0.3))
-                                                                            .frame(width: 40, height: 40)
-                                                                        
-                                                                        Circle()
-                                                                            .stroke(isMe ? Color.electricPurple : Color.activeCyan, lineWidth: 2)
-                                                                            .frame(width: 24, height: 24)
-                                                                            .shadow(color: isMe ? Color.electricPurple : Color.activeCyan, radius: 4)
-                                                                    }
-                                                                }
-                                                            }
-                                                            .frame(height: 140)
-                                                            .cornerRadius(12)
-                                                            .overlay(
-                                                                RoundedRectangle(cornerRadius: 12)
-                                                                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                                                            )
                                                         }
                                                     }
                                                     .padding(14)
@@ -739,6 +788,22 @@ struct MainDashboardView: View {
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+    
+    private func relationshipDurationText(from date: Date) -> String {
+        let now = currentTime
+        let calendar = Calendar.current
+        
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date, to: now)
+        
+        let years = components.year ?? 0
+        let months = components.month ?? 0
+        let days = components.day ?? 0
+        let hours = components.hour ?? 0
+        let minutes = components.minute ?? 0
+        let seconds = components.second ?? 0
+        
+        return "\(years)y \(months)m \(days)d \(hours)h \(minutes)m \(seconds)s"
     }
 }
 

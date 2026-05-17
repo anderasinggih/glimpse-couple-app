@@ -7,15 +7,15 @@ struct ChatView: View {
     @State private var messages: [ChatMessage] = []
     @State private var messageInput = ""
     @State private var isSending = false
-    @State private var timer: Timer.TimerPublisher = Timer.publish(every: 1.5, on: .main, in: .common)
+    @State private var timer: Timer.TimerPublisher = Timer.publish(every: 5.0, on: .main, in: .common)
     @State private var cancellable: Cancellable?
     @FocusState private var isInputFocused: Bool
     
-    // To track when to push status (every 8 ticks of the 1.5s timer = ~12s)
+    // To track when to push status (every 2 ticks of the 5.0s timer = 10s)
     @State private var tickCount = 0
-    @State private var isPartnerTyping = false
     @State private var isSearchingChat = false
     @State private var searchQuery = ""
+    @State private var isShowingScrollToBottomButton = false
     
     var filteredMessages: [ChatMessage] {
         let cleanQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -44,7 +44,8 @@ struct ChatView: View {
                     
                     // Messages ScrollView (occupies full height, goes UNDER header)
                     ScrollViewReader { proxy in
-                        ScrollView {
+                        ZStack(alignment: .bottomTrailing) {
+                            ScrollView {
                             VStack(spacing: 12) {
                                 // Top space to offset first message below the frosted header (height matches whether search is expanded)
                                 Spacer().frame(height: isSearchingChat ? 165 : 110)
@@ -78,7 +79,7 @@ struct ChatView: View {
                                     .transition(.opacity.combined(with: .scale))
                                 }
                                 
-                                if isPartnerTyping {
+                                if auth.isPartnerTyping {
                                     HStack {
                                         TypingIndicatorView()
                                             .transition(.asymmetric(
@@ -94,6 +95,25 @@ struct ChatView: View {
                                 
                                 // Tiny bottom padding to prevent drop shadow clipping of the last bubble
                                 Spacer().frame(height: 15)
+                                
+                                // Bottom Scroll Detection Marker
+                                Color.clear
+                                    .frame(height: 1)
+                                    .background(
+                                        GeometryReader { geo in
+                                            let frame = geo.frame(in: .global)
+                                            Color.clear
+                                                .onChange(of: frame.minY) { _, newValue in
+                                                    let screenHeight = UIScreen.main.bounds.height
+                                                    let isOff = newValue > screenHeight + 120
+                                                    if isShowingScrollToBottomButton != isOff {
+                                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                                            isShowingScrollToBottomButton = isOff
+                                                        }
+                                                    }
+                                                }
+                                        }
+                                    )
                             }
                             .padding(.horizontal, 16)
                             .frame(maxWidth: .infinity, minHeight: 600)
@@ -154,7 +174,36 @@ struct ChatView: View {
                                 }
                             }
                         }
+                        
+                        // Floating Scroll To Bottom Button
+                        if isShowingScrollToBottomButton {
+                            Button {
+                                if let lastMsg = messages.last {
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                        proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(12)
+                                    .background(
+                                        Circle()
+                                            .fill(Color.electricPurple)
+                                            .shadow(color: .electricPurple.opacity(0.6), radius: 8, x: 0, y: 4)
+                                    )
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                    )
+                            }
+                            .padding(.trailing, 20)
+                            .padding(.bottom, 90) // Positions nicely above glass input bar
+                            .transition(.scale.combined(with: .opacity))
+                        }
                     }
+                }
                     
                     // Premium Small Header - aligned top overlaying ScrollView!
                     chatHeader(partner: partner)
@@ -188,49 +237,43 @@ struct ChatView: View {
         .onDisappear {
             stopPolling()
         }
-        // Poll for updates in real-time
+        // Push our current battery/charging status to partner periodically in background
         .onReceive(timer) { _ in
-            if let partner = auth.partner, auth.coupleActive {
+            if auth.partner != nil, auth.coupleActive {
                 tickCount += 1
                 
-                // 1. Every tick (1.5s): Fetch messages and full partner state
-                Task {
-                    if let newMsgs = try? await auth.fetchMessages(), newMsgs != self.messages {
-                        await MainActor.run {
-                            let oldMsgsCount = self.messages.count
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-                                self.messages = newMsgs
-                            }
-                            
-                            // Play soft "ting" sound (1103) and tactile "klek" haptic (.rigid) on background messages
-                            if oldMsgsCount > 0, let lastMsg = newMsgs.last, lastMsg.sender_id == partner.id {
-                                AudioServicesPlaySystemSound(1103) // Soft ting/chime
-                                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                            }
-                        }
-                    }
-                    try? await auth.fetchState()
-                }
-                
-                // Simulate typing animation occasionally when partner is online
-                if !partner.isOffline {
-                    if Double.random(in: 0...1) < 0.15 && !isPartnerTyping {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-                            isPartnerTyping = true
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-                                isPartnerTyping = false
-                            }
-                        }
-                    }
-                }
-                
-                // 2. Every 8 ticks (~12s): Push our current battery/charging status to partner
-                if tickCount >= 8 {
+                // Every 2 ticks (10s): Push our current battery/charging status to partner
+                if tickCount >= 2 {
                     tickCount = 0
                     auth.pushCurrentStatus()
                 }
+            }
+        }
+        // Listen to live WebSocket message broadcasts from Partner
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatMessageReceived"))) { notification in
+            if let newMsg = notification.object as? ChatMessage {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                    if !self.messages.contains(where: { $0.id == newMsg.id }) {
+                        self.messages.append(newMsg)
+                        
+                        // Play soft "ting" sound (1103) and tactile "klek" haptic (.rigid) for live incoming messages
+                        if let partner = auth.partner, newMsg.sender_id == partner.id {
+                            AudioServicesPlaySystemSound(1103)
+                            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                        }
+                    }
+                }
+            }
+        }
+        // Real-time typing notification triggers
+        .onChange(of: messageInput) { oldValue, newValue in
+            let cleanNew = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cleanOld = oldValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            if !cleanNew.isEmpty && cleanOld.isEmpty {
+                auth.sendTypingStatus(isTyping: true)
+            } else if cleanNew.isEmpty && !cleanOld.isEmpty {
+                auth.sendTypingStatus(isTyping: false)
             }
         }
     }
@@ -577,7 +620,7 @@ struct ChatView: View {
     }
     
     private func startPolling() {
-        timer = Timer.publish(every: 1.5, on: .main, in: .common)
+        timer = Timer.publish(every: 5.0, on: .main, in: .common)
         cancellable = timer.connect()
     }
     

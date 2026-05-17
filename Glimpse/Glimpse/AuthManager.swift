@@ -33,6 +33,13 @@ class AuthManager {
     var latestFetchedMessages: [ChatMessage] = []
     var flashes: [GlimpseFlash] = []
     
+    // WEBSOCKET PROPERTIES
+    private var webSocketTask: URLSessionWebSocketTask?
+    var isWebSocketConnected = false
+    var isPartnerTyping = false
+    private var shouldReconnect = true
+    private var reconnectInterval: TimeInterval = 2.0
+    
     var userToken: String? {
         UserDefaults.standard.string(forKey: "auth_token")
     }
@@ -46,6 +53,7 @@ class AuthManager {
             self.isAuthenticated = true
             Task {
                 try? await self.fetchState()
+                self.connectWebSocket()
             }
         }
     }
@@ -122,14 +130,6 @@ class AuthManager {
                     try? FileManager.default.removeItem(at: fileURL)
                 }
                 WidgetCenter.shared.reloadAllTimelines()
-            }
-            
-            // Fetch messages and flashes whenever state is fetched
-            if self.coupleActive {
-                Task {
-                    _ = try? await self.fetchMessages()
-                    _ = try? await self.fetchFlashes()
-                }
             }
         }
     }
@@ -473,6 +473,10 @@ class AuthManager {
             withAnimation {
                 self.isAuthenticated = true
             }
+            Task {
+                try? await self.fetchState()
+                self.connectWebSocket()
+            }
         }
     }
     
@@ -499,10 +503,15 @@ class AuthManager {
             withAnimation {
                 self.isAuthenticated = true
             }
+            Task {
+                try? await self.fetchState()
+                self.connectWebSocket()
+            }
         }
     }
     
     func logout() {
+        self.disconnectWebSocket()
         UserDefaults.standard.removeObject(forKey: "auth_token")
         
         let sharedDefaults = UserDefaults(suiteName: "group.glimpse.app")
@@ -605,6 +614,221 @@ class AuthManager {
         let (_, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw NSError(domain: "Auth", code: 500, userInfo: [NSLocalizedDescriptionKey: "Love burst failed"])
+        }
+    }
+    
+    func sendTypingStatus(isTyping: Bool) {
+        guard isAuthenticated else { return }
+        
+        Task {
+            guard let url = URL(string: "\(baseURL)/glimpse/typing") else { return }
+            guard let token = userToken else { return }
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.addValue("application/json", forHTTPHeaderField: "Accept")
+            
+            let body = ["is_typing": isTyping]
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            
+            _ = try? await URLSession.shared.data(for: request)
+        }
+    }
+    
+    // MARK: - WEBSOCKET INTEGRATION
+    func connectWebSocket() {
+        // Close any existing connection first
+        disconnectWebSocket()
+        
+        guard let coupleId = currentUser?.couple_id, coupleActive else { return }
+        
+        // Parse host from baseURL
+        guard let urlComponents = URLComponents(string: baseURL),
+              let host = urlComponents.host else { return }
+        
+        let appKey = "u1eadho8wbhzv2mcnlfy"
+        let wsPort = 8080
+        let wsScheme = urlComponents.scheme == "https" ? "wss" : "ws"
+        
+        let wsUrlString = "\(wsScheme)://\(host):\(wsPort)/app/\(appKey)?protocol=7&client=js&version=8.4.0-reverb"
+        guard let url = URL(string: wsUrlString) else { return }
+        
+        print("🔌 Connecting to WebSockets at: \(wsUrlString)")
+        
+        shouldReconnect = true
+        webSocketTask = URLSession.shared.webSocketTask(with: url)
+        webSocketTask?.resume()
+        
+        listenWebSocketMessages()
+    }
+    
+    func disconnectWebSocket() {
+        shouldReconnect = false
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        webSocketTask = nil
+        DispatchQueue.main.async {
+            self.isWebSocketConnected = false
+        }
+        print("🔌 WebSocket disconnected manually.")
+    }
+    
+    private func listenWebSocketMessages() {
+        webSocketTask?.receive { [weak self] result in
+            guard let self = self else { return }
+            switch result {
+            case .success(let message):
+                switch message {
+                case .string(let text):
+                    self.handleWebSocketString(text)
+                case .data(let data):
+                    if let text = String(data: data, encoding: .utf8) {
+                        self.handleWebSocketString(text)
+                    }
+                @unknown default:
+                    break
+                }
+                
+                // Continue listening recursively
+                self.listenWebSocketMessages()
+                
+            case .failure(let error):
+                print("❌ WebSocket connection failed/disconnected: \(error)")
+                self.handleWebSocketDisconnection()
+            }
+        }
+    }
+    
+    struct PusherEvent: Codable {
+        let event: String
+        let channel: String?
+        let data: String?
+    }
+    
+    private func handleWebSocketString(_ text: String) {
+        guard let data = text.data(using: .utf8) else { return }
+        do {
+            let pusherEvent = try JSONDecoder().decode(PusherEvent.self, from: data)
+            
+            switch pusherEvent.event {
+            case "pusher:connection_established":
+                print("✅ WebSocket handshake established!")
+                DispatchQueue.main.async {
+                    self.isWebSocketConnected = true
+                }
+                if let coupleId = self.currentUser?.couple_id {
+                    self.sendSubscribeFrame(channel: "couple.\(coupleId)")
+                }
+                
+            case "pusher_internal:subscription_succeeded":
+                print("❤️ Subscribed successfully to Glimpse Live Channel!")
+                
+            case "App\\Events\\PartnerStateUpdated":
+                print("🔔 Live State Updated from partner!")
+                if let eventDataString = pusherEvent.data,
+                   let eventData = eventDataString.data(using: .utf8) {
+                    struct StatePayload: Codable {
+                        let user: GlimpseUser
+                    }
+                    if let payload = try? JSONDecoder().decode(StatePayload.self, from: eventData) {
+                        DispatchQueue.main.async {
+                            self.partner = payload.user
+                            // Trigger immediate local state notification
+                            NotificationCenter.default.post(name: Notification.Name("GlimpseLiveStateUpdated"), object: nil)
+                        }
+                    }
+                }
+                
+            case "App\\Events\\MessageSent":
+                print("💬 New message broadcast received!")
+                if let eventDataString = pusherEvent.data,
+                   let eventData = eventDataString.data(using: .utf8) {
+                    struct MessagePayload: Codable {
+                        let message: ChatMessage
+                    }
+                    if let payload = try? JSONDecoder().decode(MessagePayload.self, from: eventData) {
+                        DispatchQueue.main.async {
+                            if !self.latestFetchedMessages.contains(where: { $0.id == payload.message.id }) {
+                                self.latestFetchedMessages.append(payload.message)
+                                self.updateUnreadCount()
+                                NotificationCenter.default.post(name: Notification.Name("GlimpseChatMessageReceived"), object: payload.message)
+                            }
+                        }
+                    }
+                }
+                
+            case "App\\Events\\LoveBurstSent":
+                print("💖 Live Love Burst broadcast received!")
+                if let eventDataString = pusherEvent.data,
+                   let eventData = eventDataString.data(using: .utf8) {
+                    struct LoveBurstPayload: Codable {
+                        let timestamp: Double
+                        let sender_id: Int
+                    }
+                    if let payload = try? JSONDecoder().decode(LoveBurstPayload.self, from: eventData) {
+                        DispatchQueue.main.async {
+                            // Update lastLoveBurstTimestamp in real-time!
+                            self.lastLoveBurstTimestamp = payload.timestamp
+                        }
+                    }
+                }
+                
+            case "App\\Events\\PartnerTyping":
+                print("⌨️ Live typing status broadcast received!")
+                if let eventDataString = pusherEvent.data,
+                   let eventData = eventDataString.data(using: .utf8) {
+                    struct TypingPayload: Codable {
+                        let user_id: Int
+                        let is_typing: Bool
+                    }
+                    if let payload = try? JSONDecoder().decode(TypingPayload.self, from: eventData) {
+                        DispatchQueue.main.async {
+                            // Update partner typing status in real-time!
+                            self.isPartnerTyping = payload.is_typing
+                        }
+                    }
+                }
+                
+            default:
+                break
+            }
+        } catch {
+            print("⚠️ Failed to parse incoming socket event: \(error)")
+        }
+    }
+    
+    private func sendSubscribeFrame(channel: String) {
+        struct SubscribePayload: Codable {
+            let event: String
+            let data: SubscribeData
+        }
+        struct SubscribeData: Codable {
+            let channel: String
+        }
+        
+        let payload = SubscribePayload(event: "pusher:subscribe", data: SubscribeData(channel: channel))
+        if let jsonData = try? JSONEncoder().encode(payload),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            webSocketTask?.send(.string(jsonString)) { error in
+                if let error = error {
+                    print("⚠️ Failed to send subscribe frame: \(error)")
+                } else {
+                    print("📤 Sent subscription frame for: \(channel)")
+                }
+            }
+        }
+    }
+    
+    private func handleWebSocketDisconnection() {
+        DispatchQueue.main.async {
+            self.isWebSocketConnected = false
+        }
+        guard shouldReconnect else { return }
+        
+        DispatchQueue.global().asyncAfter(deadline: .now() + reconnectInterval) { [weak self] in
+            print("🔄 Attempting to reconnect to WebSocket...")
+            self?.connectWebSocket()
         }
     }
 }

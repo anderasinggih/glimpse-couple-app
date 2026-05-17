@@ -2,36 +2,39 @@
 
 namespace App\Events;
 
-use App\Models\User;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class PartnerStateUpdated implements ShouldBroadcast
+class LoveBurstSent implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    public $user;
+    public $coupleId;
+    public $senderId;
+    public $timestamp;
 
-    public function __construct(User $user)
+    public function __construct($coupleId, $senderId, $timestamp)
     {
-        $this->user = $user;
+        $this->coupleId = $coupleId;
+        $this->senderId = $senderId;
+        $this->timestamp = $timestamp;
     }
 
     public function broadcastOn(): array
     {
         return [
-            new Channel('couple.' . $this->user->couple_id),
+            new Channel('couple.' . $this->coupleId),
         ];
     }
 
     public function broadcastWith(): array
     {
         return [
-            'user' => $this->user
+            'sender_id' => $this->senderId,
+            'timestamp' => $this->timestamp
         ];
     }
 }

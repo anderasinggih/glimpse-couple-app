@@ -397,6 +397,9 @@ class GlimpseController extends Controller
             'message' => $request->message
         ]);
 
+        // Broadcast MessageSent event to the partner over WebSockets
+        broadcast(new \App\Events\MessageSent($msg))->toOthers();
+
         return response()->json($msg);
     }
 
@@ -421,6 +424,9 @@ class GlimpseController extends Controller
         if ($request->has('location_name')) $user->location_name = $request->location_name;
 
         $user->save();
+
+        // Broadcast live state updates to the partner instantly over WebSockets
+        broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
 
         return response()->json([
             'message' => 'Status updated successfully!',
@@ -488,9 +494,26 @@ class GlimpseController extends Controller
             'sender_id' => $user->id
         ], 60);
 
+        // Broadcast LoveBurstSent event to partner instantly over WebSockets
+        broadcast(new \App\Events\LoveBurstSent($user->couple_id, $user->id, $timestamp))->toOthers();
+
         return response()->json([
             'message' => 'Love burst triggered!',
             'timestamp' => $timestamp
         ]);
+    }
+
+    public function broadcastTyping(Request $request)
+    {
+        $request->validate(['is_typing' => 'required|boolean']);
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple'], 400);
+        }
+
+        // Broadcast typing status with 0 database queries
+        broadcast(new \App\Events\PartnerTyping($user->couple_id, $user->id, $request->is_typing))->toOthers();
+
+        return response()->json(['status' => 'ok']);
     }
 }

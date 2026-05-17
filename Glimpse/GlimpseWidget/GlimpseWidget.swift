@@ -17,16 +17,14 @@ struct GlimpseWidgetProvider: TimelineProvider {
         let partnerData = sharedDefaults?.data(forKey: "latest_partner_data")
         let partner = try? JSONDecoder().decode(GlimpseUser.self, from: partnerData ?? Data())
         var partnerImage: UIImage? = nil
-        let photoUrlString = partner?.latest_photo_url ?? partner?.profile_photo_url
-        if let urlString = photoUrlString {
-            let cleanPath = urlString.hasPrefix("/") ? String(urlString.dropFirst()) : urlString
-            let finalUrlString = cleanPath.contains("http") ? urlString : (cleanPath.contains("storage/") ? "http://172.20.10.2:8000/\(cleanPath)" : "http://172.20.10.2:8000/storage/\(cleanPath)")
-            
-            let cacheKey = "img_cache_\(finalUrlString)"
-            if let data = sharedDefaults?.data(forKey: cacheKey), let cachedImage = data.downsampledForWidget() {
+        
+        if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+            let fileURL = groupURL.appendingPathComponent("widget_photo.jpg")
+            if let data = try? Data(contentsOf: fileURL), let cachedImage = data.downsampledForWidget() {
                 partnerImage = cachedImage
             }
         }
+        
         let finalPartner = context.isPreview ? (partner ?? .mockPartner) : partner
         let entry = GlimpseWidgetEntry(date: Date(), partner: finalPartner, image: partnerImage)
         completion(entry)
@@ -37,19 +35,14 @@ struct GlimpseWidgetProvider: TimelineProvider {
         let partnerData = sharedDefaults?.data(forKey: "latest_partner_data")
         
         var partner: GlimpseUser? = nil
-        
         if let data = partnerData {
             partner = try? JSONDecoder().decode(GlimpseUser.self, from: data)
         }
         
         var partnerImage: UIImage? = nil
-        let photoUrlString = partner?.latest_photo_url ?? partner?.profile_photo_url
-        if let urlString = photoUrlString {
-            let cleanPath = urlString.hasPrefix("/") ? String(urlString.dropFirst()) : urlString
-            let finalUrlString = cleanPath.contains("http") ? urlString : (cleanPath.contains("storage/") ? "http://172.20.10.2:8000/\(cleanPath)" : "http://172.20.10.2:8000/storage/\(cleanPath)")
-            
-            let cacheKey = "img_cache_\(finalUrlString)"
-            if let data = sharedDefaults?.data(forKey: cacheKey), let cachedImage = data.downsampledForWidget() {
+        if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+            let fileURL = groupURL.appendingPathComponent("widget_photo.jpg")
+            if let data = try? Data(contentsOf: fileURL), let cachedImage = data.downsampledForWidget() {
                 partnerImage = cachedImage
             }
         }

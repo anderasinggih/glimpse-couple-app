@@ -15,6 +15,12 @@ struct ProfileView: View {
     @State private var isShowingApproveDisconnectConfirmation = false
     @State private var isShowingAcceptInviteConfirmation = false
     @State private var isShowingCancelInviteConfirmation = false
+    @AppStorage("glimpse_theme_accent") var themeAccentHex = "00FFFF"
+    @AppStorage("glimpse_haptic_strength") var hapticStrength = "rigid"
+    
+    @State private var isShowingThemeSelection = false
+    @State private var isShowingHapticSelection = false
+    
     @State private var notificationsEnabled = true
     @State private var scrollOffset: CGFloat = 0
     @State private var isCopied = false
@@ -111,7 +117,7 @@ struct ProfileView: View {
                                         Button {
                                             isShowingDisconnectConfirmation = true
                                         } label: {
-                                            CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: "Paired", color: .red)
+                                            CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: formattedPairedDate(auth.anniversaryDate ?? Date()), color: .red)
                                         }
                                     }
                                     
@@ -159,7 +165,25 @@ struct ProfileView: View {
                         }
                         .padding(.horizontal)
                         
-                        // 4. App & Privacy
+                        // 4. Glimpse Customization
+                        VStack(alignment: .leading, spacing: 10) {
+                            sectionLabel("Glimpse Customization")
+                            
+                            Button {
+                                isShowingThemeSelection = true
+                            } label: {
+                                CompactMenuRow(icon: "paintpalette.fill", title: "App accent theme", value: activeThemeName(), color: .activeCyan)
+                            }
+                            
+                            Button {
+                                isShowingHapticSelection = true
+                            } label: {
+                                CompactMenuRow(icon: "waveform.path", title: "Vibrations & haptics", value: hapticStrengthTitle(), color: .orange)
+                            }
+                        }
+                        .padding(.horizontal)
+                        
+                        // 5. App & Privacy
                         VStack(alignment: .leading, spacing: 10) {
                             sectionLabel("App & privacy")
                             
@@ -218,6 +242,14 @@ struct ProfileView: View {
         .sheet(isPresented: $isShowingEditAnniversary) {
             EditAnniversaryView(auth: auth)
                 .presentationDetents([.height(300)])
+        }
+        .sheet(isPresented: $isShowingThemeSelection) {
+            ThemeSelectionView(accentHex: $themeAccentHex)
+                .presentationDetents([.height(260)])
+        }
+        .sheet(isPresented: $isShowingHapticSelection) {
+            HapticSelectionView(hapticStrength: $hapticStrength)
+                .presentationDetents([.height(230)])
         }
         .alert("Connect Partner", isPresented: $isShowingInviteAlert) {
             TextField("Partner code", text: $inviteCodeInput)
@@ -396,6 +428,31 @@ struct ProfileView: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         return formatter.string(from: date)
+    }
+    
+    private func activeThemeName() -> String {
+        switch themeAccentHex {
+        case "00FFFF": return "Electric Cyan"
+        case "FF66B2": return "Rose Romance"
+        case "FFA500": return "Sunset Spark"
+        case "00FF88": return "Vivid Mint"
+        default: return "Custom"
+        }
+    }
+    
+    private func hapticStrengthTitle() -> String {
+        switch hapticStrength {
+        case "rigid": return "Crisp & Rigid"
+        case "soft": return "Soft & Subtle"
+        case "none": return "Disabled"
+        default: return "Standard"
+        }
+    }
+    
+    private func formattedPairedDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMM yyyy"
+        return "paired " + formatter.string(from: date).lowercased()
     }
 }
 
@@ -688,4 +745,107 @@ struct CompactMenuRow: View {
 
 #Preview {
     ProfileView()
+}
+
+struct ThemeSelectionView: View {
+    @Binding var accentHex: String
+    @Environment(\.dismiss) var dismiss
+    
+    let themes = [
+        ("Electric Cyan", "00FFFF"),
+        ("Rose Romance", "FF66B2"),
+        ("Sunset Spark", "FFA500"),
+        ("Vivid Mint", "00FF88")
+    ]
+    
+    var body: some View {
+        ZStack {
+            Color.deepVelvet.ignoresSafeArea()
+            
+            VStack(spacing: 20) {
+                Text("Select App Theme")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .padding(.top, 20)
+                
+                HStack(spacing: 18) {
+                    ForEach(themes, id: \.1) { theme in
+                        Button {
+                            accentHex = theme.1
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            dismiss()
+                        } label: {
+                            VStack(spacing: 8) {
+                                Circle()
+                                    .fill(Color(hex: theme.1))
+                                    .frame(width: 48, height: 48)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color.white, lineWidth: accentHex == theme.1 ? 3 : 0)
+                                    )
+                                    .shadow(color: Color(hex: theme.1).opacity(0.5), radius: 8)
+                                
+                                Text(theme.0)
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .foregroundColor(accentHex == theme.1 ? .white : .white.opacity(0.5))
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                
+                Spacer()
+            }
+        }
+    }
+}
+
+
+struct HapticSelectionView: View {
+    @Binding var hapticStrength: String
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        ZStack {
+            Color.deepVelvet.ignoresSafeArea()
+            
+            VStack(spacing: 16) {
+                Text("Vibration & Haptic Feedback")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .padding(.top, 20)
+                
+                VStack(spacing: 8) {
+                    ForEach([("Crisp & Rigid", "rigid"), ("Soft & Subtle", "soft"), ("Disabled", "none")], id: \.1) { option in
+                        Button {
+                            hapticStrength = option.1
+                            if option.1 == "rigid" {
+                                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                            } else if option.1 == "soft" {
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            }
+                            dismiss()
+                        } label: {
+                            HStack {
+                                Text(option.0)
+                                Spacer()
+                                if hapticStrength == option.1 {
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(.activeCyan)
+                                }
+                            }
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(Color.white.opacity(0.05))
+                            .cornerRadius(12)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                
+                Spacer()
+            }
+        }
+    }
 }
