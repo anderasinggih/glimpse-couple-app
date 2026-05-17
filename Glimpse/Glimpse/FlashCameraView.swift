@@ -88,7 +88,7 @@ struct FlashCameraView: View {
                         RoundedRectangle(cornerRadius: 28, style: .continuous)
                             .stroke(LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
                     )
-                    .shadow(color: isScreenFlashing ? .white : .electricPurple.opacity(0.2), radius: isScreenFlashing ? 50 : 30)
+                    .shadow(color: Color.black.opacity(0.35), radius: 15, x: 0, y: 8)
                     
                     // Rotating modern intimate camera hints
                     Text(cameraHints[activeHintIndex])
@@ -180,6 +180,26 @@ struct FlashCameraView: View {
                                 .shadow(color: .electricPurple.opacity(0.3), radius: 15)
                                 .padding(.top, 10)
                             
+                            // Retake Photo Button placed high up for superb keyboard safety
+                            Button {
+                                capturedImage = nil
+                                statusNote = ""
+                                model.startSession()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                        .font(.system(size: 12, weight: .bold))
+                                    Text("Retake Photo")
+                                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                                }
+                                .foregroundColor(.white.opacity(0.6))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Color.white.opacity(0.08))
+                                .cornerRadius(20)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            
                             Text("Add a caption to your Glimpse")
                                 .font(.system(size: 15, weight: .bold, design: .rounded))
                                 .foregroundColor(.white)
@@ -229,17 +249,7 @@ struct FlashCameraView: View {
                             .padding(.horizontal, 30)
                             .id("glimpse-input-field")
                             
-                            // Retake Photo Button
-                            Button {
-                                capturedImage = nil
-                                statusNote = ""
-                                model.startSession()
-                            } label: {
-                                Text("Retake Photo")
-                                    .font(.subheadline.bold())
-                                    .foregroundColor(.white.opacity(0.6))
-                                    .padding(.vertical, 8)
-                            }
+
                             
                             Spacer().frame(height: 30)
                         }
