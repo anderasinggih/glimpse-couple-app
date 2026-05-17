@@ -472,49 +472,6 @@ struct FlashCameraView: View {
         let battery = Int(UIDevice.current.batteryLevel * 100)
         
         Task {
-            var address: String? = nil
-            
-            // PERFORM REVERSE GEOCODING WITH A STRICT 1.0 SECOND TIMEOUT
-            if let lat = lat, let lon = lon {
-                let location = CLLocation(latitude: lat, longitude: lon)
-                let geocoder = CLGeocoder()
-                
-                address = await withTaskGroup(of: String?.self) { group in
-                    // Group task 1: Geocoding
-                    group.addTask {
-                        do {
-                            let placemarks = try await geocoder.reverseGeocodeLocation(location)
-                            if let placemark = placemarks.first {
-                                let street = placemark.thoroughfare ?? ""
-                                let subLoc = placemark.subLocality ?? placemark.locality ?? ""
-                                if !street.isEmpty && !subLoc.isEmpty {
-                                    return "\(street), \(subLoc)"
-                                } else {
-                                    return street.isEmpty ? subLoc : street
-                                }
-                            }
-                        } catch {
-                            print("Geocoding failed/canceled: \(error)")
-                        }
-                        return nil
-                    }
-                    
-                    // Group task 2: Strict Timeout (1.0 second)
-                    group.addTask {
-                        try? await Task.sleep(nanoseconds: 1_000_000_000)
-                        geocoder.cancelGeocode()
-                        return nil
-                    }
-                    
-                    // Race and pick the first completed result
-                    if let result = await group.next() {
-                        group.cancelAll()
-                        return result
-                    }
-                    return nil
-                }
-            }
-            
             do {
                 try await AuthManager.shared.uploadPhoto(
                     image, 
@@ -522,7 +479,7 @@ struct FlashCameraView: View {
                     longitude: lon, 
                     battery: battery, 
                     note: statusNote.isEmpty ? nil : statusNote,
-                    locationName: address
+                    locationName: nil // Skipped on upload, resolved dynamically in background by viewer/receiver!
                 )
                 
                 // SUCCESS MICRO-INTERACTION: Haptics, Sound, & Animation
