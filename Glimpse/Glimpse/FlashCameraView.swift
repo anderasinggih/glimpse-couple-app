@@ -349,8 +349,8 @@ struct FlashCameraView: View {
         }
         .onChange(of: capturedImage) { oldValue, newValue in
             if newValue != nil {
-                // AUTO-FOCUS note input field with a tiny transition delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                // AUTO-FOCUS note input field with a tiny transition delay (100ms is visual instant!)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     isInputFocused = true
                 }
             }
