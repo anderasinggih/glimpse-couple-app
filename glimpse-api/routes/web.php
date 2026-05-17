@@ -10,10 +10,135 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+Route::get('/privacy', function () {
+    return '
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - Glimpse</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0b071e;
+            color: #ffffff;
+            font-family: "Outfit", sans-serif;
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+        }
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #a855f7 0%, #06b6d4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .subtitle {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+        h2 {
+            font-size: 1.4rem;
+            color: #06b6d4;
+            margin-top: 30px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 8px;
+        }
+        p, li {
+            font-size: 1rem;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.85);
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        .footer {
+            margin-top: 50px;
+            text-align: center;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Glimpse Privacy Policy</h1>
+        <p class="subtitle">Effective Date: May 17, 2026</p>
+        
+        <p>Welcome to Glimpse, an intimate companion application designed to keep couples connected. Your privacy is of paramount importance to us. This Privacy Policy describes how Glimpse collects, uses, processes, and protects your information.</p>
+        
+        <h2>1. Information We Collect</h2>
+        <p>To provide a seamless real-time connection experience, Glimpse collects the following categories of information:</p>
+        <ul>
+            <li><strong>Account Data:</strong> Your name, email address, password, and profile photo when you sign up.</li>
+            <li><strong>Intimate Connection State:</strong> Location coordinates (latitude and longitude), battery status, charging state, status notes, and photos you capture for your Flash memory feed.</li>
+            <li><strong>Direct Messaging:</strong> Chat messages exchanged between you and your linked partner. Messages are transmitted securely to deliver them in real-time.</li>
+        </ul>
+        
+        <h2>2. How We Use Your Information</h2>
+        <p>Glimpse uses the collected information strictly for the following purposes:</p>
+        <ul>
+            <li>To display your real-time presence (location, battery status, and status note) to your linked partner.</li>
+            <li>To share direct chat messages and Flash photos exclusively with your connected partner.</li>
+            <li>To host and build your shared memory timeline.</li>
+        </ul>
+        
+        <h2>3. Data Sharing & Security</h2>
+        <p><strong>We do not sell, trade, or share your personal data with any third-party advertisers or corporations.</strong> Your data is strictly shared with the individual you choose to pair with using your unique connection invite code.</p>
+        
+        <h2>4. Data Retention & Control</h2>
+        <p>You have full control over your shared intimacy data. You can disconnect from your partner, delete past messages, or request account deletion directly from the settings menu within the application at any time.</p>
+        
+        <div class="footer">
+            &copy; 2026 Glimpse App. Crafted with love.
+        </div>
+    </div>
+</body>
+</html>
+';
+});
+
+Route::get('/debug-storage', function () {
+    $avatarsDir = storage_path('app/public/avatars');
+    $files = file_exists($avatarsDir) ? scandir($avatarsDir) : [];
+    
+    $users = \App\Models\User::select('id', 'name', 'profile_photo_url')->get()->toArray();
+    
+    return response()->json([
+        'avatars_directory_exists' => file_exists($avatarsDir),
+        'avatars_directory_path' => $avatarsDir,
+        'files_in_avatars' => $files,
+        'users_in_database' => $users,
+        'symlink_public_storage_exists' => file_exists(public_path('storage')),
+    ]);
+});
+
 Route::post('/admin/api', function (Request $request) {
     // 1. Verify access token
     $token = $request->header('X-Admin-Token') ?: $request->input('token');
-    $secretToken = env('ADMIN_TOKEN');
+    $secretToken = config('app.admin_token') ?: env('ADMIN_TOKEN');
 
     if (!$secretToken || !$token || $token !== $secretToken) {
         return response()->json(['error' => 'Unauthorized. Invalid Admin Token.'], 401);
@@ -85,10 +210,220 @@ Route::post('/admin/api', function (Request $request) {
         case 'delete_user':
             $userId = $request->input('user_id');
             $user = User::findOrFail($userId);
+            
+            $deletePhysicalFile = function($url) {
+                if (!$url) return;
+                $relativePath = parse_url($url, PHP_URL_PATH);
+                if (strpos($relativePath, '/storage/') === 0) {
+                    $relativePath = substr($relativePath, 9);
+                }
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($relativePath);
+            };
+
+            // 1. Delete user photo attachments
+            $deletePhysicalFile($user->profile_photo_url);
+            $deletePhysicalFile($user->latest_photo_url);
+
+            // 2. Clear out flashes uploaded by this user
+            $userFlashes = Flash::where('sender_id', $user->id)->get();
+            foreach ($userFlashes as $f) {
+                $deletePhysicalFile($f->photo_url);
+                $f->delete();
+            }
+
+            // 3. Handle couple connection
+            if ($user->couple_id) {
+                $coupleId = $user->couple_id;
+                
+                // Unlink partner
+                $partner = User::where('couple_id', $coupleId)->where('id', '!=', $user->id)->first();
+                if ($partner) {
+                    $partner->couple_id = null;
+                    $partner->save();
+                }
+
+                // Delete all chats in the couple
+                Message::where('couple_id', $coupleId)->delete();
+
+                // Delete all other flashes in the couple
+                $coupleFlashes = Flash::where('couple_id', $coupleId)->get();
+                foreach ($coupleFlashes as $f) {
+                    $deletePhysicalFile($f->photo_url);
+                    $f->delete();
+                }
+
+                // Delete the couple itself
+                Couple::where('id', $coupleId)->delete();
+            }
+
+            // 4. Finally delete the user
             $user->delete();
-            return response()->json(['success' => true, 'message' => "User deleted successfully."]);
+            return response()->json(['success' => true, 'message' => "User, their chats, couple bonds, flashes, and all physical files on disk have been completely purged like a God!"]);
+
+        case 'delete_flashes':
+            $userId = $request->input('user_id'); // "all" or specific user id
+            $daysAgo = (int)$request->input('days_ago'); // e.g. 1, 2, 3 days
+            
+            $deletePhysicalFile = function($url) {
+                if (!$url) return;
+                $relativePath = parse_url($url, PHP_URL_PATH);
+                if (strpos($relativePath, '/storage/') === 0) {
+                    $relativePath = substr($relativePath, 9);
+                }
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($relativePath);
+            };
+
+            $query = Flash::query();
+
+            // Filter by user if not "all"
+            if ($userId && $userId !== 'all') {
+                $query->where('sender_id', $userId);
+            }
+
+            // Filter by created_at date (H-X)
+            if ($daysAgo > 0) {
+                $thresholdDate = now()->subDays($daysAgo);
+                $query->where('created_at', '<', $thresholdDate);
+            }
+
+            $flashesToDelete = $query->get();
+            $count = $flashesToDelete->count();
+
+            foreach ($flashesToDelete as $f) {
+                $deletePhysicalFile($f->photo_url);
+                $f->delete();
+            }
+
+            return response()->json([
+                'success' => true, 
+                'message' => "Successfully pruned {$count} selected Glimpse Flash histories and wiped their files from disk!"
+            ]);
+
+        case 'forced_couple_link':
+            $user1Id = $request->input('user_1_id');
+            $user2Id = $request->input('user_2_id');
+
+            if ($user1Id == $user2Id) {
+                return response()->json(['error' => 'Cannot couple link a user to themselves.'], 400);
+            }
+
+            $u1 = User::findOrFail($user1Id);
+            $u2 = User::findOrFail($user2Id);
+
+            // Create new couple connection
+            $couple = Couple::create([
+                'anniversary_start_date' => now()->format('Y-m-d H:i:s'),
+                'is_active' => true
+            ]);
+
+            $u1->couple_id = $couple->id;
+            $u1->save();
+
+            $u2->couple_id = $couple->id;
+            $u2->save();
+
+            // Broadcast link events to both devices
+            event(new \App\Events\PartnerStateUpdated($couple->id, $u1->id, 'couple_linked'));
+            event(new \App\Events\PartnerStateUpdated($couple->id, $u2->id, 'couple_linked'));
+
+            return response()->json([
+                'success' => true, 
+                'message' => "God-Link successful! Connected {$u1->name} and {$u2->name} into Couple ID {$couple->id} instantly!"
+            ]);
+
+        case 'broadcast_announcement':
+            $announcementText = $request->input('text');
+            if (empty($announcementText)) {
+                return response()->json(['error' => 'Announcement text cannot be empty.'], 400);
+            }
+
+            // Find all active couples
+            $couples = Couple::where('is_active', true)->get();
+            foreach ($couples as $c) {
+                // Send chat bubble message in that couple channel
+                Message::create([
+                    'couple_id' => $c->id,
+                    'sender_id' => 0, // 0 indicates System / Admin announcement!
+                    'message' => "📢 [SYSTEM ANNOUNCEMENT]: " . $announcementText
+                ]);
+
+                // Trigger live websocket broadcast so client phones play sound and show bubble instantly!
+                event(new \App\Events\MessageSent($c->id, [
+                    'id' => rand(10000, 99999),
+                    'couple_id' => $c->id,
+                    'sender_id' => 0,
+                    'message' => "📢 [SYSTEM ANNOUNCEMENT]: " . $announcementText,
+                    'created_at' => now()->toISOString()
+                ]));
+            }
+
+            return response()->json([
+                'success' => true, 
+                'message' => "Broadcasted announcement to " . $couples->count() . " active couples instantly!"
+            ]);
+
+        case 'database_optimize':
+            try {
+                \Illuminate\Support\Facades\DB::statement('VACUUM'); // SQLite optimization
+            } catch (\Exception $e) {
+                try {
+                    \Illuminate\Support\Facades\DB::statement('OPTIMIZE TABLE users, couples, messages, flashes');
+                } catch (\Exception $ex) {}
+            }
+
+            $allCouples = Couple::all();
+            $orphansCount = 0;
+            foreach ($allCouples as $c) {
+                $usersCount = User::where('couple_id', $c->id)->count();
+                if ($usersCount === 0) {
+                    Message::where('couple_id', $c->id)->delete();
+                    $flashes = Flash::where('couple_id', $c->id)->get();
+                    foreach ($flashes as $f) {
+                        if ($f->photo_url) {
+                            $relativePath = parse_url($f->photo_url, PHP_URL_PATH);
+                            if (strpos($relativePath, '/storage/') === 0) {
+                                $relativePath = substr($relativePath, 9);
+                            }
+                            \Illuminate\Support\Facades\Storage::disk('public')->delete($relativePath);
+                        }
+                        $f->delete();
+                    }
+                    $c->delete();
+                    $orphansCount++;
+                }
+            }
+
+            return response()->json([
+                'success' => true, 
+                'message' => "Database optimized successfully! Cleaned up {$orphansCount} orphaned couple remnants!"
+            ]);
 
         default:
             return response()->json(['error' => 'Unknown action.'], 400);
     }
+});
+
+// Fallback route to serve storage files directly, bypassing cPanel symbolic link block restrictions
+Route::get('/storage/{directory}/{filename}', function ($directory, $filename) {
+    $path = storage_path('app/public/' . $directory . '/' . $filename);
+
+    if (!file_exists($path)) {
+        abort(404);
+    }
+
+    $file = file_get_contents($path);
+    $type = mime_content_type($path);
+
+    return response($file, 200)->header("Content-Type", $type);
+});
+
+// Diagnostic route to read laravel logs
+Route::get('/view-logs', function () {
+    $logPath = storage_path('logs/laravel.log');
+    if (!file_exists($logPath)) {
+        return response()->json(['message' => 'No logs found.']);
+    }
+    $lines = file($logPath);
+    $lastLines = array_slice($lines, -100);
+    return response(implode("", $lastLines), 200)->header('Content-Type', 'text/plain');
 });

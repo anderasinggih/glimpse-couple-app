@@ -945,6 +945,115 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- ================= DEWA (GOD MODE) CONTROL PANEL ================= -->
+                <div class="p-6 rounded-2xl border border-white/10 bg-white/5 space-y-6">
+                    <div class="flex items-center justify-between border-b border-white/10 pb-4">
+                        <h4 class="text-xl font-bold flex items-center space-x-2 text-activeCyan">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" class="w-6 h-6 text-activeCyan animate-pulse" viewBox="0 0 24 24">
+                                <path d="M12 2L2 22h20L12 2zm0 3.99L19.53 19H4.47L12 5.99zM13 16h-2v2h2v-2zm0-6h-2v4h2v-4z"/>
+                            </svg>
+                            <span>Dewa God Mode Command Center</span>
+                        </h4>
+                        <span class="text-[10px] uppercase font-bold tracking-widest text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-1 rounded">God Level Access</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- God Command 1: Glimpse Flash Exterminator -->
+                        <div class="p-4 bg-slate-950/40 border border-white/5 rounded-xl space-y-4">
+                            <div>
+                                <span class="block font-bold text-white text-sm">⚡ Glimpse Flash Exterminator</span>
+                                <span class="block text-xs text-white/50 mt-1">Directly wipe and prune flash history files from the server's disk based on expiration age.</span>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-[10px] text-white/50 uppercase font-semibold mb-1">Target User</label>
+                                    <select id="dewaPruneUserSelect" class="w-full px-3 py-2 rounded-lg border border-white/10 bg-slate-900 text-white text-xs focus:outline-none focus:border-activeCyan">
+                                        <option value="all">All Users (Global Wipeout)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-white/50 uppercase font-semibold mb-1">Age Filter (Threshold)</label>
+                                    <select id="dewaPruneDaysSelect" class="w-full px-3 py-2 rounded-lg border border-white/10 bg-slate-900 text-white text-xs focus:outline-none focus:border-activeCyan">
+                                        <option value="1">Older than 1 Day (H-1)</option>
+                                        <option value="2">Older than 2 Days (H-2)</option>
+                                        <option value="3">Older than 3 Days (H-3)</option>
+                                        <option value="5">Older than 5 Days (H-5)</option>
+                                        <option value="7" selected>Older than 7 Days (Default Expired H-7)</option>
+                                        <option value="0">All Flashes (Instant Wipe - 0 Days!)</option>
+                                    </select>
+                                </div>
+                                <button onclick="executeFlashPrune()" class="w-full py-2 rounded-lg bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/30 font-bold text-xs transition-all flex items-center justify-center space-x-2">
+                                    <span>Purge selected flashes</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- God Command 2: Forced Couple Linker -->
+                        <div class="p-4 bg-slate-950/40 border border-white/5 rounded-xl space-y-4">
+                            <div>
+                                <span class="block font-bold text-white text-sm">🔗 Forced Couple Linker</span>
+                                <span class="block text-xs text-white/50 mt-1">Forcefully bind two users as a connected couple pair immediately, bypassing invite codes.</span>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="block text-[10px] text-white/50 uppercase font-semibold mb-1">User A</label>
+                                        <select id="dewaLinkUser1Select" class="w-full px-3 py-2 rounded-lg border border-white/10 bg-slate-900 text-white text-xs focus:outline-none focus:border-activeCyan">
+                                            <!-- Dynamic populated -->
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-white/50 uppercase font-semibold mb-1">User B</label>
+                                        <select id="dewaLinkUser2Select" class="w-full px-3 py-2 rounded-lg border border-white/10 bg-slate-900 text-white text-xs focus:outline-none focus:border-activeCyan">
+                                            <!-- Dynamic populated -->
+                                        </select>
+                                    </div>
+                                </div>
+                                <button onclick="executeGodLink()" class="w-full py-2 rounded-lg bg-activeCyan/10 hover:bg-activeCyan text-activeCyan hover:text-slate-950 border border-activeCyan/30 font-bold text-xs transition-all flex items-center justify-center space-x-2">
+                                    <span>Establish God-Link Connection</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- God Command 3: Global System Live Broadcast -->
+                        <div class="p-4 bg-slate-950/40 border border-white/5 rounded-xl space-y-4">
+                            <div>
+                                <span class="block font-bold text-white text-sm">📢 Global System Broadcast</span>
+                                <span class="block text-xs text-white/50 mt-1">Send a live system announcement bubble that flashes immediately on all active couple devices.</span>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-[10px] text-white/50 uppercase font-semibold mb-1">Broadcast Message</label>
+                                    <textarea id="dewaBroadcastText" placeholder="Attention: Glimpse API Server Maintenance in 10 minutes..." rows="2" class="w-full px-3 py-2 rounded-lg border border-white/10 bg-slate-900 text-white text-xs focus:outline-none focus:border-activeCyan resize-none"></textarea>
+                                </div>
+                                <button onclick="executeGlobalBroadcast()" class="w-full py-2 rounded-lg bg-electricPurple/10 hover:bg-electricPurple text-electricPurple hover:text-white border border-electricPurple/30 font-bold text-xs transition-all flex items-center justify-center space-x-2">
+                                    <span>Broadcast System Message</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- God Command 4: System Optimizer & Orphan Sweeper -->
+                        <div class="p-4 bg-slate-950/40 border border-white/5 rounded-xl space-y-4 flex flex-col justify-between">
+                            <div>
+                                <span class="block font-bold text-white text-sm">⚙️ System Engine Optimizer</span>
+                                <span class="block text-xs text-white/50 mt-1">Recalibrate indices, optimize tables, and purge orphan couple connection remnants from database.</span>
+                            </div>
+
+                            <div class="space-y-3 pt-4">
+                                <button onclick="executeDatabaseOptimize()" class="w-full py-3 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 border border-emerald-500/30 font-bold text-xs transition-all flex items-center justify-center space-x-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                                    </svg>
+                                    <span>Optimize & Purge Stale Remnants</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
         
@@ -1154,15 +1263,41 @@
             // 4. Populate simulator & developer utilities select controls
             const simSelect = document.getElementById('simulatorUserSelect');
             const clearSelect = document.getElementById('clearChatCoupleSelect');
+            const dewaPruneSelect = document.getElementById('dewaPruneUserSelect');
+            const dewaLink1Select = document.getElementById('dewaLinkUser1Select');
+            const dewaLink2Select = document.getElementById('dewaLinkUser2Select');
             
             simSelect.innerHTML = '';
             clearSelect.innerHTML = '';
+            
+            // Retain default option for prune
+            dewaPruneSelect.innerHTML = '<option value="all">All Users (Global Wipeout)</option>';
+            dewaLink1Select.innerHTML = '';
+            dewaLink2Select.innerHTML = '';
 
             data.users.forEach(u => {
                 const opt = document.createElement('option');
                 opt.value = u.id;
                 opt.innerText = `${u.name} (${u.email})`;
                 simSelect.appendChild(opt);
+
+                // Populate Dewa Prune User select
+                const optPrune = document.createElement('option');
+                optPrune.value = u.id;
+                optPrune.innerText = u.name;
+                dewaPruneSelect.appendChild(optPrune);
+
+                // Populate Dewa Link User 1
+                const optLink1 = document.createElement('option');
+                optLink1.value = u.id;
+                optLink1.innerText = u.name;
+                dewaLink1Select.appendChild(optLink1);
+
+                // Populate Dewa Link User 2
+                const optLink2 = document.createElement('option');
+                optLink2.value = u.id;
+                optLink2.innerText = u.name;
+                dewaLink2Select.appendChild(optLink2);
             });
 
             data.couples.forEach(c => {
@@ -1702,6 +1837,75 @@
                 ctx.strokeStyle = lineColor;
                 ctx.lineWidth = 2;
                 ctx.stroke();
+            }
+        }
+
+        // --- DEWA (GOD MODE) ACTIONS ---
+        async function dewaApiCall(action, payload) {
+            const token = localStorage.getItem('glimpse_admin_token');
+            try {
+                const response = await fetch('/admin/api', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Admin-Token': token
+                    },
+                    body: JSON.stringify({ action, ...payload })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    alert(`✨ Dewa Success:\n${data.message}`);
+                    fetchData(); // Sync dashboard
+                } else {
+                    alert(`❌ Dewa Error:\n${data.error || 'Request failed'}`);
+                }
+            } catch (err) {
+                console.error(err);
+                alert(`❌ Network failure during Dewa command execution.`);
+            }
+        }
+
+        function executeFlashPrune() {
+            const userId = document.getElementById('dewaPruneUserSelect').value;
+            const daysAgo = document.getElementById('dewaPruneDaysSelect').value;
+            const confirmation = confirm(`⚠️ DEWA COMMAND WARNING ⚠️\n\nAre you sure you want to exterminate Glimpse Flash records for this selection? This will physically and permanently erase flash files from the server's disk!`);
+            if (confirmation) {
+                dewaApiCall('delete_flashes', { user_id: userId, days_ago: daysAgo });
+            }
+        }
+
+        function executeGodLink() {
+            const user1 = document.getElementById('dewaLinkUser1Select').value;
+            const user2 = document.getElementById('dewaLinkUser2Select').value;
+            if (user1 === user2) {
+                alert("❌ Cannot establish link between the same user!");
+                return;
+            }
+            const confirmation = confirm(`Establish direct God-Link between User ID ${user1} and User ID ${user2} instantly?`);
+            if (confirmation) {
+                dewaApiCall('forced_couple_link', { user_1_id: user1, user_2_id: user2 });
+            }
+        }
+
+        function executeGlobalBroadcast() {
+            const text = document.getElementById('dewaBroadcastText').value.trim();
+            if (!text) {
+                alert("❌ Please write an announcement text to broadcast!");
+                return;
+            }
+            const confirmation = confirm(`📢 Broadcast system announcement to all active couple companion devices instantly?`);
+            if (confirmation) {
+                dewaApiCall('broadcast_announcement', { text: text });
+                document.getElementById('dewaBroadcastText').value = '';
+            }
+        }
+
+        function executeDatabaseOptimize() {
+            const confirmation = confirm(`⚙️ Run system engine database vacuuming & orphans purge?`);
+            if (confirmation) {
+                dewaApiCall('database_optimize', {});
             }
         }
     </script>
