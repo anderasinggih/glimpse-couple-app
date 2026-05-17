@@ -105,15 +105,40 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                     }
                 } else {
                     // Non-stationary: Device is moving (walking, automotive, shaking, etc.)
+                    
+                    // Pre-emptive Dynamic GPS configuration based on activity type
+                    var accuracy = kCLLocationAccuracyNearestTenMeters
+                    var filter = 30.0
+                    var tipeGerak = "bergerak"
+                    
+                    if activity.walking {
+                        tipeGerak = "jalan kaki 🚶‍♂️"
+                        accuracy = kCLLocationAccuracyNearestTenMeters
+                        filter = 20.0
+                    } else if activity.running {
+                        tipeGerak = "berlari 🏃‍♂️"
+                        accuracy = kCLLocationAccuracyNearestTenMeters
+                        filter = 20.0
+                    } else if activity.automotive {
+                        tipeGerak = "berkendara 🚗"
+                        accuracy = kCLLocationAccuracyBest
+                        filter = 5.0
+                    } else if activity.cycling {
+                        tipeGerak = "sepeda 🚴‍♂️"
+                        accuracy = kCLLocationAccuracyBest
+                        filter = 10.0
+                    }
+                    
+                    // Apply dynamic settings pre-emptively
+                    if self.locationManager.desiredAccuracy != accuracy || self.locationManager.distanceFilter != filter {
+                        self.locationManager.desiredAccuracy = accuracy
+                        self.locationManager.distanceFilter = filter
+                        self.log("⚡ Akurasi Dinamis (CM): GPS dikonfigurasi ke \(accuracy == kCLLocationAccuracyBest ? "AKURASI TERBAIK 🚗" : "HEMAT DAYA 🚶‍♂️") (Filter: \(filter)m)")
+                    }
+                    
                     if self.isStationary && self.motionDebounceTimer == nil {
                         self.log("⏳ Pergerakan Terdeteksi: Memantau apakah gerakan berlanjut selama 3 menit sebelum menyalakan GPS...")
                         LiveDebugLogger.shared.setGPSStatus("Evaluating Movement... ⏳")
-                        
-                        var tipeGerak = "bergerak"
-                        if activity.walking { tipeGerak = "jalan kaki 🚶‍♂️" }
-                        else if activity.running { tipeGerak = "berlari 🏃‍♂️" }
-                        else if activity.automotive { tipeGerak = "berkendara 🚗" }
-                        else if activity.cycling { tipeGerak = "sepeda 🚴‍♂️" }
                         
                         // Schedule GPS wake-up after 3 minutes (180 seconds) of continuous motion
                         self.motionDebounceTimer = Timer.scheduledTimer(withTimeInterval: 180.0, repeats: false) { [weak self] _ in
@@ -236,6 +261,22 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         if #available(iOS 15.0, *) {
             if location.sourceInformation?.isSimulatedBySoftware == true {
                 LiveDebugLogger.shared.setGPSStatus("Xcode Simulator Active 🛸")
+            }
+        }
+        
+        // Dynamic accuracy fallback based on actual physical speed (Layer 2)
+        let speed = location.speed // in meters/second
+        if speed >= 5.0 { // Speed is >= 18 km/h (driving/cycling/etc)
+            if locationManager.desiredAccuracy != kCLLocationAccuracyBest {
+                locationManager.desiredAccuracy = kCLLocationAccuracyBest
+                locationManager.distanceFilter = 5.0
+                self.log("⚡ Akurasi Dinamis (Speed): Kecepatan terdeteksi \(Int(speed * 3.6)) km/jam. Mengaktifkan GPS Akurasi Maksimal!")
+            }
+        } else if speed > 0.5 && speed < 3.0 { // Walking speed (1.8 km/h to 10.8 km/h)
+            if locationManager.desiredAccuracy != kCLLocationAccuracyNearestTenMeters {
+                locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+                locationManager.distanceFilter = 20.0
+                self.log("⚡ Akurasi Dinamis (Speed): Kecepatan terdeteksi \(Int(speed * 3.6)) km/jam. Mengaktifkan GPS Akurasi Hemat Daya.")
             }
         }
         
