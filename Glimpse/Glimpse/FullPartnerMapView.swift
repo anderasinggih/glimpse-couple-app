@@ -7,6 +7,7 @@ struct FullPartnerMapView: View {
     @State private var position: MapCameraPosition
     @State private var mapStyle: MapStyle = .standard(emphasis: .muted)
     @State private var isSatellite = true
+    @State private var mapPulse = false
     
     // Polling timer for maps: 3.0 seconds
     @State private var timer: Timer.TimerPublisher = Timer.publish(every: 3.0, on: .main, in: .common)
@@ -24,8 +25,76 @@ struct FullPartnerMapView: View {
             if let partner = auth.partner {
                 // Full Screen Map with Pulsing Partner Marker
                 Map(position: $position) {
-                    Annotation(partner.name, coordinate: partner.coordinate) {
-                        PartnerMarker(photoUrl: partner.profile_photo_url, isOffline: partner.isOffline)
+                    if auth.isTogether, let currentUser = auth.currentUser {
+                        Annotation("Together", coordinate: partner.coordinate) {
+                            ZStack {
+                                Circle()
+                                    .fill(LinearGradient(colors: [.electricPurple.opacity(0.3), .activeCyan.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                    .frame(width: 90, height: 90)
+                                    .scaleEffect(mapPulse ? 1.25 : 0.85)
+                                    .blur(radius: 8)
+                                    .onAppear {
+                                        withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                                            mapPulse = true
+                                        }
+                                    }
+                                
+                                HStack(spacing: -8) {
+                                    CachedImageView(urlString: currentUser.profile_photo_url)
+                                        .frame(width: 38, height: 38)
+                                        .clipShape(Circle())
+                                        .overlay(Circle().stroke(Color.electricPurple, lineWidth: 1.5))
+                                        .shadow(color: .electricPurple.opacity(0.5), radius: 5)
+                                    
+                                    Image(systemName: "heart.fill")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.red)
+                                        .scaleEffect(mapPulse ? 1.2 : 0.8)
+                                        .shadow(color: .red, radius: 4)
+                                        .zIndex(5)
+                                    
+                                    CachedImageView(urlString: partner.profile_photo_url)
+                                        .frame(width: 38, height: 38)
+                                        .clipShape(Circle())
+                                        .overlay(Circle().stroke(Color.activeCyan, lineWidth: 1.5))
+                                        .shadow(color: .activeCyan.opacity(0.5), radius: 5)
+                                }
+                                .padding(6)
+                                .background(.ultraThinMaterial)
+                                .cornerRadius(24)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 24)
+                                        .stroke(
+                                            LinearGradient(colors: [.white.opacity(0.5), .clear], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                            lineWidth: 0.5
+                                        )
+                                )
+                            }
+                        }
+                    } else {
+                        if let currentUser = auth.currentUser {
+                            Annotation("Me", coordinate: currentUser.coordinate) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.electricPurple.opacity(0.2))
+                                        .frame(width: 60, height: 60)
+                                        .blur(radius: 10)
+                                    
+                                    PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false)
+                                }
+                            }
+                        }
+                        
+                        Annotation(partner.name, coordinate: partner.coordinate) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.activeCyan.opacity(0.2))
+                                    .frame(width: 60, height: 60)
+                                    .blur(radius: 10)
+                                
+                                PartnerMarker(photoUrl: partner.profile_photo_url, isOffline: partner.isOffline)
+                            }
+                        }
                     }
                 }
                 .mapStyle(isSatellite ? .hybrid(elevation: .realistic) : .standard(emphasis: .muted))
