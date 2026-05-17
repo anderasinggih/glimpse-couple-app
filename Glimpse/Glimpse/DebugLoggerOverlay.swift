@@ -126,9 +126,7 @@ struct DebugLoggerOverlay: View {
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                            .background(
-                                VisualEffectBlur(material: .systemUltraThinMaterialDark, blendingMode: .withinWindow)
-                            )
+                            .background(.ultraThinMaterial)
                             .cornerRadius(20)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 20)
@@ -171,20 +169,5 @@ struct DebugLoggerOverlay: View {
         if log.contains("🏃‍♂️") || log.contains("🛸") { return .green }
         if log.contains("📴") { return .orange }
         return .white
-    }
-}
-
-// Helper to provide true native blur in SwiftUI
-struct VisualEffectBlur: UIViewRepresentable {
-    var material: UIBlurEffect.Material
-    var blendingMode: UIVisualEffectView.BlendingMode
-    
-    func makeUIView(context: Context) -> UIVisualEffectView {
-        let view = UIVisualEffectView(effect: UIBlurEffect(style: material))
-        return view
-    }
-    
-    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {
-        uiView.effect = UIBlurEffect(style: material)
     }
 }
