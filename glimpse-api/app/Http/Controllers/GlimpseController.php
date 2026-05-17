@@ -322,6 +322,15 @@ class GlimpseController extends Controller
             return response()->json([]);
         }
 
+        // Clean up flashes older than 7 days along with their images
+        $oldFlashes = \App\Models\Flash::where('created_at', '<', now()->subDays(7))->get();
+        foreach ($oldFlashes as $oldFlash) {
+            if ($oldFlash->photo_url) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete(str_replace('/storage/', '', $oldFlash->photo_url));
+            }
+            $oldFlash->delete();
+        }
+
         $flashes = \App\Models\Flash::where('couple_id', $user->couple_id)
             ->with('sender')
             ->orderBy('created_at', 'desc')

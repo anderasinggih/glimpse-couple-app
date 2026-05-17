@@ -10,6 +10,7 @@ struct MainDashboardView: View {
     @State private var lastSeenLoveBurstTimestamp: Double = 0.0
     @State private var popHearts: [PopHeart] = []
     @State private var expandedFlashId: Int? = nil
+    @State private var showAllFlashes: Bool = false
     private let dashboardPollTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
     
     var body: some View {
@@ -383,6 +384,7 @@ struct MainDashboardView: View {
                                     Image(systemName: "photo.stack.fill")
                                         .foregroundColor(.activeCyan)
                                         .font(.system(size: 18))
+                                        .shadow(color: .activeCyan.opacity(0.5), radius: 6)
                                     Text("Flash History")
                                         .font(.system(size: 16, weight: .bold, design: .rounded))
                                         .foregroundColor(.white)
@@ -400,8 +402,10 @@ struct MainDashboardView: View {
                                         .padding(.vertical, 20)
                                         .frame(maxWidth: .infinity)
                                 } else {
+                                    let visibleFlashes = showAllFlashes ? auth.flashes : Array(auth.flashes.prefix(8))
+                                    
                                     VStack(spacing: 12) {
-                                        ForEach(auth.flashes) { flash in
+                                        ForEach(visibleFlashes) { flash in
                                             let isExpanded = expandedFlashId == flash.id
                                             let isMe = flash.sender_id == auth.currentUser?.id
                                             
@@ -422,6 +426,7 @@ struct MainDashboardView: View {
                                                                 Circle()
                                                                     .fill(isMe ? Color.electricPurple : Color.activeCyan)
                                                                     .frame(width: 6, height: 6)
+                                                                    .shadow(color: isMe ? Color.electricPurple : Color.activeCyan, radius: 4)
                                                                 
                                                                 Text(isMe ? "You" : flash.sender_name)
                                                                     .font(.system(size: 13, weight: .bold))
@@ -448,9 +453,12 @@ struct MainDashboardView: View {
                                                 // CONTENT BODY (EXPANDABLE)
                                                 if isExpanded {
                                                     VStack(alignment: .leading, spacing: 12) {
-                                                        // Photo Row
-                                                        CachedImageView(urlString: flash.photo_url)
-                                                            .frame(height: 250)
+                                                        // Photo Row - RIGID 1:1 ASPECT RATIO
+                                                        Color.clear
+                                                            .aspectRatio(1.0, contentMode: .fit)
+                                                            .overlay(
+                                                                CachedImageView(urlString: flash.photo_url)
+                                                            )
                                                             .clipShape(RoundedRectangle(cornerRadius: 12))
                                                             .overlay(
                                                                 RoundedRectangle(cornerRadius: 12)
@@ -462,8 +470,9 @@ struct MainDashboardView: View {
                                                             HStack(spacing: 8) {
                                                                 Image(systemName: "mappin.circle.fill")
                                                                     .foregroundColor(.activeCyan)
+                                                                    .shadow(color: .activeCyan.opacity(0.5), radius: 4)
                                                                 Text(locName)
-                                                                    .font(.system(size: 13, weight: .medium))
+                                                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
                                                                     .foregroundColor(.white)
                                                             }
                                                         }
@@ -474,10 +483,11 @@ struct MainDashboardView: View {
                                                                 .font(.system(size: 13, weight: .regular))
                                                                 .italic()
                                                                 .foregroundColor(.white.opacity(0.8))
-                                                                .padding(.horizontal, 8)
-                                                                .padding(.vertical, 6)
+                                                                .padding(.horizontal, 10)
+                                                                .padding(.vertical, 8)
+                                                                .frame(maxWidth: .infinity, alignment: .leading)
                                                                 .background(Color.white.opacity(0.04))
-                                                                .cornerRadius(6)
+                                                                .cornerRadius(8)
                                                         }
                                                         
                                                         // Map View Row
@@ -496,6 +506,7 @@ struct MainDashboardView: View {
                                                                         Circle()
                                                                             .stroke(isMe ? Color.electricPurple : Color.activeCyan, lineWidth: 2)
                                                                             .frame(width: 24, height: 24)
+                                                                            .shadow(color: isMe ? Color.electricPurple : Color.activeCyan, radius: 4)
                                                                     }
                                                                 }
                                                             }
@@ -519,6 +530,34 @@ struct MainDashboardView: View {
                                                     .stroke(Color.white.opacity(0.08), lineWidth: 1)
                                             )
                                         }
+                                    }
+                                    
+                                    // "See More" / "See Less" Button
+                                    if auth.flashes.count > 8 {
+                                        Button {
+                                            withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+                                                showAllFlashes.toggle()
+                                            }
+                                        } label: {
+                                            HStack {
+                                                Text(showAllFlashes ? "See Less" : "See More Captures")
+                                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                                    .foregroundColor(showAllFlashes ? .white.opacity(0.6) : .activeCyan)
+                                                Image(systemName: showAllFlashes ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
+                                                    .font(.system(size: 14))
+                                                    .foregroundColor(showAllFlashes ? .white.opacity(0.6) : .activeCyan)
+                                            }
+                                            .padding(.vertical, 12)
+                                            .frame(maxWidth: .infinity)
+                                            .background(Color.white.opacity(showAllFlashes ? 0.02 : 0.04))
+                                            .cornerRadius(12)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(showAllFlashes ? Color.white.opacity(0.05) : Color.activeCyan.opacity(0.2), lineWidth: 1)
+                                            )
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .padding(.top, 8)
                                     }
                                 }
                             }
