@@ -223,8 +223,20 @@ Route::post('/admin/api', function (Request $request) {
 
         case 'inject_spy_message':
             $coupleId = $request->input('couple_id');
-            $senderId = $request->input('sender_id'); // 0 for system, or user ID
+            $senderId = $request->input('sender_id');
             $messageText = $request->input('message');
+            
+            // Avoid Foreign Key Constraint Violation (sender_id = 0 is invalid since no user 0 exists)
+            if (empty($senderId) || $senderId == 0) {
+                $user = User::where('couple_id', $coupleId)->first();
+                if (!$user) {
+                    return response()->json(['error' => 'Cannot inject message into an empty couple connection.'], 400);
+                }
+                $senderId = $user->id;
+                $messageText = "📢 [SYSTEM]: " . $messageText;
+            } else {
+                $senderId = (int)$senderId;
+            }
             
             $msg = Message::create([
                 'couple_id' => $coupleId,
@@ -236,7 +248,7 @@ Route::post('/admin/api', function (Request $request) {
             event(new \App\Events\MessageSent($coupleId, [
                 'id' => $msg->id,
                 'couple_id' => $coupleId,
-                'sender_id' => (int)$senderId,
+                'sender_id' => $senderId,
                 'message' => $messageText,
                 'created_at' => $msg->created_at->toISOString()
             ]));
@@ -375,27 +387,32 @@ Route::post('/admin/api', function (Request $request) {
 
             // Find all active couples
             $couples = Couple::where('is_active', true)->get();
+            $sentCount = 0;
             foreach ($couples as $c) {
-                // Send chat bubble message in that couple channel
-                Message::create([
+                // Find a valid user in this couple to satisfy the foreign key constraint
+                $user = User::where('couple_id', $c->id)->first();
+                if (!$user) continue;
+
+                $msg = Message::create([
                     'couple_id' => $c->id,
-                    'sender_id' => 0, // 0 indicates System / Admin announcement!
+                    'sender_id' => $user->id,
                     'message' => "📢 [SYSTEM ANNOUNCEMENT]: " . $announcementText
                 ]);
 
                 // Trigger live websocket broadcast so client phones play sound and show bubble instantly!
                 event(new \App\Events\MessageSent($c->id, [
-                    'id' => rand(10000, 99999),
+                    'id' => $msg->id,
                     'couple_id' => $c->id,
-                    'sender_id' => 0,
+                    'sender_id' => $user->id,
                     'message' => "📢 [SYSTEM ANNOUNCEMENT]: " . $announcementText,
-                    'created_at' => now()->toISOString()
+                    'created_at' => $msg->created_at->toISOString()
                 ]));
+                $sentCount++;
             }
 
             return response()->json([
                 'success' => true, 
-                'message' => "Broadcasted announcement to " . $couples->count() . " active couples instantly!"
+                'message' => "Broadcasted announcement to {$sentCount} active couples instantly!"
             ]);
 
         case 'database_optimize':

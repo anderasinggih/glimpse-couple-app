@@ -2026,9 +2026,9 @@
             messages.forEach(m => {
                 const bubble = document.createElement('div');
                 
-                // System message (sender_id = 0)
-                if (m.sender_id === 0) {
-                    bubble.className = 'flex justify-center my-2';
+                // System message (sender_id = 0 or starts with 📢)
+                if (m.sender_id === 0 || m.message.includes('📢')) {
+                    bubble.className = 'flex justify-center my-2 w-full';
                     bubble.innerHTML = `
                         <div class="px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-[10px] text-white/60 font-mono tracking-tight max-w-sm text-center">
                             ${m.message}
