@@ -608,6 +608,12 @@ struct ChatView: View {
     
     private func loadMessages() {
         guard auth.partner != nil && auth.coupleActive else { return }
+        
+        // 1. Load instantly from cache for 0ms startup & offline resilience
+        if !auth.latestFetchedMessages.isEmpty {
+            self.messages = auth.latestFetchedMessages
+        }
+        
         Task {
             if let msgs = try? await auth.fetchMessages() {
                 await MainActor.run {

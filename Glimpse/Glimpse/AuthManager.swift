@@ -56,6 +56,7 @@ class AuthManager {
             
             // 1. Instantly load cached session for offline resilience
             loadCachedSession()
+            loadCachedMessages()
             
             Task {
                 try? await self.fetchState()
@@ -309,6 +310,7 @@ class AuthManager {
         await MainActor.run {
             self.latestFetchedMessages = decoded
             self.updateUnreadCount()
+            self.saveMessagesCache()
         }
         return decoded
     }
@@ -767,6 +769,7 @@ class AuthManager {
                             if !self.latestFetchedMessages.contains(where: { $0.id == payload.message.id }) {
                                 self.latestFetchedMessages.append(payload.message)
                                 self.updateUnreadCount()
+                                self.saveMessagesCache()
                                 NotificationCenter.default.post(name: Notification.Name("GlimpseChatMessageReceived"), object: payload.message)
                                 
                                 // Global sound & haptic alert for incoming messages from partner!
@@ -852,6 +855,23 @@ class AuthManager {
         DispatchQueue.global().asyncAfter(deadline: .now() + reconnectInterval) { [weak self] in
             print("🔄 Attempting to reconnect to WebSocket...")
             self?.connectWebSocket()
+        }
+    }
+    
+    // MARK: - MESSAGES CACHING
+    func saveMessagesCache() {
+        if let encoded = try? JSONEncoder().encode(latestFetchedMessages) {
+            UserDefaults.standard.set(encoded, forKey: "glimpse_cached_messages")
+        }
+    }
+    
+    func loadCachedMessages() {
+        guard let cachedData = UserDefaults.standard.data(forKey: "glimpse_cached_messages") else { return }
+        do {
+            let decoded = try JSONDecoder().decode([ChatMessage].self, from: cachedData)
+            self.latestFetchedMessages = decoded
+        } catch {
+            print("❌ Failed to decode cached messages: \(error)")
         }
     }
     
