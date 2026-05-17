@@ -398,50 +398,70 @@ struct FullPartnerMapView: View {
         let endLoc = CLLocation(latitude: end.latitude, longitude: end.longitude)
         let distance = startLoc.distance(from: endLoc)
         
-        // Midpoint coordinate along the path
-        let midLat = (start.latitude + end.latitude) / 2.0
-        let midLon = (start.longitude + end.longitude) / 2.0
-        let midpoint = CLLocationCoordinate2D(latitude: midLat, longitude: midLon)
+        let dLat = end.latitude - start.latitude
+        let dLon = end.longitude - start.longitude
+        
+        // Perpendicular vector to create a circular arc
+        let pLat = -dLon
+        let pLon = dLat
+        
+        // Circular control point offset to create a gorgeous sweeping Bezier path
+        let arcStrength = 0.25
+        let ctrlLat = (start.latitude + end.latitude) / 2.0 + pLat * arcStrength
+        let ctrlLon = (start.longitude + end.longitude) / 2.0 + pLon * arcStrength
+        let control = CLLocationCoordinate2D(latitude: ctrlLat, longitude: ctrlLon)
+        
+        let steps = 25
+        let duration: Double = 1.2 // Fast & crisp (1.2 seconds total flight time!)
+        let stepDelay = duration / Double(steps)
         
         Task {
-            // --- STAGE 1: ZOOM OUT FLAT TO SHOW BOTH (MIDPOINT FOCUS) ---
-            // Swoop out to midpoint so BOTH coordinates are fully visible. Keep 2D (pitch 0, heading 0)
-            // Clamp maximum distance to 2,000 km to prevent zooming out into outer space if very far apart!
-            let targetZoom = min(2_000_000.0, max(3500.0, distance * 1.8))
-            
-            await MainActor.run {
-                withAnimation(.spring(response: 2.0, dampingFraction: 0.82)) {
-                    position = .camera(MapCamera(
-                        centerCoordinate: midpoint,
-                        distance: targetZoom,
-                        heading: 0.0, // Face North
-                        pitch: 0.0 // Keep 2D Flat
-                    ))
+            for i in 0...steps {
+                let t = Double(i) / Double(steps)
+                
+                // 1. Bezier interpolation for curved coordinate path
+                let mt = 1.0 - t
+                let lat = mt * mt * start.latitude + 2.0 * mt * t * control.latitude + t * t * end.latitude
+                let lon = mt * mt * start.longitude + 2.0 * mt * t * control.longitude + t * t * end.longitude
+                let currentCoord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                
+                // 2. Parabolic altitude arc (rise at zenith, swoop in at landing)
+                let peakHeight = min(1_500_000.0, max(4000.0, distance * 1.5))
+                let startHeight = 600.0
+                let endHeight = 600.0
+                let currentDistance = startHeight + (endHeight - startHeight) * t + 4.0 * t * (1.0 - t) * (peakHeight - startHeight)
+                
+                // 3. Smooth dynamic heading rotation shift (circular camera pan)
+                let maxHeading = 25.0
+                let currentHeading = 4.0 * t * (1.0 - t) * maxHeading
+                
+                // 4. Smooth 3D tilt pitch (depth swooping)
+                let maxPitch = 30.0
+                let currentPitch = 4.0 * t * (1.0 - t) * maxPitch
+                
+                await MainActor.run {
+                    withAnimation(.linear(duration: stepDelay)) {
+                        position = .camera(MapCamera(
+                            centerCoordinate: currentCoord,
+                            distance: currentDistance,
+                            heading: currentHeading,
+                            pitch: currentPitch
+                        ))
+                    }
                 }
+                
+                try? await Task.sleep(nanoseconds: UInt64(stepDelay * 1_000_000_000))
             }
             
-            // Allow the user to comfortably see both partners and the glowing frequency line (1.8s)
-            try? await Task.sleep(nanoseconds: 1_800_000_000)
-            
-            // --- STAGE 2: CUSHIONED 2D FLAT LANDING ON DESTINATION ---
-            // Settle close on the destination, keeping standard flat 2D (pitch 0) and facing North (0)
             await MainActor.run {
-                withAnimation(.spring(response: 2.2, dampingFraction: 0.88)) {
+                // Settle beautifully at precise target location flat facing North
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
                     position = .camera(MapCamera(
                         centerCoordinate: end,
-                        distance: 500.0, // Close details zoom
-                        heading: 0.0, // Aligns North
-                        pitch: 0.0 // Standard 2D flat
+                        distance: 500.0,
+                        heading: 0.0,
+                        pitch: 0.0
                     ))
-                }
-            }
-            
-            // Wait for Stage 2 glide animation to fully complete (2.2 seconds) before releasing flight lock!
-            try? await Task.sleep(nanoseconds: 2_200_000_000)
-            
-            await MainActor.run {
-                // Update bottom overlay info card ONLY when camera has fully arrived at destination!
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
                     currentlyFocusedTarget = targetFocus
                 }
                 isFlying = false
