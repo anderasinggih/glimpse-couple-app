@@ -17,6 +17,10 @@ Route::get('/admin', function () {
     return view('admin');
 });
 
+Route::get('/admin/login', function () {
+    return view('admin-login');
+});
+
 Route::get('/admin/diagnose', function (Request $request) {
     $testToken = $request->query('token', '');
     
