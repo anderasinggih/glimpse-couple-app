@@ -32,6 +32,7 @@ class User extends Authenticatable
         'battery_level',
         'latest_photo_url',
         'profile_photo_url',
+        'last_seen_message_id',
     ];
 
     protected static function boot()

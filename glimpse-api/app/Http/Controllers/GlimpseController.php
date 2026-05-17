@@ -94,6 +94,7 @@ class GlimpseController extends Controller
                 'status_note' => $user->status_note,
                 'latest_photo_url' => $latestPhotoUrl,
                 'last_updated' => $user->updated_at->toIso8601String(),
+                'last_seen_message_id' => $user->last_seen_message_id !== null ? (int)$user->last_seen_message_id : null,
             ],
             'partner_data' => $partner ? [
                 'id' => (int)$partner->id,
@@ -109,6 +110,7 @@ class GlimpseController extends Controller
                 'status_note' => $partner->status_note,
                 'latest_photo_url' => $partnerLatestPhotoUrl,
                 'last_updated' => $partner->updated_at->toIso8601String(),
+                'last_seen_message_id' => $partner->last_seen_message_id !== null ? (int)$partner->last_seen_message_id : null,
             ] : null,
             'anniversary_start_date' => $couple ? $couple->anniversary_start_date : null,
             'disconnect_requested_by' => $couple && $couple->disconnect_requested_by !== null ? (int)$couple->disconnect_requested_by : null,
@@ -409,6 +411,23 @@ class GlimpseController extends Controller
         }
 
         return response()->json($msg);
+    }
+
+    public function markAsRead(Request $request)
+    {
+        $request->validate(['message_id' => 'required|integer']);
+        $user = $request->user();
+
+        $user->last_seen_message_id = $request->message_id;
+        $user->save();
+
+        try {
+            broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+        }
+
+        return response()->json(['status' => 'ok', 'last_seen_message_id' => $user->last_seen_message_id]);
     }
 
     public function updateStatus(Request $request)

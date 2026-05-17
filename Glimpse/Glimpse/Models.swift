@@ -16,6 +16,7 @@ struct GlimpseUser: Codable, Identifiable {
     let last_updated: String?
     let invite_code: String?
     let couple_id: Int?
+    let last_seen_message_id: Int?
     
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude ?? 0, longitude: longitude ?? 0)

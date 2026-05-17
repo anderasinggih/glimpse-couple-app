@@ -27,6 +27,11 @@ class AuthManager {
             _selectedTab = newValue
             if newValue == 3 {
                 clearUnreadMessages()
+                if let lastMsg = latestFetchedMessages.last {
+                    Task {
+                        await markMessagesAsRead(messageId: lastMsg.id)
+                    }
+                }
             }
         }
     }
@@ -317,6 +322,11 @@ class AuthManager {
             self.updateUnreadCount()
             self.saveMessagesCache()
         }
+        if let lastMsg = decoded.last {
+            Task {
+                await self.markMessagesAsRead(messageId: lastMsg.id)
+            }
+        }
         return decoded
     }
     
@@ -365,6 +375,22 @@ class AuthManager {
             UserDefaults.standard.set(lastMsg.id, forKey: "last_read_message_id")
         }
         unreadMessagesCount = 0
+    }
+    
+    func markMessagesAsRead(messageId: Int) async {
+        guard let url = URL(string: "\(baseURL)/glimpse/chat/read") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body: [String: Any] = ["message_id": messageId]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        
+        _ = try? await URLSession.shared.data(for: request)
     }
     
     func sendChatMessage(text: String) async throws -> ChatMessage {
@@ -926,6 +952,12 @@ class AuthManager {
                                 self.updateUnreadCount()
                                 self.saveMessagesCache()
                                 NotificationCenter.default.post(name: Notification.Name("GlimpseChatMessageReceived"), object: payload.message)
+                                
+                                if self.selectedTab == 3 {
+                                    Task {
+                                        await self.markMessagesAsRead(messageId: payload.message.id)
+                                    }
+                                }
                                 
                                 // Global sound & haptic alert for incoming messages from partner!
                                 if payload.message.sender_id != self.currentUser?.id {
