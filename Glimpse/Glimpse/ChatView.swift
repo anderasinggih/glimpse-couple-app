@@ -434,6 +434,11 @@ struct ChatView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                     .focused($isInputFocused)
+                    .onChange(of: messageInput) { oldValue, newValue in
+                        if newValue.count > 500 {
+                            messageInput = String(newValue.prefix(500))
+                        }
+                    }
             }
             .frame(minHeight: 44)
             .background(.ultraThinMaterial)
@@ -456,7 +461,7 @@ struct ChatView: View {
                     .clipShape(Circle())
                     .shadow(color: messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.clear : Color.electricPurple.opacity(0.3), radius: 8, y: 3)
             }
-            .disabled(messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+            .disabled(messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }
     
@@ -595,26 +600,53 @@ struct ChatView: View {
         let cleanText = messageInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanText.isEmpty else { return }
         
-        isSending = true
+        // 1. Clear input instantly
         messageInput = ""
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         
+        // 2. Play soft tap sound and haptic vibration instantly
+        AudioServicesPlaySystemSound(1104) // Soft WA-like tek click
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        
+        // 3. Generate optimistic local ChatMessage
+        let tempId = Int.random(in: -100000...(-1))
+        let formatter = ISO8601DateFormatter()
+        let createdAtStr = formatter.string(from: Date())
+        
+        let tempMsg = ChatMessage(
+            id: tempId,
+            couple_id: auth.currentUser?.couple_id ?? 0,
+            sender_id: auth.currentUser?.id ?? 0,
+            message: cleanText,
+            created_at: createdAtStr,
+            updated_at: createdAtStr
+        )
+        
+        // 4. Instantly append to chat list to show bubble in 0ms!
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            self.messages.append(tempMsg)
+        }
+        
+        // 5. Perform the real network request in background Task
         Task {
             do {
                 let sentMsg = try await auth.sendChatMessage(text: cleanText)
+                
                 await MainActor.run {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-                        self.messages.append(sentMsg)
+                    // Reconcile and replace temporary optimistic message with server-confirmed message
+                    if let index = self.messages.firstIndex(where: { $0.id == tempId }) {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            self.messages[index] = sentMsg
+                        }
                     }
-                    isSending = false
-                    
-                    // Soft "tek" click sound (Tink: 1104) and haptic "klek" (.rigid) on send
-                    AudioServicesPlaySystemSound(1104) // Soft WA-like tek click
-                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                 }
             } catch {
-                print("Failed to send message: \(error)")
-                isSending = false
+                print("❌ Background message send failed: \(error)")
+                await MainActor.run {
+                    // Remove optimistic bubble if sending failed
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        self.messages.removeAll(where: { $0.id == tempId })
+                    }
+                }
             }
         }
     }
