@@ -72,7 +72,7 @@ struct DebugLoggerOverlay: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 if logger.logs.isEmpty {
                                     Text("Waiting for GPS or CoreMotion events...")
-                                        .font(.system(size: 12, style: .monospaced))
+                                        .font(.system(size: 12, design: .monospaced))
                                         .foregroundColor(.white.opacity(0.4))
                                         .padding(.vertical, 40)
                                         .frame(maxWidth: .infinity, alignment: .center)
