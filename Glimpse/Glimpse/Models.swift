@@ -47,8 +47,32 @@ struct CoupleResponse: Codable {
     
     var anniversaryDate: Date? {
         guard let start = anniversary_start_date else { return nil }
-        let formatter = ISO8601DateFormatter()
-        return formatter.date(from: start)
+        
+        // 1. Try ISO8601 Date Formatter
+        let isoFormatter = ISO8601DateFormatter()
+        if let date = isoFormatter.date(from: start) {
+            return date
+        }
+        
+        // 2. Try YYYY-MM-DD HH:mm:ss standard database format
+        let dbFormatter = DateFormatter()
+        dbFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        dbFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dbFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        if let date = dbFormatter.date(from: start) {
+            return date
+        }
+        
+        // 3. Try YYYY-MM-DD simple date format
+        let simpleFormatter = DateFormatter()
+        simpleFormatter.dateFormat = "yyyy-MM-dd"
+        simpleFormatter.locale = Locale(identifier: "en_US_POSIX")
+        simpleFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        if let date = simpleFormatter.date(from: start) {
+            return date
+        }
+        
+        return nil
     }
 }
 
