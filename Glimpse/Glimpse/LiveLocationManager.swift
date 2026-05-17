@@ -93,7 +93,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                         self.locationManager.stopUpdatingLocation()
                         LiveDebugLogger.shared.setGPSStatus("Sleeping (Stationary) 😴")
                     }
-                } else if activity.walking || activity.running || activity.automotive || activity.cycling {
+                } else {
                     if self.isStationary {
                         self.isStationary = false
                         var tipeGerak = "bergerak"
@@ -123,11 +123,10 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                     self.fetchCurrentWiFiAndLock()
                 } else {
                     // Disconnected from Wi-Fi: Resume standard GPS tracking
-                    if self.currentWiFiBSSID != nil {
-                        self.log("📴 Wi-Fi Terputus: Lepas dari jangkar Wi-Fi. Mengaktifkan kembali chip GPS aktif!")
-                        self.currentWiFiBSSID = nil
-                        self.locationManager.startUpdatingLocation()
-                    }
+                    self.log("📴 Wi-Fi Terputus: Jaringan berpindah ke Data Seluler. Menyalakan kembali GPS aktif!")
+                    self.currentWiFiBSSID = nil
+                    self.locationManager.startUpdatingLocation()
+                    LiveDebugLogger.shared.setGPSStatus("Active GPS 🛰️")
                 }
             }
         }
