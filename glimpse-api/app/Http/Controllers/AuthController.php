@@ -53,6 +53,9 @@ class AuthController extends Controller
             return response()->json(['message' => 'Incorrect password'], 401);
         }
 
+        // Enforce single active session per user by deleting all previous access tokens
+        $user->tokens()->delete();
+
         $token = $user->createToken('auth_token')->plainTextToken;
         \Illuminate\Support\Facades\Log::info("Login successful for: " . $request->email);
 

@@ -22,6 +22,7 @@ class AuthManager {
     var totalMeetings = 0
     var lastLoveBurstTimestamp: Double = 0.0
     var showInviteDeclinedAlert = false
+    var showSessionTerminatedAlert = false
     let chatTabDoubleTapPublisher = PassthroughSubject<Void, Never>()
     
     private var _selectedTab = 0
@@ -107,9 +108,7 @@ class AuthManager {
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            return
-        }
+        guard await checkResponseStatus(response) else { return }
         
         let responseData = try JSONDecoder().decode(CoupleResponse.self, from: data)
         saveSessionCache(data)
@@ -648,6 +647,36 @@ class AuthManager {
         withAnimation {
             self.isAuthenticated = false
         }
+    }
+    
+    @MainActor
+    func handleSessionTerminated() {
+        self.disconnectWebSocket()
+        UserDefaults.standard.removeObject(forKey: "auth_token")
+        UserDefaults(suiteName: "group.glimpse.app")?.removeObject(forKey: "auth_token")
+        
+        let sharedDefaults = UserDefaults(suiteName: "group.glimpse.app")
+        sharedDefaults?.removeObject(forKey: "latest_partner_data")
+        if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+            let fileURL = groupURL.appendingPathComponent("widget_photo.jpg")
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+        WidgetCenter.shared.reloadAllTimelines()
+        
+        withAnimation {
+            self.isAuthenticated = false
+        }
+        
+        self.showSessionTerminatedAlert = true
+    }
+    
+    func checkResponseStatus(_ response: URLResponse) async -> Bool {
+        guard let httpResponse = response as? HTTPURLResponse else { return false }
+        if httpResponse.statusCode == 401 {
+            await handleSessionTerminated()
+            return false
+        }
+        return httpResponse.statusCode == 200
     }
     
     // MARK: - OUTBOX / OFFLINE FLASH UPLOAD
