@@ -806,6 +806,72 @@ struct MainDashboardView: View {
                 }
             }
             } // Close ScrollViewReader
+            
+            // Floating Upload Progress Banner!
+            if auth.isUploadingFlash {
+                VStack {
+                    Spacer()
+                    
+                    HStack(spacing: 12) {
+                        // Tiny thumbnail or upload icon with progress arc
+                        ZStack {
+                            Circle()
+                                .stroke(Color.white.opacity(0.1), lineWidth: 3)
+                                .frame(width: 38, height: 38)
+                            
+                            Circle()
+                                .trim(from: 0.0, to: CGFloat(auth.uploadProgress))
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [.electricPurple, .activeCyan],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                                )
+                                .frame(width: 38, height: 38)
+                                .rotationEffect(Angle(degrees: -90))
+                                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: auth.uploadProgress)
+                            
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(.activeCyan)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Uploading Glimpse...")
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                            
+                            Text("\(Int(auth.uploadProgress * 100))% complete • Outbox safe")
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .background(Color.black.opacity(0.75))
+                    .cornerRadius(18)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [.white.opacity(0.15), .clear],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1.5
+                            )
+                    )
+                    .shadow(color: Color.black.opacity(0.4), radius: 10, y: 5)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 20)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .zIndex(100)
+            }
         }
     }
     

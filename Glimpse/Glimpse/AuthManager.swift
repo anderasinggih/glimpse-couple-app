@@ -35,6 +35,10 @@ class AuthManager {
     var latestFetchedMessages: [ChatMessage] = []
     var flashes: [GlimpseFlash] = []
     
+    // UPLOAD PROGRESS
+    var isUploadingFlash: Bool = false
+    var uploadProgress: Double = 0.0
+    
     // WEBSOCKET PROPERTIES
     private var webSocketTask: URLSessionWebSocketTask?
     var isWebSocketConnected = false
@@ -61,6 +65,7 @@ class AuthManager {
             Task {
                 try? await self.fetchState()
                 self.connectWebSocket()
+                self.processPendingFlashes()
             }
         }
     }
@@ -544,7 +549,138 @@ class AuthManager {
         }
     }
     
+    // MARK: - OUTBOX / OFFLINE FLASH UPLOAD
+    struct PendingFlash: Codable {
+        let photoFileName: String
+        let latitude: Double?
+        let longitude: Double?
+        let battery: Int?
+        let note: String?
+        let locationName: String?
+        let timestamp: Double
+    }
+    
+    func savePendingFlash(image: UIImage, latitude: Double?, longitude: Double?, battery: Int?, note: String?, locationName: String?) {
+        guard let finalData = image.compressedForApp(maxDimension: 800, targetBytes: 100_000) else { return }
+        
+        let fileName = "pending_flash_\(UUID().uuidString).jpg"
+        let fileManager = FileManager.default
+        guard let cachesDir = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
+        let fileURL = cachesDir.appendingPathComponent(fileName)
+        
+        do {
+            try finalData.write(to: fileURL)
+            
+            let pending = PendingFlash(
+                photoFileName: fileName,
+                latitude: latitude,
+                longitude: longitude,
+                battery: battery,
+                note: note,
+                locationName: locationName,
+                timestamp: Date().timeIntervalSince1970
+            )
+            
+            var list = getPendingFlashes()
+            list.append(pending)
+            if let encoded = try? JSONEncoder().encode(list) {
+                UserDefaults.standard.set(encoded, forKey: "glimpse_pending_flashes")
+            }
+            print("💾 Saved Flash to local Outbox successfully!")
+        } catch {
+            print("❌ Failed to save pending flash locally: \(error)")
+        }
+    }
+    
+    func getPendingFlashes() -> [PendingFlash] {
+        guard let data = UserDefaults.standard.data(forKey: "glimpse_pending_flashes") else { return [] }
+        return (try? JSONDecoder().decode([PendingFlash].self, from: data)) ?? []
+    }
+    
+    func processPendingFlashes() {
+        let list = getPendingFlashes()
+        guard !list.isEmpty else { return }
+        guard !isUploadingFlash else { return }
+        
+        Task {
+            await MainActor.run {
+                self.isUploadingFlash = true
+                self.uploadProgress = 0.0
+            }
+            
+            let fileManager = FileManager.default
+            guard let cachesDir = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+                await MainActor.run { self.isUploadingFlash = false }
+                return
+            }
+            
+            var remainingFlashes: [PendingFlash] = []
+            
+            for pending in list {
+                let fileURL = cachesDir.appendingPathComponent(pending.photoFileName)
+                guard fileManager.fileExists(atPath: fileURL.path) else { continue }
+                
+                do {
+                    guard let imageData = try? Data(contentsOf: fileURL),
+                          let image = UIImage(data: imageData) else {
+                        try? fileManager.removeItem(at: fileURL)
+                        continue
+                    }
+                    
+                    try await uploadPhotoInternal(
+                        image,
+                        latitude: pending.latitude,
+                        longitude: pending.longitude,
+                        battery: pending.battery,
+                        note: pending.note,
+                        locationName: pending.locationName
+                    )
+                    
+                    try? fileManager.removeItem(at: fileURL)
+                    print("✅ Outbox Flash uploaded successfully!")
+                } catch {
+                    print("❌ Failed to upload outbox flash: \(error)")
+                    remainingFlashes.append(pending)
+                }
+            }
+            
+            await MainActor.run {
+                if let encoded = try? JSONEncoder().encode(remainingFlashes) {
+                    UserDefaults.standard.set(encoded, forKey: "glimpse_pending_flashes")
+                }
+                self.isUploadingFlash = false
+                self.uploadProgress = 1.0
+            }
+        }
+    }
+    
     func uploadPhoto(_ image: UIImage, latitude: Double? = nil, longitude: Double? = nil, battery: Int? = nil, note: String? = nil, locationName: String? = nil) async throws {
+        // 1. Save to outbox queue first for complete offline & crash resilience!
+        savePendingFlash(image: image, latitude: latitude, longitude: longitude, battery: battery, note: note, locationName: locationName)
+        
+        // 2. Process queue immediately
+        processPendingFlashes()
+    }
+    
+    private func uploadPhotoInternal(_ image: UIImage, latitude: Double? = nil, longitude: Double? = nil, battery: Int? = nil, note: String? = nil, locationName: String? = nil) async throws {
+        // 1. Request Background Task Assertion from iOS to protect upload from screen lock / app minimizes!
+        var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "UploadFlash") {
+            UIApplication.shared.endBackgroundTask(backgroundTaskID)
+            backgroundTaskID = .invalid
+        }
+        
+        defer {
+            if backgroundTaskID != .invalid {
+                UIApplication.shared.endBackgroundTask(backgroundTaskID)
+                backgroundTaskID = .invalid
+            }
+        }
+        
+        await MainActor.run {
+            self.uploadProgress = 0.1
+        }
+        
         guard let url = URL(string: "\(baseURL)/glimpse/photo") else { return }
         guard let token = userToken else { return }
         
@@ -556,47 +692,47 @@ class AuthManager {
         let boundary = "Boundary-\(UUID().uuidString)"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         
-        // 1. COMPRESS: Scale down to 800px and compress to under 100KB
+        await MainActor.run {
+            self.uploadProgress = 0.2
+        }
+        
         guard let finalData = image.compressedForApp(maxDimension: 800, targetBytes: 100_000) else { return }
         
-        var body = Data()
+        await MainActor.run {
+            self.uploadProgress = 0.3
+        }
         
-        // 1. Photo data
+        var body = Data()
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"photo\"; filename=\"flash.jpg\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
         body.append(finalData)
         body.append("\r\n".data(using: .utf8)!)
         
-        // 2. Latitude
         if let lat = latitude {
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
             body.append("Content-Disposition: form-data; name=\"latitude\"\r\n\r\n".data(using: .utf8)!)
             body.append("\(lat)\r\n".data(using: .utf8)!)
         }
         
-        // 3. Longitude
         if let lon = longitude {
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
             body.append("Content-Disposition: form-data; name=\"longitude\"\r\n\r\n".data(using: .utf8)!)
             body.append("\(lon)\r\n".data(using: .utf8)!)
         }
         
-        // 4. Battery
         if let batt = battery {
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
             body.append("Content-Disposition: form-data; name=\"battery_level\"\r\n\r\n".data(using: .utf8)!)
             body.append("\(batt)\r\n".data(using: .utf8)!)
         }
         
-        // 5. Note (Kabar)
         if let status = note {
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
             body.append("Content-Disposition: form-data; name=\"status_note\"\r\n\r\n".data(using: .utf8)!)
             body.append("\(status)\r\n".data(using: .utf8)!)
         }
         
-        // 6. Location Name
         if let loc = locationName {
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
             body.append("Content-Disposition: form-data; name=\"location_name\"\r\n\r\n".data(using: .utf8)!)
@@ -606,18 +742,32 @@ class AuthManager {
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
         
+        await MainActor.run {
+            self.uploadProgress = 0.5
+        }
+        
         let (_, response) = try await URLSession.shared.data(for: request)
+        
+        await MainActor.run {
+            self.uploadProgress = 0.8
+        }
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw NSError(domain: "Auth", code: 500, userInfo: [NSLocalizedDescriptionKey: "Upload failed"])
         }
         
-        // 1. Send automatic flash attachment message
-        _ = try? await sendChatMessage(text: "📷 Sent a Flash! [FLASH_ATTACHMENT]")
+        await MainActor.run {
+            self.uploadProgress = 0.9
+        }
         
-        // 2. Refresh state and flashes after upload to reflect changes
+        _ = try? await sendChatMessage(text: "📷 Sent a Flash! [FLASH_ATTACHMENT]")
         try? await fetchState()
         _ = try? await fetchFlashes()
+        
+        await MainActor.run {
+            self.uploadProgress = 1.0
+        }
+    }
     }
     
     func triggerServerLoveBurst() async throws {

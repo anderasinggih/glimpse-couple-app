@@ -506,58 +506,52 @@ struct FlashCameraView: View {
     }
     
     private func uploadPhoto(_ image: UIImage) {
-        // 0. Verify internet connectivity before triggering optimistic success!
-        guard NetworkMonitor.shared.isConnected else {
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.error)
-            showNoInternetAlert = true
-            return
-        }
-        
         // Collect extra metadata
         let lat = model.lastLocation?.coordinate.latitude
         let lon = model.lastLocation?.coordinate.longitude
         let battery = Int(UIDevice.current.batteryLevel * 100)
         let note = statusNote.isEmpty ? nil : statusNote
         
-        // 1. OPTIMISTIC UX: Trigger SUCCESS pop-up animation instantly!
+        // 1. Save to outbox queue immediately (secure local storage!)
+        AuthManager.shared.savePendingFlash(image: image, latitude: lat, longitude: lon, battery: battery, note: note, locationName: nil)
+        
+        // 2. Check connection status for different UX flows
+        guard NetworkMonitor.shared.isConnected else {
+            // Offline path: Play warning haptic and show no-internet alert
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.warning)
+            showNoInternetAlert = true
+            
+            // Cleanup and close camera
+            capturedImage = nil
+            statusNote = ""
+            dismiss()
+            return
+        }
+        
+        // 3. Online path: Optimistic Success pop-up animation instantly!
         withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
             isUploadSuccess = true
         }
         
-        // 2. TIMED MICRO-INTERACTION: Play Sent Sound (1004) and haptic vibration EXACTLY 0.15s later!
-        // This coordinates perfectly with the spring scale-up animation of the pop-up!
+        // 4. Play sent sound (1004) and haptic success vibration
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            AudioServicesPlaySystemSound(1004) // Mail Sent crisp "klek" sent sound!
+            AudioServicesPlaySystemSound(1004) // Mail Sent crisp "klek" sound!
             
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
         }
         
-        // 3. Dismiss and cleanup after 1.5 seconds so they can see and hear the gorgeous feedback
+        // 5. Dismiss camera after 1.5 seconds so they can see the glorious feedback
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             capturedImage = nil
             statusNote = ""
             isUploadSuccess = false
-            dismiss() // Close camera
+            dismiss()
         }
         
-        // 3. Perform image compression and upload COMPLETELY in the background
-        Task.detached(priority: .background) {
-            do {
-                try await AuthManager.shared.uploadPhoto(
-                    image, 
-                    latitude: lat, 
-                    longitude: lon, 
-                    battery: battery, 
-                    note: note,
-                    locationName: nil
-                )
-                print("✅ Background Glimpse upload succeeded!")
-            } catch {
-                print("❌ Background Glimpse upload failed: \(error)")
-            }
-        }
+        // 6. Process the Outbox queue to start uploading in the background
+        AuthManager.shared.processPendingFlashes()
     }
     
     private func startHintTimer() {
