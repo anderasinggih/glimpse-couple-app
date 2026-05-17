@@ -108,8 +108,12 @@ struct PartnerMapView: View {
                         if let currentUser = auth.currentUser,
                            let userLat = user.latitude, userLat != 0.0,
                            let myLat = currentUser.latitude, myLat != 0.0 {
+                            let startLoc = CLLocation(latitude: currentUser.coordinate.latitude, longitude: currentUser.coordinate.longitude)
+                            let endLoc = CLLocation(latitude: user.coordinate.latitude, longitude: user.coordinate.longitude)
+                            let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
+                            
                             let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: user.coordinate, phase: wavePhase)
-                            let colors = getShiftingColors(phase: wavePhase)
+                            let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
                             
                             // 1. Bottom Layer: Outer Neon Glow
                             MapPolyline(coordinates: wavyCoords)
@@ -270,14 +274,43 @@ struct PartnerMapView: View {
         }
     }
     
-    private func getShiftingColors(phase: Double) -> [Color] {
+    private func getShiftingColors(phase: Double, distanceInKm: Double) -> [Color] {
         let baseHue = phase / (2 * .pi)
-        return [
-            Color(hue: baseHue, saturation: 0.9, brightness: 0.95),
-            Color(hue: (baseHue + 0.33).truncatingRemainder(dividingBy: 1.0), saturation: 0.9, brightness: 0.95),
-            Color(hue: (baseHue + 0.66).truncatingRemainder(dividingBy: 1.0), saturation: 0.9, brightness: 0.95),
-            Color(hue: baseHue, saturation: 0.9, brightness: 0.95)
-        ]
+        
+        if distanceInKm <= 1.0 {
+            // DEKAT: Warm passion (hues around 0.85 to 0.15 - Magenta, Red, Orange, Yellow)
+            let hue1 = (0.85 + baseHue * 0.3).truncatingRemainder(dividingBy: 1.0)
+            let hue2 = (hue1 + 0.1).truncatingRemainder(dividingBy: 1.0)
+            let hue3 = (hue2 + 0.1).truncatingRemainder(dividingBy: 1.0)
+            return [
+                Color(hue: hue1, saturation: 0.95, brightness: 0.95),
+                Color(hue: hue2, saturation: 0.95, brightness: 0.95),
+                Color(hue: hue3, saturation: 0.95, brightness: 0.95),
+                Color(hue: hue1, saturation: 0.95, brightness: 0.95)
+            ]
+        } else if distanceInKm >= 10.0 {
+            // JAUH: Steady aurora (hues around 0.45 to 0.65 - Emerald, Teal, Cyan, Blue)
+            let hue1 = 0.45 + baseHue * 0.2
+            let hue2 = hue1 + 0.07
+            let hue3 = hue2 + 0.07
+            return [
+                Color(hue: hue1, saturation: 0.95, brightness: 0.95),
+                Color(hue: hue2, saturation: 0.95, brightness: 0.95),
+                Color(hue: hue3, saturation: 0.95, brightness: 0.95),
+                Color(hue: hue1, saturation: 0.95, brightness: 0.95)
+            ]
+        } else {
+            // SEDANG: Romantic purple/magenta (hues around 0.65 to 0.85 - Blue, Indigo, Purple, Pink)
+            let hue1 = 0.65 + baseHue * 0.2
+            let hue2 = hue1 + 0.07
+            let hue3 = hue2 + 0.07
+            return [
+                Color(hue: hue1, saturation: 0.95, brightness: 0.95),
+                Color(hue: hue2, saturation: 0.95, brightness: 0.95),
+                Color(hue: hue3, saturation: 0.95, brightness: 0.95),
+                Color(hue: hue1, saturation: 0.95, brightness: 0.95)
+            ]
+        }
     }
     
     private func generateWavyCoordinates(
