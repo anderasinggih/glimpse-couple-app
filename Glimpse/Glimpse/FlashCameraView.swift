@@ -12,6 +12,8 @@ struct FlashCameraView: View {
     @State private var errorMessage: String?
     @State private var isShowingError = false
     @State private var isUploadSuccess = false
+    @State private var isScreenFlashing = false
+    @State private var animateCheckmark = false
     @State private var auth = AuthManager.shared
     @Environment(\.dismiss) var dismiss
     
@@ -33,16 +35,16 @@ struct FlashCameraView: View {
         let frameSize = screenWidth - 25
         
         ZStack {
-            // LAYER 1: Background - Fixated and Full Screen (Bright white screen flash filler when flash is ON!)
+            // LAYER 1: Background - Fixated and Full Screen (Bright white screen flash filler ONLY during selfie snap!)
             ZStack {
-                if model.flashMode == .on {
+                if isScreenFlashing {
                     Color.white.ignoresSafeArea()
                 } else {
                     Color.deepVelvet.ignoresSafeArea()
                     iOS26Background().opacity(0.4)
                 }
             }
-            .animation(.easeInOut(duration: 0.35), value: model.flashMode)
+            .animation(.easeInOut(duration: 0.15), value: isScreenFlashing)
             .ignoresSafeArea()
             .ignoresSafeArea(.keyboard)
             .onTapGesture {
@@ -86,13 +88,13 @@ struct FlashCameraView: View {
                         RoundedRectangle(cornerRadius: 28, style: .continuous)
                             .stroke(LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
                     )
-                    .shadow(color: model.flashMode == .on ? .white : .electricPurple.opacity(0.2), radius: model.flashMode == .on ? 50 : 30)
+                    .shadow(color: isScreenFlashing ? .white : .electricPurple.opacity(0.2), radius: isScreenFlashing ? 50 : 30)
                     
                     // Rotating modern intimate camera hints
                     Text(cameraHints[activeHintIndex])
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundColor(model.flashMode == .on ? .deepVelvet : .white.opacity(0.9))
-                        .shadow(color: model.flashMode == .on ? .clear : .black.opacity(0.3), radius: 2, x: 0, y: 1)
+                        .foregroundColor(.white.opacity(0.9))
+                        .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
                         .padding(.horizontal, 20)
                         .padding(.top, 24)
                         .id(activeHintIndex)
@@ -131,12 +133,12 @@ struct FlashCameraView: View {
                             Button { model.toggleFlash() } label: {
                                 Image(systemName: model.flashMode == .on ? "bolt.fill" : "bolt.slash.fill")
                                     .font(.system(size: 20, weight: .bold))
-                                    .foregroundColor(model.flashMode == .on ? .orange : .white)
+                                    .foregroundColor(model.flashMode == .on ? .yellow : .white)
                                     .frame(width: 50, height: 50)
-                                    .background(model.flashMode == .on ? Color.deepVelvet.opacity(0.1) : .ultraThinMaterial)
+                                    .background(.ultraThinMaterial)
                                     .clipShape(Circle())
                                     .overlay(
-                                        Circle().stroke(model.flashMode == .on ? Color.deepVelvet.opacity(0.2) : Color.white.opacity(0.1), lineWidth: 1)
+                                        Circle().stroke(Color.white.opacity(0.1), lineWidth: 1)
                                     )
                             }
                             
@@ -146,12 +148,12 @@ struct FlashCameraView: View {
                             Button { model.switchCamera() } label: {
                                 Image(systemName: "camera.rotate")
                                     .font(.system(size: 20, weight: .bold))
-                                    .foregroundColor(model.flashMode == .on ? .deepVelvet : .white)
+                                    .foregroundColor(.white)
                                     .frame(width: 50, height: 50)
-                                    .background(model.flashMode == .on ? Color.deepVelvet.opacity(0.1) : .ultraThinMaterial)
+                                    .background(.ultraThinMaterial)
                                     .clipShape(Circle())
                                     .overlay(
-                                        Circle().stroke(model.flashMode == .on ? Color.deepVelvet.opacity(0.2) : Color.white.opacity(0.1), lineWidth: 1)
+                                        Circle().stroke(Color.white.opacity(0.1), lineWidth: 1)
                                     )
                             }
                         }
@@ -270,37 +272,54 @@ struct FlashCameraView: View {
                             Circle()
                                 .fill(Color.vividMint.opacity(0.12))
                                 .frame(width: 120, height: 120)
+                                .scaleEffect(animateCheckmark ? 1.0 : 0.4)
                             
                             Circle()
                                 .stroke(Color.vividMint, lineWidth: 3)
                                 .frame(width: 80, height: 80)
+                                .scaleEffect(animateCheckmark ? 1.0 : 0.6)
                             
                             Image(systemName: "checkmark")
                                 .font(.system(size: 36, weight: .bold))
                                 .foregroundColor(.vividMint)
+                                .scaleEffect(animateCheckmark ? 1.0 : 0.2)
+                                .rotationEffect(.degrees(animateCheckmark ? 0 : -45))
                         }
                         
                         VStack(spacing: 8) {
                             Text("Flash Shared!")
                                 .font(.system(size: 24, weight: .bold, design: .rounded))
                                 .foregroundColor(.white)
+                                .opacity(animateCheckmark ? 1.0 : 0.0)
+                                .offset(y: animateCheckmark ? 0 : 10)
                             
                             Text("Sent to your partner")
                                 .font(.system(size: 15))
                                 .foregroundColor(.white.opacity(0.6))
+                                .opacity(animateCheckmark ? 1.0 : 0.0)
+                                .offset(y: animateCheckmark ? 0 : 10)
                         }
                     }
                     .padding(32)
                     .background(.ultraThinMaterial)
                     .cornerRadius(28)
+                    .scaleEffect(animateCheckmark ? 1.0 : 0.85)
                     .overlay(
                         RoundedRectangle(cornerRadius: 28)
                             .stroke(Color.white.opacity(0.1), lineWidth: 1)
                     )
                     .shadow(color: Color.black.opacity(0.3), radius: 20, y: 10)
                 }
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .transition(.opacity)
                 .zIndex(999)
+                .task {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.75, blendDuration: 0)) {
+                        animateCheckmark = true
+                    }
+                }
+                .onDisappear {
+                    animateCheckmark = false
+                }
             }
         }
         .onAppear {
@@ -350,8 +369,25 @@ struct FlashCameraView: View {
         Button {
             UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
             isProcessing = true
+            
+            // Trigger quick screen flash if mode is ON!
+            if model.flashMode == .on {
+                withAnimation(.easeIn(duration: 0.05)) {
+                    isScreenFlashing = true
+                }
+            }
+            
             model.capturePhoto { image in
                 model.stopSession()
+                
+                // Turn off screen flash after snap
+                if model.flashMode == .on {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            isScreenFlashing = false
+                        }
+                    }
+                }
                 
                 Task.detached(priority: .userInitiated) {
                     let processed = await processCapturedImage(image)
@@ -363,8 +399,8 @@ struct FlashCameraView: View {
             }
         } label: {
             ZStack {
-                Circle().stroke(model.flashMode == .on ? Color.deepVelvet.opacity(0.3) : Color.white.opacity(0.3), lineWidth: 4).frame(width: 85, height: 85)
-                Circle().fill(model.flashMode == .on ? Color.deepVelvet : Color.white).frame(width: 70, height: 70)
+                Circle().stroke(Color.white.opacity(0.3), lineWidth: 4).frame(width: 85, height: 85)
+                Circle().fill(Color.white).frame(width: 70, height: 70)
             }
         }
         .disabled(isProcessing)
@@ -460,21 +496,22 @@ struct FlashCameraView: View {
         let battery = Int(UIDevice.current.batteryLevel * 100)
         let note = statusNote.isEmpty ? nil : statusNote
         
-        // 1. OPTIMISTIC UX: Trigger SUCCESS instantly so the user doesn't wait!
-        // Play signature "Sent" system sound (1004)
-        AudioServicesPlaySystemSound(1004)
-        
-        // Play signature success haptic vibration
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-        
-        // Trigger full-screen success animation state
+        // 1. OPTIMISTIC UX: Trigger SUCCESS pop-up animation instantly!
         withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
             isUploadSuccess = true
         }
         
-        // 2. Dismiss and cleanup after 1.2 seconds so they can see the gorgeous checkmark
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+        // 2. TIMED MICRO-INTERACTION: Play App Store / Apple Pay Double Chime (1315) and haptic vibration EXACTLY 0.15s later!
+        // This coordinates perfectly with the spring scale-up animation of the pop-up!
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            AudioServicesPlaySystemSound(1315) // App Store / Apple Pay beautiful double ding chimes!
+            
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+        }
+        
+        // 3. Dismiss and cleanup after 1.5 seconds so they can see and hear the gorgeous feedback
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             capturedImage = nil
             statusNote = ""
             isUploadSuccess = false
