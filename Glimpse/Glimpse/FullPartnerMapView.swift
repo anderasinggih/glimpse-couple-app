@@ -417,7 +417,7 @@ struct FullPartnerMapView: View {
         Task {
             // --- STAGE 1: SMOOTH 3D ARC TO MIDPOINT (UPWARD GLIDE) ---
             // Swoop up to midpoint with a beautiful 3D tilt and rotating angle
-            let targetZoom = min(1_500_000.0, max(4500.0, distance * 1.7))
+            let targetZoom = min(8_000_000.0, max(1500.0, distance * 2.2))
             
             await MainActor.run {
                 withAnimation(.spring(response: 1.5, dampingFraction: 0.82)) {
