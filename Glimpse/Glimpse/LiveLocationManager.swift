@@ -44,6 +44,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     func startTracking() {
         locationManager.requestWhenInUseAuthorization()
         locationManager.startUpdatingLocation()
+        LiveDebugLogger.shared.setGPSStatus("Active GPS 🛰️")
         
         startMotionTracking()
         
@@ -56,12 +57,14 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     func stopTracking() {
         locationManager.stopUpdatingLocation()
         motionActivityManager.stopActivityUpdates()
+        LiveDebugLogger.shared.setGPSStatus("Stopped 🛑")
     }
     
     // MARK: - Elite Debug Logging Helper (Zero overhead in App Store release build!)
     private func log(_ message: String) {
         #if DEBUG
         print("[⚡️ Glimpse GPS Debug] \(message)")
+        LiveDebugLogger.shared.log(message)
         #endif
     }
     
@@ -77,6 +80,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                 if #available(iOS 15.0, *) {
                     if self.locationManager.location?.sourceInformation?.isSimulatedBySoftware == true {
                         self.locationManager.startUpdatingLocation()
+                        LiveDebugLogger.shared.setGPSStatus("Xcode Simulator Active 🛸")
                         self.log("🛸 Deteksi Xcode Simulator: GPS dibiarkan aktif untuk simulasi.")
                         return
                     }
@@ -87,6 +91,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                         self.isStationary = true
                         self.log("🛑 Sensor Gerak (Stationary): HP terdeteksi DIAM di tempat. Menidurkan GPS demi hemat baterai!")
                         self.locationManager.stopUpdatingLocation()
+                        LiveDebugLogger.shared.setGPSStatus("Sleeping (Stationary) 😴")
                     }
                 } else if activity.walking || activity.running || activity.automotive || activity.cycling {
                     if self.isStationary {
@@ -99,6 +104,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                         
                         self.log("🏃‍♂️ Sensor Gerak (Moving): HP terdeteksi \(tipeGerak). Membangunkan GPS kembali secara real-time!")
                         self.locationManager.startUpdatingLocation()
+                        LiveDebugLogger.shared.setGPSStatus("Active (\(tipeGerak)) 🏃‍♂️")
                     }
                 }
             }
@@ -155,6 +161,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                     if shouldStop {
                         self.log("😴 GPS Dinonaktifkan: Terkunci pada cache koordinat Wi-Fi. Menghemat baterai hingga 99%!")
                         self.locationManager.stopUpdatingLocation()
+                        LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi Locked) 📶😴")
                     }
                     
                     let dummyLocation = CLLocation(latitude: cached.latitude, longitude: cached.longitude)
@@ -175,6 +182,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                         if shouldStop {
                             self.log("😴 GPS Dinonaktifkan: Titik Wi-Fi berhasil di-cache. Menidurkan GPS!")
                             self.locationManager.stopUpdatingLocation()
+                            LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi Cache Locked) 📶😴")
                         }
                     }
                 }
@@ -201,6 +209,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             if shouldStop {
                 self.log("😴 GPS Dinonaktifkan: Wi-Fi terdaftar dari pembacaan satelit. Menidurkan GPS!")
                 locationManager.stopUpdatingLocation()
+                LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi GPS Lock) 📶😴")
             }
         }
         
