@@ -15,6 +15,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     private let motionActivityManager = CMMotionActivityManager()
     private let motionQueue = OperationQueue()
     private var isStationary = false
+    private var motionDebounceTimer: Timer?
     
     // Wi-Fi location anchoring
     private let pathMonitor = NWPathMonitor()
@@ -87,6 +88,14 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                 }
                 
                 if activity.stationary {
+                    // Cancel any pending wake-up timers immediately since device is still
+                    if self.motionDebounceTimer != nil {
+                        self.motionDebounceTimer?.invalidate()
+                        self.motionDebounceTimer = nil
+                        self.log("🛑 Gerakan Singkat Terhenti: Mengabaikan gerakan minor. GPS tetap tidur!")
+                        LiveDebugLogger.shared.setGPSStatus("Sleeping (Stationary) 😴")
+                    }
+                    
                     if !self.isStationary {
                         self.isStationary = true
                         self.log("🛑 Sensor Gerak (Stationary): HP terdeteksi DIAM di tempat. Menidurkan GPS demi hemat baterai!")
@@ -94,17 +103,29 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                         LiveDebugLogger.shared.setGPSStatus("Sleeping (Stationary) 😴")
                     }
                 } else {
-                    if self.isStationary {
-                        self.isStationary = false
+                    // Non-stationary: Device is moving (walking, automotive, shaking, etc.)
+                    if self.isStationary && self.motionDebounceTimer == nil {
+                        self.log("⏳ Pergerakan Terdeteksi: Memantau apakah gerakan berlanjut selama 5 detik sebelum menyalakan GPS...")
+                        LiveDebugLogger.shared.setGPSStatus("Evaluating Movement... ⏳")
+                        
                         var tipeGerak = "bergerak"
                         if activity.walking { tipeGerak = "jalan kaki 🚶‍♂️" }
                         else if activity.running { tipeGerak = "berlari 🏃‍♂️" }
                         else if activity.automotive { tipeGerak = "berkendara 🚗" }
                         else if activity.cycling { tipeGerak = "sepeda 🚴‍♂️" }
                         
-                        self.log("🏃‍♂️ Sensor Gerak (Moving): HP terdeteksi \(tipeGerak). Membangunkan GPS kembali secara real-time!")
-                        self.locationManager.startUpdatingLocation()
-                        LiveDebugLogger.shared.setGPSStatus("Active (\(tipeGerak)) 🏃‍♂️")
+                        // Schedule GPS wake-up after 5 seconds of continuous motion
+                        self.motionDebounceTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
+                            guard let self = self else { return }
+                            
+                            Task { @MainActor in
+                                self.isStationary = false
+                                self.motionDebounceTimer = nil
+                                self.log("🏃‍♂️ Sensor Gerak (Sustained): Gerakan berlanjut selama 5 detik. Membangunkan GPS kembali secara real-time!")
+                                self.locationManager.startUpdatingLocation()
+                                LiveDebugLogger.shared.setGPSStatus("Active (\(tipeGerak)) 🏃‍♂️")
+                            }
+                        }
                     }
                 }
             }
@@ -142,47 +163,56 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             
             defer { self.isWiFiScanning = false }
             
-            if let net = network {
-                let bssid = net.bssid
-                self.currentWiFiBSSID = bssid
+            // Personal Dev Account Fallback: if network is nil (blocked by entitlement),
+            // we use a synthetic BSSID "personal_dev_wifi" to let them test the Wi-Fi feature!
+            let bssid = network?.bssid ?? "personal_dev_wifi_anchor"
+            self.currentWiFiBSSID = bssid
+            
+            self.log("📶 Wi-Fi Terhubung: Tersambung ke Wi-Fi BSSID: \(bssid)")
+            
+            // HOTSPOT PROTECTION: Only sleep GPS if device is STATIONARY.
+            // If device is moving, do NOT lock to cached Wi-Fi coordinates (user might be tethered to a moving hotspot in a car!)
+            if !self.isStationary {
+                self.log("🚗 Wi-Fi Terhubung tetapi HP sedang bergerak (Hotspot Mobil?). GPS dibiarkan AKTIF!")
+                LiveDebugLogger.shared.setGPSStatus("Active (Moving on Wi-Fi) 📶🚗")
+                self.locationManager.startUpdatingLocation()
+                return
+            }
+            
+            // If we already have a cached location for this Wi-Fi, lock to it (unless simulated!)
+            if let cached = self.cachedWiFiLocations[bssid] {
+                var shouldStop = true
+                if #available(iOS 15.0, *) {
+                    if self.locationManager.location?.sourceInformation?.isSimulatedBySoftware == true {
+                        shouldStop = false
+                    }
+                }
                 
-                self.log("📶 Wi-Fi Terhubung: Tersambung ke BSSID: \(bssid)")
+                if shouldStop {
+                    self.log("😴 GPS Dinonaktifkan: Terkunci pada cache koordinat Wi-Fi stasioner. Menghemat baterai!")
+                    self.locationManager.stopUpdatingLocation()
+                    LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi Locked) 📶😴")
+                }
                 
-                // If we already have a cached location for this Wi-Fi, lock to it (unless simulated!)
-                if let cached = self.cachedWiFiLocations[bssid] {
+                let dummyLocation = CLLocation(latitude: cached.latitude, longitude: cached.longitude)
+                self.processAndUploadLocation(dummyLocation)
+            } else {
+                // Otherwise, get current coordinate first to cache it (unless simulated!)
+                if let currentLoc = self.locationManager.location {
+                    self.cachedWiFiLocations[bssid] = currentLoc.coordinate
+                    self.log("💾 Wi-Fi Caching: Koordinat lokasi baru disimpan untuk Wi-Fi BSSID: \(bssid)")
+                    
                     var shouldStop = true
                     if #available(iOS 15.0, *) {
-                        if self.locationManager.location?.sourceInformation?.isSimulatedBySoftware == true {
+                        if currentLoc.sourceInformation?.isSimulatedBySoftware == true {
                             shouldStop = false
                         }
                     }
                     
                     if shouldStop {
-                        self.log("😴 GPS Dinonaktifkan: Terkunci pada cache koordinat Wi-Fi. Menghemat baterai hingga 99%!")
+                        self.log("😴 GPS Dinonaktifkan: Titik Wi-Fi berhasil di-cache. Menidurkan GPS!")
                         self.locationManager.stopUpdatingLocation()
-                        LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi Locked) 📶😴")
-                    }
-                    
-                    let dummyLocation = CLLocation(latitude: cached.latitude, longitude: cached.longitude)
-                    self.processAndUploadLocation(dummyLocation)
-                } else {
-                    // Otherwise, get current coordinate first to cache it (unless simulated!)
-                    if let currentLoc = self.locationManager.location {
-                        self.cachedWiFiLocations[bssid] = currentLoc.coordinate
-                        self.log("💾 Wi-Fi Caching: Koordinat lokasi baru disimpan untuk Wi-Fi BSSID: \(bssid)")
-                        
-                        var shouldStop = true
-                        if #available(iOS 15.0, *) {
-                            if currentLoc.sourceInformation?.isSimulatedBySoftware == true {
-                                shouldStop = false
-                            }
-                        }
-                        
-                        if shouldStop {
-                            self.log("😴 GPS Dinonaktifkan: Titik Wi-Fi berhasil di-cache. Menidurkan GPS!")
-                            self.locationManager.stopUpdatingLocation()
-                            LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi Cache Locked) 📶😴")
-                        }
+                        LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi Cache Locked) 📶😴")
                     }
                 }
             }
