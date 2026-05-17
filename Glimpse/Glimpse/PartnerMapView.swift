@@ -460,8 +460,13 @@ struct PartnerOverlayCard: View {
     let locationOverride: String?
     let isMinimal: Bool
     
+    private var isMe: Bool {
+        user.id == AuthManager.shared.currentUser?.id
+    }
+    
     private var distanceText: String? {
         guard let currentUser = AuthManager.shared.currentUser,
+              currentUser.id != user.id,
               let myLat = currentUser.latitude, myLat != 0.0,
               let myLon = currentUser.longitude, myLon != 0.0,
               let partnerLat = user.latitude, partnerLat != 0.0,
@@ -554,14 +559,16 @@ struct PartnerOverlayCard: View {
                 }
                 .padding(.top, 4)
                 
-                HStack(spacing: 8) {
-                    Image(systemName: "quote.bubble.fill")
-                        .foregroundColor(.electricPurple)
-                        .font(.system(size: 14))
-                    
-                    Text(user.status_note ?? "No status yet")
-                        .font(.system(size: 14))
-                        .lineLimit(2)
+                if !isMe {
+                    HStack(spacing: 8) {
+                        Image(systemName: "quote.bubble.fill")
+                            .foregroundColor(.electricPurple)
+                            .font(.system(size: 14))
+                        
+                        Text(user.status_note ?? "No status yet")
+                            .font(.system(size: 14))
+                            .lineLimit(2)
+                    }
                 }
             } else {
                 // MINIMAL MODE FOR PHOTO
@@ -574,7 +581,7 @@ struct PartnerOverlayCard: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.white)
                     
-                    if let note = user.status_note, !note.isEmpty {
+                    if !isMe, let note = user.status_note, !note.isEmpty {
                         Text(note)
                             .font(.system(size: 13, weight: .regular))
                             .foregroundColor(.white.opacity(0.9))

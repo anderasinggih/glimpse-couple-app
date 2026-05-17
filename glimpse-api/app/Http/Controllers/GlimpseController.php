@@ -299,7 +299,7 @@ class GlimpseController extends Controller
         if ($request->has('latitude')) $user->latitude = $request->latitude;
         if ($request->has('longitude')) $user->longitude = $request->longitude;
         if ($request->has('battery_level')) $user->battery_level = $request->battery_level;
-        if ($request->has('status_note')) $user->status_note = $request->status_note;
+        $user->status_note = $request->input('status_note');
         if ($request->has('location_name')) $user->location_name = $request->location_name;
 
         if ($request->has('latitude') && $request->has('longitude')) {
