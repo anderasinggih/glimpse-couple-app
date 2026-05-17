@@ -320,7 +320,25 @@ struct PartnerOverlayCard: View {
                             if user.isOffline {
                                 Text("Offline")
                                     .font(.caption)
+                                    .foregroundColor(.white.opacity(0.4))
+                                
+                                Text("•")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.2))
+                                
+                                Text("Synced \(timeAgo(from: user.lastUpdatedDate))")
+                                    .font(.caption)
                                     .foregroundColor(.white.opacity(0.5))
+                                
+                                if let dist = distanceText {
+                                    Text("•")
+                                        .font(.caption)
+                                        .foregroundColor(.white.opacity(0.2))
+                                    
+                                    Text(dist)
+                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.activeCyan.opacity(0.6))
+                                }
                             } else {
                                 HStack(spacing: 4) {
                                     Circle()
@@ -330,16 +348,16 @@ struct PartnerOverlayCard: View {
                                         .font(.caption)
                                         .foregroundColor(.green)
                                 }
-                            }
-                            
-                            if let dist = distanceText {
-                                Text("•")
-                                    .font(.caption)
-                                    .foregroundColor(.white.opacity(0.3))
                                 
-                                Text(dist)
-                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                    .foregroundColor(.activeCyan)
+                                if let dist = distanceText {
+                                    Text("•")
+                                        .font(.caption)
+                                        .foregroundColor(.white.opacity(0.3))
+                                    
+                                    Text(dist)
+                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.activeCyan)
+                                }
                             }
                         }
                     }
