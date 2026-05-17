@@ -24,7 +24,7 @@ struct ProfileView: View {
     @State private var isShowingHapticSelection = false
     
     @State private var notificationsEnabled = true
-    @State private var scrollOffset: CGFloat = 0
+    @Binding var scrollOffset: CGFloat
     @State private var isCopied = false
     
     var body: some View {
@@ -37,16 +37,18 @@ struct ProfileView: View {
             .ignoresSafeArea()
             
             // LAYER 2: Scroll Content
-            ScrollView(showsIndicators: false) {
-                ZStack {
-                    // Scroll Position Detector
-                    GeometryReader { geo in
-                        Color.clear.preference(key: ScrollOffsetKey.self, value: geo.frame(in: .named("scroll")).minY)
-                    }
-                    .frame(height: 0)
+            ScrollViewReader { proxy in
+                ScrollView(showsIndicators: false) {
+                    ZStack {
+                        // Scroll Position Detector
+                        GeometryReader { geo in
+                            Color.clear.preference(key: ScrollOffsetKey.self, value: geo.frame(in: .named("scroll")).minY)
+                        }
+                        .frame(height: 0)
                     
                     VStack(spacing: 24) {
                         Spacer(minLength: 95) // Space for floating header
+                            .id("SCROLL_TOP_ANCHOR")
                         
                         // 1. Profile Summary (Dynamic Header)
                         if let user = auth.currentUser {
@@ -201,7 +203,7 @@ struct ProfileView: View {
                                 CompactMenuRow(icon: "location.viewfinder", title: "Location sharing", value: locationStatus(), color: .green)
                             }
                             
-                            Link(destination: URL(string: "https://glimpse-app.com/privacy")!) {
+                            Link(destination: URL(string: "https://api.galleryfortwo.my.id/privacy")!) {
                                 CompactMenuRow(icon: "shield.fill", title: "Privacy policy", value: "View", color: .secondary)
                             }
                         }
@@ -231,6 +233,17 @@ struct ProfileView: View {
                 }
             }
             .coordinateSpace(name: "scroll")
+            .onPreferenceChange(ScrollOffsetKey.self) { value in
+                self.scrollOffset = value
+            }
+            .onChange(of: auth.selectedTab) { oldValue, newValue in
+                if newValue == 4 { // Profile tab
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                        proxy.scrollTo("SCROLL_TOP_ANCHOR", anchor: .top)
+                    }
+                }
+            }
+            } // Close ScrollViewReader
             .ignoresSafeArea(.container, edges: .top)
         }
         .sheet(isPresented: $isShowingEditProfile) {
@@ -609,6 +622,11 @@ struct EditProfileView: View {
                         .padding()
                         .background(Color.white.opacity(0.05))
                         .cornerRadius(12)
+                        .onChange(of: name) { oldValue, newValue in
+                            if newValue.count > 30 {
+                                name = String(newValue.prefix(30))
+                            }
+                        }
                     
                     TextField("Email", text: $email)
                         .padding()
@@ -616,6 +634,11 @@ struct EditProfileView: View {
                         .cornerRadius(12)
                         .keyboardType(.emailAddress)
                         .autocapitalization(.none)
+                        .onChange(of: email) { oldValue, newValue in
+                            if newValue.count > 100 {
+                                email = String(newValue.prefix(100))
+                            }
+                        }
                 }
                 .padding(.horizontal)
                 
@@ -755,7 +778,7 @@ struct CompactMenuRow: View {
 }
 
 #Preview {
-    ProfileView()
+    ProfileView(scrollOffset: .constant(0))
 }
 
 struct ThemeSelectionView: View {

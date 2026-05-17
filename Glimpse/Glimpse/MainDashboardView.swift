@@ -15,6 +15,34 @@ struct MainDashboardView: View {
     @State private var currentTime = Date()
     private let dashboardPollTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
     
+    @State private var dashboardScrollOffset: CGFloat = 0
+    @State private var profileScrollOffset: CGFloat = 0
+    
+    private var headerOpacity: Double {
+        if auth.selectedTab == 0 {
+            // Dashboard: fade out between offset 0 and -60
+            if dashboardScrollOffset >= 0 {
+                return 1.0
+            } else if dashboardScrollOffset <= -60 {
+                return 0.0
+            } else {
+                return Double(1.0 + (dashboardScrollOffset / 60.0))
+            }
+        } else if auth.selectedTab == 4 {
+            // Profile: fade out between offset 0 and -60
+            if profileScrollOffset >= 0 {
+                return 1.0
+            } else if profileScrollOffset <= -60 {
+                return 0.0
+            } else {
+                return Double(1.0 + (profileScrollOffset / 60.0))
+            }
+        } else {
+            // Other tabs (like Map or Flash Camera) - keep full opacity!
+            return 1.0
+        }
+    }
+    
     var body: some View {
         @Bindable var bindableAuth = auth
         return ZStack(alignment: .top) {
@@ -68,7 +96,7 @@ struct MainDashboardView: View {
                     .tag(3)
                 
                 // Tab 4: Profile
-                ProfileView()
+                ProfileView(scrollOffset: $profileScrollOffset)
                     .tabItem {
                         Label("Profile", systemImage: "person")
                     }
@@ -103,6 +131,8 @@ struct MainDashboardView: View {
             // MASTER HEADER (Like app.blade.php)
             if auth.selectedTab != 3 {
                 BrandingHeader()
+                    .opacity(headerOpacity)
+                    .allowsHitTesting(headerOpacity > 0.1) // Avoid blocking interaction when transparent
                     .zIndex(100)
             }
 
@@ -172,9 +202,16 @@ struct MainDashboardView: View {
             // Main Scroll Content
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 20) {
-                        Spacer(minLength: 45)
-                            .id("SCROLL_TOP_ANCHOR")
+                    ZStack {
+                        // Scroll Position Detector
+                        GeometryReader { geo in
+                            Color.clear.preference(key: ScrollOffsetKey.self, value: geo.frame(in: .named("dashboard_scroll")).minY)
+                        }
+                        .frame(height: 0)
+                        
+                        VStack(spacing: 20) {
+                            Spacer(minLength: 65) // Space for floating header
+                                .id("SCROLL_TOP_ANCHOR")
                     
                     // Presence Interface (Interactive Flip Card)
                     // Presence Interface (Interactive Flip Card)
@@ -734,6 +771,11 @@ struct MainDashboardView: View {
                     Spacer(minLength: 100)
                 }
                 .padding(.horizontal, 16)
+                } // Close ZStack
+            }
+            .coordinateSpace(name: "dashboard_scroll")
+            .onPreferenceChange(ScrollOffsetKey.self) { value in
+                self.dashboardScrollOffset = value
             }
             .refreshable {
                 try? await auth.fetchState()
