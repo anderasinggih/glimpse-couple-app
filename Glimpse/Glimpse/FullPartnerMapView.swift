@@ -10,6 +10,7 @@ struct FullPartnerMapView: View {
     @State private var mapPulse = false
     @State private var wavePhase = 0.0
     @State private var recenterTargetMe = true
+    @State private var currentCameraCenter: CLLocationCoordinate2D? = nil
     
     // Polling timer for maps: 3.0 seconds
     @State private var timer: Timer.TimerPublisher = Timer.publish(every: 3.0, on: .main, in: .common)
@@ -181,6 +182,9 @@ struct FullPartnerMapView: View {
                     MapScaleView()
                 }
                 .ignoresSafeArea()
+                .onMapCameraChange { context in
+                    currentCameraCenter = context.camera.centerCoordinate
+                }
                 // Automatically move map camera smoothly when partner's live coordinates change
                 .onChange(of: partner.last_updated) { _, _ in
                     withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
@@ -220,15 +224,44 @@ struct FullPartnerMapView: View {
                             // Re-center Scope
                             Button {
                                 guard let currentUser = auth.currentUser else { return }
-                                if recenterTargetMe {
-                                    // Flight to ME
-                                    triggerCinematicFlight(from: partner.coordinate, to: currentUser.coordinate)
-                                    recenterTargetMe = false
+                                let myCoord = currentUser.coordinate
+                                let partnerCoord = partner.coordinate
+                                
+                                // Default to flying to Me
+                                var targetCoord = myCoord
+                                var startCoord = partnerCoord
+                                
+                                if let currentCenter = currentCameraCenter {
+                                    let centerLoc = CLLocation(latitude: currentCenter.latitude, longitude: currentCenter.longitude)
+                                    let myLoc = CLLocation(latitude: myCoord.latitude, longitude: myCoord.longitude)
+                                    let partnerLoc = CLLocation(latitude: partnerCoord.latitude, longitude: partnerCoord.longitude)
+                                    
+                                    let distToMe = centerLoc.distance(from: myLoc)
+                                    let distToPartner = centerLoc.distance(from: partnerLoc)
+                                    
+                                    if distToMe < distToPartner {
+                                        // Camera is currently closer to Me, so we should fly to Partner!
+                                        targetCoord = partnerCoord
+                                        startCoord = myCoord
+                                    } else {
+                                        // Camera is closer to Partner, so we should fly to Me!
+                                        targetCoord = myCoord
+                                        startCoord = partnerCoord
+                                    }
                                 } else {
-                                    // Flight to PARTNER
-                                    triggerCinematicFlight(from: currentUser.coordinate, to: partner.coordinate)
-                                    recenterTargetMe = true
+                                    // Fallback: If we don't have camera center yet, toggle based on simple state
+                                    if recenterTargetMe {
+                                        targetCoord = myCoord
+                                        startCoord = partnerCoord
+                                        recenterTargetMe = false
+                                    } else {
+                                        targetCoord = partnerCoord
+                                        startCoord = myCoord
+                                        recenterTargetMe = true
+                                    }
                                 }
+                                
+                                triggerCinematicFlight(from: startCoord, to: targetCoord)
                             } label: {
                                 Image(systemName: "scope")
                                     .font(.system(size: 20, weight: .semibold))
@@ -323,19 +356,6 @@ struct FullPartnerMapView: View {
     }
     
     private func triggerCinematicFlight(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D) {
-        // Calculate bearing/heading from start to end
-        let lat1 = start.latitude * .pi / 180.0
-        let lon1 = start.longitude * .pi / 180.0
-        let lat2 = end.latitude * .pi / 180.0
-        let lon2 = end.longitude * .pi / 180.0
-        
-        let dLon = lon2 - lon1
-        let y = sin(dLon) * cos(lat2)
-        let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
-        let radiansBearing = atan2(y, x)
-        var bearing = radiansBearing * 180.0 / .pi
-        if bearing < 0 { bearing += 360.0 }
-        
         let startLoc = CLLocation(latitude: start.latitude, longitude: start.longitude)
         let endLoc = CLLocation(latitude: end.latitude, longitude: end.longitude)
         let distance = startLoc.distance(from: endLoc)
@@ -346,15 +366,15 @@ struct FullPartnerMapView: View {
         let midpoint = CLLocationCoordinate2D(latitude: midLat, longitude: midLon)
         
         Task {
-            // --- STAGE 1: ZOOM OUT & TILT TO SHOW BOTH (MIDPOINT FOCUS) ---
-            // Swoop out, tilt to 3D and center on midpoint so BOTH coordinates are fully visible
+            // --- STAGE 1: ZOOM OUT FLAT TO SHOW BOTH (MIDPOINT FOCUS) ---
+            // Swoop out to midpoint so BOTH coordinates are fully visible. Keep 2D (pitch 0, heading 0)
             await MainActor.run {
                 withAnimation(.spring(response: 2.0, dampingFraction: 0.82)) {
                     position = .camera(MapCamera(
                         centerCoordinate: midpoint,
                         distance: max(3500.0, distance * 1.8),
-                        heading: bearing,
-                        pitch: 65.0
+                        heading: 0.0, // Face North
+                        pitch: 0.0 // Keep 2D Flat
                     ))
                 }
             }
@@ -363,14 +383,14 @@ struct FullPartnerMapView: View {
             try? await Task.sleep(nanoseconds: 1_800_000_000)
             
             // --- STAGE 2: CUSHIONED 2D FLAT LANDING ON DESTINATION ---
-            // Settle close on the destination, smoothly flattening pitch back to 2D (0°) and reset heading to North (0°)
+            // Settle close on the destination, keeping standard flat 2D (pitch 0) and facing North (0)
             await MainActor.run {
                 withAnimation(.spring(response: 2.2, dampingFraction: 0.88)) {
                     position = .camera(MapCamera(
                         centerCoordinate: end,
                         distance: 500.0, // Close details zoom
-                        heading: 0.0, // Aligns North like normal 2D map
-                        pitch: 0.0 // Smooth flatten
+                        heading: 0.0, // Aligns North
+                        pitch: 0.0 // Standard 2D flat
                     ))
                 }
             }
