@@ -803,16 +803,24 @@
                     startWebSocketDiagnostics();
                     startBandwidthMonitor();
                 } else {
-                    if (!isAuto) showLoginError();
+                    let errMsg = `Server status ${response.status}: Unauthorized`;
+                    try {
+                        const errData = await response.json();
+                        if (errData && errData.error) {
+                            errMsg = errData.error;
+                        }
+                    } catch(e) {}
+                    if (!isAuto) showLoginError(errMsg);
                 }
             } catch (err) {
                 console.error(err);
-                if (!isAuto) showLoginError();
+                if (!isAuto) showLoginError(`Network Error: ${err.message}`);
             }
         }
 
-        function showLoginError() {
+        function showLoginError(message) {
             const errorDiv = document.getElementById('loginError');
+            errorDiv.innerText = message || 'Invalid Admin Token.';
             errorDiv.classList.remove('hidden');
             localStorage.removeItem('glimpse_admin_token');
         }
