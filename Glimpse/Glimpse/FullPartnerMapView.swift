@@ -281,11 +281,21 @@ struct FullPartnerMapView: View {
                         .padding(.bottom, 12)
                     }
                     
-                    // Bottom Info Card (Observing Live partner)
-                    PartnerOverlayCard(user: partner, locationOverride: nil, isMinimal: false)
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 30)
-                        .shadow(color: Color.black.opacity(0.25), radius: 10, y: 5)
+                    // Bottom Info Card (Observing dynamically either Me or Partner based on active focus)
+                    Group {
+                        if let currentUser = auth.currentUser, currentlyFocusedTarget == .me {
+                            PartnerOverlayCard(user: currentUser, locationOverride: nil, isMinimal: false)
+                                .id("me_card")
+                        } else {
+                            PartnerOverlayCard(user: partner, locationOverride: nil, isMinimal: false)
+                                .id("partner_card")
+                        }
+                    }
+                    .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
+                    .animation(.spring(response: 0.45, dampingFraction: 0.8), value: currentlyFocusedTarget)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 30)
+                    .shadow(color: Color.black.opacity(0.25), radius: 10, y: 5)
                 }
             } else {
                 // Not Connected / No Partner View (Beautiful, minimalist box-less state)
