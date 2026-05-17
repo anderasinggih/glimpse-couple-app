@@ -105,7 +105,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                 } else {
                     // Non-stationary: Device is moving (walking, automotive, shaking, etc.)
                     if self.isStationary && self.motionDebounceTimer == nil {
-                        self.log("⏳ Pergerakan Terdeteksi: Memantau apakah gerakan berlanjut selama 5 detik sebelum menyalakan GPS...")
+                        self.log("⏳ Pergerakan Terdeteksi: Memantau apakah gerakan berlanjut selama 3 menit sebelum menyalakan GPS...")
                         LiveDebugLogger.shared.setGPSStatus("Evaluating Movement... ⏳")
                         
                         var tipeGerak = "bergerak"
@@ -114,14 +114,14 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                         else if activity.automotive { tipeGerak = "berkendara 🚗" }
                         else if activity.cycling { tipeGerak = "sepeda 🚴‍♂️" }
                         
-                        // Schedule GPS wake-up after 5 seconds of continuous motion
-                        self.motionDebounceTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
+                        // Schedule GPS wake-up after 3 minutes (180 seconds) of continuous motion
+                        self.motionDebounceTimer = Timer.scheduledTimer(withTimeInterval: 180.0, repeats: false) { [weak self] _ in
                             guard let self = self else { return }
                             
                             Task { @MainActor in
                                 self.isStationary = false
                                 self.motionDebounceTimer = nil
-                                self.log("🏃‍♂️ Sensor Gerak (Sustained): Gerakan berlanjut selama 5 detik. Membangunkan GPS kembali secara real-time!")
+                                self.log("🏃‍♂️ Sensor Gerak (Sustained): Gerakan berlanjut selama 3 menit. Membangunkan GPS kembali secara real-time!")
                                 self.locationManager.startUpdatingLocation()
                                 LiveDebugLogger.shared.setGPSStatus("Active (\(tipeGerak)) 🏃‍♂️")
                             }
