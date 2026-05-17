@@ -33,12 +33,16 @@ struct FlashCameraView: View {
         let frameSize = screenWidth - 25
         
         ZStack {
-            // LAYER 1: Background - Fixated and Full Screen
+            // LAYER 1: Background - Fixated and Full Screen (Bright white screen flash filler when flash is ON!)
             ZStack {
-                Color.deepVelvet.ignoresSafeArea()
-                iOS26Background().opacity(0.4)
+                if model.flashMode == .on {
+                    Color.white.ignoresSafeArea()
+                } else {
+                    Color.deepVelvet.ignoresSafeArea()
+                    iOS26Background().opacity(0.4)
+                }
             }
-            .drawingGroup()
+            .animation(.easeInOut(duration: 0.35), value: model.flashMode)
             .ignoresSafeArea()
             .ignoresSafeArea(.keyboard)
             .onTapGesture {
@@ -48,27 +52,7 @@ struct FlashCameraView: View {
             if capturedImage == nil {
                 // --- CAMERA TAKING MODE ---
                 VStack(spacing: 0) {
-                    // Sleek Top Bar with Close button
-                    HStack {
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.white)
-                                .padding(12)
-                                .background(.ultraThinMaterial)
-                                .clipShape(Circle())
-                                .overlay(
-                                    Circle().stroke(Color.white.opacity(0.1), lineWidth: 1)
-                                )
-                        }
-                        .padding(.leading, 20)
-                        
-                        Spacer()
-                    }
-                    .padding(.top, 10)
-                    .zIndex(10)
+                    Spacer().frame(height: 20)
                     
                     Spacer()
                     
@@ -102,13 +86,13 @@ struct FlashCameraView: View {
                         RoundedRectangle(cornerRadius: 28, style: .continuous)
                             .stroke(LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
                     )
-                    .shadow(color: .electricPurple.opacity(0.2), radius: 30)
+                    .shadow(color: model.flashMode == .on ? .white : .electricPurple.opacity(0.2), radius: model.flashMode == .on ? 50 : 30)
                     
                     // Rotating modern intimate camera hints
                     Text(cameraHints[activeHintIndex])
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.9))
-                        .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
+                        .foregroundColor(model.flashMode == .on ? .deepVelvet : .white.opacity(0.9))
+                        .shadow(color: model.flashMode == .on ? .clear : .black.opacity(0.3), radius: 2, x: 0, y: 1)
                         .padding(.horizontal, 20)
                         .padding(.top, 24)
                         .id(activeHintIndex)
@@ -147,12 +131,12 @@ struct FlashCameraView: View {
                             Button { model.toggleFlash() } label: {
                                 Image(systemName: model.flashMode == .on ? "bolt.fill" : "bolt.slash.fill")
                                     .font(.system(size: 20, weight: .bold))
-                                    .foregroundColor(model.flashMode == .on ? .yellow : .white)
+                                    .foregroundColor(model.flashMode == .on ? .orange : .white)
                                     .frame(width: 50, height: 50)
-                                    .background(.ultraThinMaterial)
+                                    .background(model.flashMode == .on ? Color.deepVelvet.opacity(0.1) : .ultraThinMaterial)
                                     .clipShape(Circle())
                                     .overlay(
-                                        Circle().stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                        Circle().stroke(model.flashMode == .on ? Color.deepVelvet.opacity(0.2) : Color.white.opacity(0.1), lineWidth: 1)
                                     )
                             }
                             
@@ -162,12 +146,12 @@ struct FlashCameraView: View {
                             Button { model.switchCamera() } label: {
                                 Image(systemName: "camera.rotate")
                                     .font(.system(size: 20, weight: .bold))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(model.flashMode == .on ? .deepVelvet : .white)
                                     .frame(width: 50, height: 50)
-                                    .background(.ultraThinMaterial)
+                                    .background(model.flashMode == .on ? Color.deepVelvet.opacity(0.1) : .ultraThinMaterial)
                                     .clipShape(Circle())
                                     .overlay(
-                                        Circle().stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                        Circle().stroke(model.flashMode == .on ? Color.deepVelvet.opacity(0.2) : Color.white.opacity(0.1), lineWidth: 1)
                                     )
                             }
                         }
@@ -379,8 +363,8 @@ struct FlashCameraView: View {
             }
         } label: {
             ZStack {
-                Circle().stroke(Color.white.opacity(0.3), lineWidth: 4).frame(width: 85, height: 85)
-                Circle().fill(Color.white).frame(width: 70, height: 70)
+                Circle().stroke(model.flashMode == .on ? Color.deepVelvet.opacity(0.3) : Color.white.opacity(0.3), lineWidth: 4).frame(width: 85, height: 85)
+                Circle().fill(model.flashMode == .on ? Color.deepVelvet : Color.white).frame(width: 70, height: 70)
             }
         }
         .disabled(isProcessing)
