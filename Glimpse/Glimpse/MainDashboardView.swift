@@ -329,13 +329,16 @@ struct MainDashboardView: View {
                                 HStack(spacing: 12) {
                                     ZStack {
                                         Circle()
-                                            .fill(LinearGradient(colors: [Color.orange.opacity(0.2), Color.red.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                            .fill(LinearGradient(colors: [Color.red.opacity(0.25), Color.orange.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing))
                                             .frame(width: 44, height: 44)
+                                            .shadow(color: .red.opacity(0.4), radius: 6)
                                         
                                         Image(systemName: "flame.fill")
                                             .font(.title2)
                                             .foregroundColor(.orange)
-                                            .scaleEffect(streakPulse ? 1.15 : 0.95)
+                                            .shadow(color: .orange, radius: 8)
+                                            .shadow(color: .red, radius: 12)
+                                            .scaleEffect(streakPulse ? 1.18 : 0.92)
                                             .onAppear {
                                                 withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
                                                     streakPulse = true
