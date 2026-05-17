@@ -1162,9 +1162,13 @@
 
             const isHttps = window.location.protocol === 'https:';
             const wsProtocol = isHttps ? 'wss:' : 'ws:';
+            const host = window.location.hostname;
+            const isLocal = host.includes('localhost') || host.includes('127.0.0.1') || host.includes('192.168.');
+            const appKey = "u1eadho8wbhzv2mcnlfy";
             
-            // Laravel Reverb WebSockets endpoint mapping (port 8080)
-            const wsUrl = `${wsProtocol}//${window.location.hostname}:8080/app/glimpseappkey?protocol=7&client=js&version=8.4.0&flash=true`;
+            const wsUrl = isLocal ? 
+                `${wsProtocol}//${host}:8080/app/${appKey}?protocol=7&client=js&version=8.4.0-reverb` :
+                `${wsProtocol}//${host}/app/${appKey}?protocol=7&client=js&version=8.4.0-reverb`;
             
             try {
                 liveWS = new WebSocket(wsUrl);
