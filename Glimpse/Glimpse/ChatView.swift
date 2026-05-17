@@ -111,7 +111,7 @@ struct ChatView: View {
                                                 .fill(LinearGradient(colors: [.clear, .electricPurple.opacity(0.3)], startPoint: .leading, endPoint: .trailing))
                                                 .frame(height: 1)
                                             
-                                            Text("Sedang Mengirim...")
+                                            Text("Sending...")
                                                 .font(.system(size: 11, weight: .bold, design: .rounded))
                                                 .foregroundColor(.electricPurple.opacity(0.8))
                                                 .padding(.horizontal, 12)
@@ -581,30 +581,31 @@ struct ChatView: View {
                             auth.selectedTab = 0 // Switch to Dashboard Tab
                         }
                     } label: {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack(spacing: 6) {
                                 Image(systemName: "camera.shutter.button.fill")
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(.system(size: 13, weight: .bold))
                                     .foregroundColor(.activeCyan)
                                 Text("Sent a Flash!")
-                                    .font(.system(size: 13.5, weight: .bold))
+                                    .font(.system(size: 12, weight: .bold))
                                     .foregroundColor(.white)
                             }
                             
                             HStack {
                                 Text("Tap to view on Dashboard")
-                                    .font(.system(size: 10, weight: .medium))
+                                    .font(.system(size: 9, weight: .medium))
                                     .foregroundColor(.white.opacity(0.7))
-                                Spacer(minLength: 12)
+                                Spacer(minLength: 8)
                                 if !timeStr.isEmpty {
                                     Text(timeStr)
-                                        .font(.system(size: 8, weight: .medium))
+                                        .font(.system(size: 7.5, weight: .medium))
                                         .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
                                 }
                             }
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 7)
+                        .frame(width: 175)
                         .background(
                             isMe ? Color.activeCyan.opacity(0.18) : Color.white.opacity(0.12)
                         )
@@ -620,26 +621,26 @@ struct ChatView: View {
                     // STANDARD CHAT BUBBLE
                     VStack(alignment: .trailing, spacing: 4) {
                         Text(msg.message)
-                            .font(.system(size: 13.5))
+                            .font(.system(size: 12.5))
                             .foregroundColor(.white)
                             .multilineTextAlignment(.leading)
                         
                         HStack(spacing: 3) {
                             if !timeStr.isEmpty {
                                 Text(timeStr)
-                                    .font(.system(size: 8.5, weight: .medium))
+                                    .font(.system(size: 8.0, weight: .medium))
                                     .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
                             }
                             
                             if isPending {
                                 Image(systemName: "clock")
-                                    .font(.system(size: 8.5))
+                                    .font(.system(size: 8.0))
                                     .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
                             }
                         }
                     }
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 7)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5.5)
                     .background(bubbleBackground(isMe: isMe))
                     .clipShape(RoundedCorner(radius: 15, corners: corners))
                     .overlay(
