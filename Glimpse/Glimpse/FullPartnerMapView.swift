@@ -9,7 +9,7 @@ struct FullPartnerMapView: View {
     @State private var isSatellite = true
     @State private var mapPulse = false
     @State private var wavePhase = 0.0
-    @State private var recenterTargetMe = false
+    @State private var recenterTargetMe = true
     
     // Polling timer for maps: 3.0 seconds
     @State private var timer: Timer.TimerPublisher = Timer.publish(every: 3.0, on: .main, in: .common)
@@ -340,28 +340,32 @@ struct FullPartnerMapView: View {
         let endLoc = CLLocation(latitude: end.latitude, longitude: end.longitude)
         let distance = startLoc.distance(from: endLoc)
         
+        // Midpoint coordinate along the path
+        let midLat = (start.latitude + end.latitude) / 2.0
+        let midLon = (start.longitude + end.longitude) / 2.0
+        let midpoint = CLLocationCoordinate2D(latitude: midLat, longitude: midLon)
+        
         Task {
-            // --- STAGE 1: INITIATE FLUID 3D FLY-OVER ---
-            // Swoop out, tilt to 65° and rotate to face destination, and glide in one continuous movement
+            // --- STAGE 1: ZOOM OUT & TILT TO SHOW BOTH (MIDPOINT FOCUS) ---
+            // Swoop out, tilt to 3D and center on midpoint so BOTH coordinates are fully visible
             await MainActor.run {
-                withAnimation(.spring(response: 2.8, dampingFraction: 0.85)) {
+                withAnimation(.spring(response: 2.0, dampingFraction: 0.82)) {
                     position = .camera(MapCamera(
-                        centerCoordinate: end,
-                        distance: max(3000.0, distance * 1.4),
+                        centerCoordinate: midpoint,
+                        distance: max(3500.0, distance * 1.8),
                         heading: bearing,
                         pitch: 65.0
                     ))
                 }
             }
             
-            // Wait until camera is mid-flight (1.6s) before smoothly easing into the landing.
-            // Momentum is preserved natively by SwiftUI's spring physics.
-            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            // Allow the user to comfortably see both partners and the glowing frequency line (1.8s)
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
             
-            // --- STAGE 2: CUSHIONED 2D FLAT LANDING ---
-            // Settle on destination, smoothly flattening pitch back to 2D (0°) and facing North (0°)
+            // --- STAGE 2: CUSHIONED 2D FLAT LANDING ON DESTINATION ---
+            // Settle close on the destination, smoothly flattening pitch back to 2D (0°) and reset heading to North (0°)
             await MainActor.run {
-                withAnimation(.spring(response: 1.8, dampingFraction: 0.9)) {
+                withAnimation(.spring(response: 2.2, dampingFraction: 0.88)) {
                     position = .camera(MapCamera(
                         centerCoordinate: end,
                         distance: 500.0, // Close details zoom
