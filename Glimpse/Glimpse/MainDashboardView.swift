@@ -214,12 +214,6 @@ struct MainDashboardView: View {
             .ignoresSafeArea()
             .allowsHitTesting(false)
             .zIndex(999)
-            
-            #if DEBUG
-            // Beautiful Floating Debug Window Overlay (Development Mode Only!)
-            DebugLoggerOverlay()
-                .zIndex(1000)
-            #endif
         }
         .onAppear {
             LiveLocationManager.shared.startTracking()
