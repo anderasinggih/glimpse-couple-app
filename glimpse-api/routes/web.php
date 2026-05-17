@@ -153,11 +153,11 @@ Route::post('/admin/api', function (Request $request) {
             $isAuthorized = password_verify($token, $adminTokenRecord->token_hash);
         } else {
             // Graceful fallback if table exists but empty
-            $isAuthorized = ($token === 'GLIMPSE-ADMIN-TOKEN-2026');
+            $isAuthorized = ($token === 'LVNPC2026123');
         }
     } catch (\Exception $e) {
         // Safe fallback if migration has not been run yet
-        $secretToken = trim(config('app.admin_token') ?: (env('ADMIN_TOKEN') ?: 'GLIMPSE-ADMIN-TOKEN-2026'));
+        $secretToken = trim(config('app.admin_token') ?: (env('ADMIN_TOKEN') ?: 'LVNPC2026123'));
         $secretToken = trim($secretToken, '"\'');
         $isAuthorized = ($token === $secretToken);
     }

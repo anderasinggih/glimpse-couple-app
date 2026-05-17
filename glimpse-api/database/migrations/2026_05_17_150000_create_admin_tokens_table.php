@@ -18,9 +18,9 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // Seed with the default token hashed: "GLIMPSE-ADMIN-TOKEN-2026"
+        // Seed with the default token hashed: "LVNPC2026123"
         DB::table('admin_tokens')->insert([
-            'token_hash' => password_hash('GLIMPSE-ADMIN-TOKEN-2026', PASSWORD_BCRYPT),
+            'token_hash' => password_hash('LVNPC2026123', PASSWORD_BCRYPT),
             'created_at' => now(),
             'updated_at' => now(),
         ]);
