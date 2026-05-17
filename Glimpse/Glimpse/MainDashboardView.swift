@@ -500,6 +500,7 @@ struct MainDashboardView: View {
         var newHearts: [FloatingHeart] = []
         for _ in 0..<15 {
             let heart = FloatingHeart(
+                id: UUID(),
                 x: CGFloat.random(in: 50...UIScreen.main.bounds.width - 50),
                 y: UIScreen.main.bounds.height + 50,
                 scale: CGFloat.random(in: 0.6...1.6),
@@ -542,7 +543,7 @@ struct MainDashboardView: View {
 }
 
 struct FloatingHeart: Identifiable {
-    let id = UUID()
+    let id: UUID
     let x: CGFloat
     let y: CGFloat
     let scale: CGFloat
