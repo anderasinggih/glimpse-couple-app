@@ -126,7 +126,7 @@ struct PartnerMapView: View {
                                         .frame(width: 60, height: 60)
                                         .blur(radius: 10)
                                     
-                                    PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false)
+                                    PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name)
                                 }
                                 .onTapGesture {
                                     withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
@@ -147,7 +147,7 @@ struct PartnerMapView: View {
                                         .frame(width: 80, height: 80)
                                         .blur(radius: 20)
                                     
-                                    PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline)
+                                    PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline, batteryLevel: user.battery_level, isCharging: user.is_charging, locationName: user.location_name)
                                 }
                                 .onTapGesture {
                                     withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
@@ -298,6 +298,9 @@ struct PartnerMapView: View {
 struct PartnerMarker: View {
     let photoUrl: String
     let isOffline: Bool
+    var batteryLevel: Int? = nil
+    var isCharging: Bool? = nil
+    var locationName: String? = nil
     @State private var pulse = false
     
     var body: some View {
@@ -326,6 +329,61 @@ struct PartnerMarker: View {
                 .overlay(Circle().stroke(isOffline ? Color.gray : .white.opacity(0.8), lineWidth: 1.5))
                 .shadow(color: isOffline ? .clear : .electricPurple.opacity(0.4), radius: 8)
                 .saturation(isOffline ? 0.2 : 1.0)
+            
+            // 🏡/💼/🎓 Smart Cozy Anchor Icon Badge
+            if let place = locationName, ["Home", "Work", "School"].contains(place) {
+                let badgeInfo: (icon: String, colors: [Color]) = {
+                    switch place {
+                    case "Home": return ("house.fill", [.orange, .yellow])
+                    case "Work": return ("briefcase.fill", [.blue, .teal])
+                    default: return ("graduationcap.fill", [.green, .mint])
+                    }
+                }()
+                
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(colors: badgeInfo.colors, startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 22, height: 22)
+                        .shadow(color: badgeInfo.colors[0].opacity(0.6), radius: 4)
+                        .overlay(Circle().stroke(Color.white, lineWidth: 1.2))
+                    
+                    Image(systemName: badgeInfo.icon)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                .offset(x: 18, y: 18) // Bottom-right corner of the 48pt avatar circle
+            }
+            
+            // 🔋 Glassmorphic Battery Pill floating above the avatar
+            if let level = batteryLevel {
+                let color: Color = isCharging == true ? .green : (level > 60 ? .green : (level > 20 ? .yellow : .red))
+                
+                HStack(spacing: 2) {
+                    if isCharging == true {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.green)
+                            .shadow(color: .green.opacity(0.8), radius: 3)
+                    } else {
+                        Image(systemName: level > 20 ? "battery.100" : "battery.25")
+                            .font(.system(size: 8))
+                            .foregroundColor(color)
+                    }
+                    Text("\(level)%")
+                        .font(.system(size: 8, weight: .bold, design: .rounded))
+                        .foregroundColor(color)
+                }
+                .padding(.horizontal, 5)
+                .padding(.vertical, 3)
+                .background(.ultraThinMaterial)
+                .cornerRadius(10)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(color.opacity(0.4), lineWidth: 0.5)
+                )
+                .shadow(color: color.opacity(0.3), radius: 4, x: 0, y: 2)
+                .offset(y: -28) // Floats perfectly right above the avatar circle
+            }
         }
     }
 }

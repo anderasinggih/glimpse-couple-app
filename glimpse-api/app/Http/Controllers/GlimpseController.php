@@ -456,6 +456,40 @@ class GlimpseController extends Controller
         if ($request->has('status_note')) $user->status_note = $request->status_note;
         if ($request->has('location_name')) $user->location_name = $request->location_name;
 
+        // 🏡 Smart Place Anchor & Cozy Labeling (Zenly Style)
+        $lat = $user->latitude;
+        $lng = $user->longitude;
+        if ($lat !== null && $lng !== null) {
+            $hour = (int)now()->format('H');
+            $dayOfWeek = (int)now()->format('N'); // 1 (Mon) - 7 (Sun)
+            
+            // Check if stationary (within ~30 meters of last coordinate in history)
+            $isStationary = false;
+            $history = $user->location_history ?? [];
+            if (!empty($history)) {
+                $last = end($history);
+                $latDiff = abs($last['latitude'] - $lat);
+                $lngDiff = abs($last['longitude'] - $lng);
+                if ($latDiff < 0.0003 && $lngDiff < 0.0003) {
+                    $isStationary = true;
+                }
+            } else {
+                $isStationary = true;
+            }
+            
+            if ($isStationary) {
+                if ($hour >= 20 || $hour < 6) {
+                    $user->location_name = "Home";
+                } elseif ($hour >= 9 && $hour <= 17) {
+                    if ($dayOfWeek >= 1 && $dayOfWeek <= 5) {
+                        $user->location_name = "Work";
+                    } else {
+                        $user->location_name = "School";
+                    }
+                }
+            }
+        }
+
         if ($request->has('latitude') && $request->has('longitude')) {
             $this->appendLocationHistory($user, $request->latitude, $request->longitude);
         }

@@ -141,16 +141,16 @@ struct MainDashboardView: View {
             ZStack {
                 ForEach(popHearts) { heart in
                     ZStack {
-                        Image(systemName: "heart.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(heart.color.opacity(0.15))
-                            .scaleEffect(heart.scale + 0.15)
-                            .blur(radius: 8)
+                        Image(systemName: heart.systemName)
+                            .font(.system(size: 44, weight: .bold))
+                            .foregroundColor(heart.color.opacity(0.2))
+                            .scaleEffect(heart.scale + 0.2)
+                            .blur(radius: 6)
                         
-                        Image(systemName: "heart.fill")
-                            .font(.system(size: 60))
+                        Image(systemName: heart.systemName)
+                            .font(.system(size: 44, weight: .bold))
                             .foregroundColor(heart.color)
-                            .shadow(color: heart.color.opacity(0.6), radius: 12)
+                            .shadow(color: heart.color.opacity(0.8), radius: 10)
                             .scaleEffect(heart.scale)
                     }
                     .rotationEffect(.degrees(heart.rotation))
@@ -383,6 +383,65 @@ struct MainDashboardView: View {
                             PartnerMapView(user: partner)
                                 .aspectRatio(1, contentMode: .fit)
                                 .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
+                            
+                            // 💖 Premium "Send Love Sparks" Button (Always accessible to ping with neon vector animations!)
+                            if !auth.isTogether {
+                                Button {
+                                    triggerLoveBurst()
+                                    Task {
+                                        try? await auth.triggerServerLoveBurst()
+                                    }
+                                    
+                                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                                    generator.impactOccurred()
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        ZStack {
+                                            Circle()
+                                                .fill(LinearGradient(colors: [.electricPurple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                                .frame(width: 40, height: 40)
+                                                .shadow(color: .electricPurple.opacity(0.4), radius: 6)
+                                            
+                                            Image(systemName: "sparkles")
+                                                .font(.system(size: 16, weight: .bold))
+                                                .foregroundColor(.white)
+                                        }
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Send Love Sparks")
+                                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                                .foregroundColor(.white)
+                                            Text("Ping \(partner.name) with glowing neon sparkles")
+                                                .font(.system(size: 11))
+                                                .foregroundColor(.white.opacity(0.6))
+                                                .multilineTextAlignment(.leading)
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        Image(systemName: "heart.fill")
+                                            .font(.system(size: 20))
+                                            .foregroundColor(.red)
+                                            .shadow(color: .red.opacity(0.8), radius: 6)
+                                            .scaleEffect(togetherAnimation ? 1.15 : 0.95)
+                                    }
+                                    .padding(16)
+                                    .background {
+                                        Color.clear.liquidGlass()
+                                    }
+                                    .cornerRadius(20)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 20)
+                                            .stroke(
+                                                LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                                lineWidth: 1
+                                            )
+                                    )
+                                    .shadow(color: .black.opacity(0.15), radius: 10, y: 5)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .padding(.bottom, 4)
+                            }
                             
                             // Together Streak & Meeting Counters Card
                             VStack(spacing: 12) {
@@ -883,35 +942,54 @@ struct MainDashboardView: View {
     }
     
     private func triggerLoveBurst() {
-        let heartId = UUID()
-        let heart = PopHeart(
-            id: heartId,
-            x: CGFloat.random(in: -90...90),
-            y: CGFloat.random(in: -90...90),
-            scale: CGFloat.random(in: 0.6...1.4),
-            color: [Color.red, Color.pink, Color.electricPurple, Color(hex: "FF4D94")].randomElement()!,
-            opacity: 1.0,
-            rotation: Double.random(in: -30...30)
-        )
+        let haptic = UINotificationFeedbackGenerator()
+        haptic.notificationOccurred(.success) // 📳 Premium Success Haptic Explosion!
         
-        self.popHearts.append(heart)
-        
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
-        
-        // Play satisfying native soft bubble pop "plup" sound effect
+        // System pop sound effect
         AudioServicesPlaySystemSound(1306)
         
-        withAnimation(.easeOut(duration: 1.0)) {
-            if let idx = self.popHearts.firstIndex(where: { $0.id == heartId }) {
-                self.popHearts[idx].y -= 120
-                self.popHearts[idx].opacity = 0.0
-                self.popHearts[idx].scale *= 1.2
-            }
-        }
+        let shapes = ["heart.fill", "sparkles", "star.fill", "flame.fill", "bolt.fill"]
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            self.popHearts.removeAll(where: { $0.id == heartId })
+        for _ in 0..<15 {
+            let heartId = UUID()
+            let angle = Double.random(in: 0...(2 * Double.pi))
+            let radius = CGFloat.random(in: 80...250)
+            let shape = shapes.randomElement() ?? "heart.fill"
+            let color = [
+                Color.activeCyan, 
+                Color.electricPurple, 
+                Color.pink, 
+                Color(hex: "FF4D94"), 
+                Color.orange
+            ].randomElement()!
+            
+            let particle = PopHeart(
+                id: heartId,
+                x: 0,
+                y: 0,
+                scale: CGFloat.random(in: 0.5...1.2),
+                color: color,
+                opacity: 1.0,
+                rotation: Double.random(in: -45...45),
+                systemName: shape
+            )
+            
+            self.popHearts.append(particle)
+            
+            // Animate outwards radially!
+            withAnimation(.spring(response: 0.8, dampingFraction: 0.6, blendDuration: 0)) {
+                if let idx = self.popHearts.firstIndex(where: { $0.id == heartId }) {
+                    self.popHearts[idx].x = cos(angle) * radius
+                    self.popHearts[idx].y = sin(angle) * radius
+                    self.popHearts[idx].opacity = 0.0
+                    self.popHearts[idx].scale *= 1.4
+                    self.popHearts[idx].rotation += Double.random(in: -90...90)
+                }
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                self.popHearts.removeAll(where: { $0.id == heartId })
+            }
         }
     }
     
@@ -947,6 +1025,7 @@ struct PopHeart: Identifiable {
     var color: Color
     var opacity: Double
     var rotation: Double
+    var systemName: String
 }
 
 struct FlashLocationRow: View {
