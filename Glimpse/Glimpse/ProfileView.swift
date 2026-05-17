@@ -21,6 +21,7 @@ struct ProfileView: View {
     @State private var isShowingClearCacheSuccess = false
     @AppStorage("glimpse_theme_accent") var themeAccentHex = "00FFFF"
     @AppStorage("glimpse_haptic_strength") var hapticStrength = "rigid"
+    @AppStorage("glimpse_dynamic_orbs") var dynamicOrbsEnabled = true
     
     @State private var isShowingThemeSelection = false
     @State private var isShowingHapticSelection = false
@@ -57,25 +58,24 @@ struct ProfileView: View {
                             VStack(spacing: 16) {
                                 if let partner = auth.partner {
                                     // PAIRED AVATARS
-                                    ZStack {
-                                        avatarImage(url: partner.profile_photo_url)
-                                            .offset(x: 25, y: 10)
-                                            .scaleEffect(0.9)
-                                        
+                                    // PAIRED AVATARS (Increased separation, accent borders, and removed covering heart icon)
+                                    HStack(spacing: 24) {
                                         avatarImage(url: user.profile_photo_url)
-                                            .overlay(Circle().stroke(Color.deepVelvet, lineWidth: 4))
-                                            .offset(x: -20)
+                                            .overlay(Circle().stroke(Color.deepVelvet, lineWidth: 2))
+                                            .shadow(color: .activeCyan.opacity(0.4), radius: 12)
                                         
-                                        Image(systemName: "heart.fill")
-                                            .font(.system(size: 16))
-                                            .foregroundColor(.red)
-                                            .padding(6)
-                                            .background(Color.white)
+                                        Image(systemName: "arrow.left.and.right")
+                                            .font(.system(size: 16, weight: .bold))
+                                            .foregroundColor(.activeCyan.opacity(0.6))
+                                            .frame(width: 32, height: 32)
+                                            .background(Color.activeCyan.opacity(0.1))
                                             .clipShape(Circle())
-                                            .shadow(radius: 5)
-                                            .offset(x: 10, y: 0)
+                                        
+                                        avatarImage(url: partner.profile_photo_url)
+                                            .overlay(Circle().stroke(Color.deepVelvet, lineWidth: 2))
+                                            .shadow(color: .activeCyan.opacity(0.4), radius: 12)
                                     }
-                                    .padding(.horizontal, 30)
+                                    .padding(.top, 10)
                                 } else {
                                     avatarImage(url: user.profile_photo_url)
                                 }
@@ -110,7 +110,7 @@ struct ProfileView: View {
                                             Button {
                                                 isShowingCancelDisconnectConfirmation = true
                                             } label: {
-                                                CompactMenuRow(icon: "clock.fill", title: "Unlink requested...", value: "Cancel Request", color: .orange)
+                                                CompactMenuRow(icon: "clock.fill", title: "Unlink requested...", value: "Cancel Request", color: .activeCyan)
                                             }
                                         } else {
                                             Button {
@@ -123,27 +123,27 @@ struct ProfileView: View {
                                         Button {
                                             isShowingDisconnectConfirmation = true
                                         } label: {
-                                            CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: formattedPairedDate(auth.anniversaryDate ?? Date()), color: .red)
+                                            CompactMenuRow(icon: "heart.fill", title: "Connected with \(partner.name)", value: formattedPairedDate(auth.anniversaryDate ?? Date()), color: .activeCyan)
                                         }
                                     }
                                     
                                     Button {
                                         isShowingEditAnniversary = true
                                     } label: {
-                                        CompactMenuRow(icon: "calendar", title: "Anniversary date", value: formattedDate(auth.anniversaryDate ?? Date()), color: .electricPurple)
+                                        CompactMenuRow(icon: "calendar", title: "Anniversary date", value: formattedDate(auth.anniversaryDate ?? Date()), color: .activeCyan)
                                     }
                                 } else {
                                     if auth.invitedBy == auth.currentUser?.id {
                                         Button {
                                             isShowingCancelInviteConfirmation = true
                                         } label: {
-                                            CompactMenuRow(icon: "hourglass.badge.plus", title: "Invite sent to \(partner.name)", value: "Pending", color: .orange)
+                                            CompactMenuRow(icon: "hourglass.badge.plus", title: "Invite sent to \(partner.name)", value: "Pending", color: .activeCyan)
                                         }
                                     } else {
                                         Button {
                                             isShowingAcceptInviteConfirmation = true
                                         } label: {
-                                            CompactMenuRow(icon: "heart.badge.plus.fill", title: "Invite from \(partner.name)", value: "Review", color: .red)
+                                            CompactMenuRow(icon: "heart.badge.plus.fill", title: "Invite from \(partner.name)", value: "Review", color: .activeCyan)
                                         }
                                     }
                                 }
@@ -166,7 +166,7 @@ struct ProfileView: View {
                             Button {
                                 isShowingChangePassword = true
                             } label: {
-                                CompactMenuRow(icon: "lock.fill", title: "Change password", value: "Security", color: .orange)
+                                CompactMenuRow(icon: "lock.fill", title: "Change password", value: "Security", color: .activeCyan)
                             }
                         }
                         .padding(.horizontal)
@@ -184,7 +184,14 @@ struct ProfileView: View {
                             Button {
                                 isShowingHapticSelection = true
                             } label: {
-                                CompactMenuRow(icon: "waveform.path", title: "Vibrations & haptics", value: hapticStrengthTitle(), color: .orange)
+                                CompactMenuRow(icon: "waveform.path", title: "Vibrations & haptics", value: hapticStrengthTitle(), color: .activeCyan)
+                            }
+                            
+                            Button {
+                                dynamicOrbsEnabled.toggle()
+                                triggerHapticExample()
+                            } label: {
+                                CompactMenuRow(icon: "circle.hexagongrid.fill", title: "Animated 3D Orbs", value: dynamicOrbsEnabled ? "Active" : "Off (Saves Battery)", color: .activeCyan)
                             }
                         }
                         .padding(.horizontal)
@@ -202,22 +209,24 @@ struct ProfileView: View {
                             Button {
                                 openAppSettings()
                             } label: {
-                                CompactMenuRow(icon: "location.viewfinder", title: "Location sharing", value: locationStatus(), color: .green)
+                                CompactMenuRow(icon: "location.viewfinder", title: "Location sharing", value: locationStatus(), color: .activeCyan)
                             }
                             
                             Button {
                                 isShowingClearCacheAlert = true
                             } label: {
-                                CompactMenuRow(icon: "trash.fill", title: "Clear cache storage", value: "Clear photos", color: .red)
+                                CompactMenuRow(icon: "trash.fill", title: "Clear cache storage", value: "Clear photos", color: .activeCyan)
                             }
                             
                             Link(destination: URL(string: "https://api.galleryfortwo.my.id/privacy")!) {
-                                CompactMenuRow(icon: "shield.fill", title: "Privacy policy", value: "View", color: .secondary)
+                                CompactMenuRow(icon: "shield.fill", title: "Privacy policy", value: "View", color: .activeCyan)
                             }
                         }
                         .padding(.horizontal)
                         
-                        // 5. Logout
+
+                        
+                        // 6. Logout
                         Button {
                             isShowingLogoutConfirmation = true
                         } label: {
@@ -235,6 +244,27 @@ struct ProfileView: View {
                         }
                         .padding(.horizontal)
                         .padding(.top, 10)
+                        
+                        // 7. Premium Footer & Branding by Lovinpeace
+                        VStack(spacing: 6) {
+                            Text("Glimpse for Couples")
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.6))
+                            
+                            Text("Version 1.2.4 (Build 412)")
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.35))
+                            
+                            Text("Created by Lovinpeace")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundColor(.activeCyan.opacity(0.85))
+                            
+                            Text("© 2026 Lovinpeace. All Rights Reserved.")
+                                .font(.system(size: 10))
+                                .foregroundColor(.white.opacity(0.2))
+                        }
+                        .padding(.top, 30)
+                        .padding(.bottom, 10)
                         
                         Spacer(minLength: 120)
                     }
@@ -272,7 +302,7 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $isShowingHapticSelection) {
             HapticSelectionView(hapticStrength: $hapticStrength)
-                .presentationDetents([.height(230)])
+                .presentationDetents([.height(420)])
         }
         .alert("Connect Partner", isPresented: $isShowingInviteAlert) {
             TextField("Partner code", text: $inviteCodeInput)
@@ -368,8 +398,23 @@ struct ProfileView: View {
         CachedImageView(urlString: formattedUrl(url))
             .frame(width: 80, height: 80)
             .clipShape(Circle())
-            .overlay(Circle().stroke(Color.electricPurple, lineWidth: 2))
-            .shadow(color: .electricPurple.opacity(0.2), radius: 10)
+            .overlay(Circle().stroke(Color.activeCyan, lineWidth: 2))
+            .shadow(color: .activeCyan.opacity(0.25), radius: 10)
+    }
+    
+    private func triggerHapticExample() {
+        guard hapticStrength != "none" else { return }
+        if hapticStrength == "rigid" {
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        } else if hapticStrength == "soft" {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        } else if hapticStrength == "heavy" {
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        } else if hapticStrength == "success" {
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        } else if hapticStrength == "warning" {
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        }
     }
     
     private func sectionLabel(_ text: String) -> some View {
@@ -491,8 +536,11 @@ struct ProfileView: View {
         switch hapticStrength {
         case "rigid": return "Crisp & Rigid"
         case "soft": return "Soft & Subtle"
+        case "heavy": return "Heavy Impact"
+        case "success": return "Success Wave"
+        case "warning": return "Alert Warnings"
         case "none": return "Disabled"
-        default: return "Standard"
+        default: return "Crisp & Rigid"
         }
     }
     
@@ -866,47 +914,120 @@ struct HapticSelectionView: View {
     @Binding var hapticStrength: String
     @Environment(\.dismiss) var dismiss
     
+    let hapticOptions = [
+        ("Crisp & Rigid", "rigid", "Double metallic tap", "selection"),
+        ("Soft & Subtle", "soft", "Light organic touch", "light"),
+        ("Heavy Impact", "heavy", "Strong tactile bump", "heavy"),
+        ("Success Wave", "success", "Playful double pulse", "success"),
+        ("Alert Warnings", "warning", "Triple alert pulse", "warning"),
+        ("Disabled", "none", "No vibration feedback", "none")
+    ]
+    
     var body: some View {
         ZStack {
             Color.deepVelvet.ignoresSafeArea()
             
             VStack(spacing: 16) {
-                Text("Vibration & Haptic Feedback")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-                    .padding(.top, 20)
+                VStack(spacing: 4) {
+                    Text("Vibration & Haptics")
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    
+                    Text("Tap any profile below to feel the haptic preview immediately!")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.5))
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top, 24)
                 
                 VStack(spacing: 8) {
-                    ForEach([("Crisp & Rigid", "rigid"), ("Soft & Subtle", "soft"), ("Disabled", "none")], id: \.1) { option in
+                    ForEach(hapticOptions, id: \.1) { option in
                         Button {
                             hapticStrength = option.1
-                            if option.1 == "rigid" {
-                                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                            } else if option.1 == "soft" {
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                            }
-                            dismiss()
+                            triggerHaptic(type: option.3)
                         } label: {
-                            HStack {
-                                Text(option.0)
+                            HStack(spacing: 12) {
+                                Image(systemName: hapticIcon(for: option.1))
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(hapticStrength == option.1 ? .deepVelvet : .activeCyan)
+                                    .frame(width: 28, height: 28)
+                                    .background(hapticStrength == option.1 ? Color.activeCyan : Color.activeCyan.opacity(0.1))
+                                    .clipShape(Circle())
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(option.0)
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundColor(hapticStrength == option.1 ? .deepVelvet : .white)
+                                    Text(option.2)
+                                        .font(.system(size: 10.5))
+                                        .foregroundColor(hapticStrength == option.1 ? .deepVelvet.opacity(0.7) : .white.opacity(0.4))
+                                }
+                                
                                 Spacer()
+                                
                                 if hapticStrength == option.1 {
-                                    Image(systemName: "checkmark")
-                                        .foregroundColor(.activeCyan)
+                                    Image(systemName: "checkmark.seal.fill")
+                                        .foregroundColor(.deepVelvet)
+                                        .font(.system(size: 15))
                                 }
                             }
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(Color.white.opacity(0.05))
-                            .cornerRadius(12)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(hapticStrength == option.1 ? Color.activeCyan : Color.white.opacity(0.04))
+                            .cornerRadius(14)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(hapticStrength == option.1 ? Color.clear : Color.white.opacity(0.05), lineWidth: 1)
+                            )
                         }
                     }
                 }
                 .padding(.horizontal)
                 
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Apply & Close")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundColor(.deepVelvet)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(Color.activeCyan)
+                        .cornerRadius(12)
+                }
+                .padding(.horizontal)
+                .padding(.top, 4)
+                
                 Spacer()
             }
+        }
+    }
+    
+    private func hapticIcon(for strength: String) -> String {
+        switch strength {
+        case "rigid": return "circle.grid.2x1.fill"
+        case "soft": return "circle.fill"
+        case "heavy": return "bolt.horizontal.fill"
+        case "success": return "checkmark.circle.fill"
+        case "warning": return "exclamationmark.triangle.fill"
+        default: return "slash.circle"
+        }
+    }
+    
+    private func triggerHaptic(type: String) {
+        switch type {
+        case "selection":
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        case "light":
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        case "heavy":
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        case "success":
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        case "warning":
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        default:
+            break
         }
     }
 }

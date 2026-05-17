@@ -218,8 +218,8 @@ struct ChatView: View {
                                     .padding(12)
                                     .background(
                                         Circle()
-                                            .fill(Color.electricPurple)
-                                            .shadow(color: .electricPurple.opacity(0.6), radius: 8, x: 0, y: 4)
+                                            .fill(Color.activeCyan)
+                                            .shadow(color: .activeCyan.opacity(0.6), radius: 8, x: 0, y: 4)
                                     )
                                     .overlay(
                                         Circle()
@@ -327,7 +327,7 @@ struct ChatView: View {
                 }
                 .frame(width: 44, height: 44)
                 .clipShape(Circle())
-                .overlay(Circle().stroke(Color.electricPurple.opacity(0.3), lineWidth: 1.5))
+                .overlay(Circle().stroke(Color.activeCyan.opacity(0.3), lineWidth: 1.5))
                 
                 // Partner Details (Tiny & Compact)
                 VStack(alignment: .leading, spacing: 3) {
@@ -361,7 +361,7 @@ struct ChatView: View {
                                 .font(.system(size: 11, weight: .medium))
                                 .lineLimit(1)
                         }
-                        .foregroundColor(.electricPurple.opacity(0.95))
+                        .foregroundColor(.activeCyan.opacity(0.95))
                         .contentShape(Rectangle())
                         .onTapGesture {
                             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -400,7 +400,7 @@ struct ChatView: View {
                 } label: {
                     Image(systemName: isSearchingChat ? "xmark.circle.fill" : "magnifyingglass")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(isSearchingChat ? .electricPurple : .white.opacity(0.8))
+                        .foregroundColor(isSearchingChat ? .activeCyan : .white.opacity(0.8))
                         .padding(8)
                         .background(Color.white.opacity(isSearchingChat ? 0.15 : 0.05))
                         .clipShape(Circle())
@@ -421,7 +421,7 @@ struct ChatView: View {
                         TextField("Search in chat...", text: $searchQuery)
                             .font(.system(size: 14))
                             .foregroundColor(.white)
-                            .tint(.electricPurple)
+                            .tint(.activeCyan)
                             .submitLabel(.search)
                         
                         if !searchQuery.isEmpty {
@@ -493,9 +493,9 @@ struct ChatView: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.deepVelvet)
                     .frame(width: 44, height: 44)
-                    .background(messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.white.opacity(0.3) : Color.electricPurple)
+                    .background(messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.white.opacity(0.3) : Color.activeCyan)
                     .clipShape(Circle())
-                    .shadow(color: messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.clear : Color.electricPurple.opacity(0.3), radius: 8, y: 3)
+                    .shadow(color: messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.clear : Color.activeCyan.opacity(0.3), radius: 8, y: 3)
             }
             .disabled(messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
@@ -504,9 +504,9 @@ struct ChatView: View {
     @ViewBuilder
     private func bubbleBackground(isMe: Bool) -> some View {
         if isMe {
-            LinearGradient(colors: [Color.electricPurple, Color.electricPurple.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            return AnyView(Color.activeCyan.opacity(0.18))
         } else {
-            LinearGradient(colors: [Color.white.opacity(0.12), Color.white.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            return AnyView(Color.white.opacity(0.08))
         }
     }
     
@@ -533,37 +533,35 @@ struct ChatView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "camera.shutter.button.fill")
                                     .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(isMe ? .deepVelvet : .activeCyan)
+                                    .foregroundColor(.activeCyan)
                                 Text("Sent a Flash!")
                                     .font(.system(size: 13.5, weight: .bold))
-                                    .foregroundColor(isMe ? .deepVelvet : .white)
+                                    .foregroundColor(.white)
                             }
                             
                             HStack {
                                 Text("Tap to view on Dashboard")
                                     .font(.system(size: 10, weight: .medium))
-                                    .foregroundColor(isMe ? .deepVelvet.opacity(0.7) : .white.opacity(0.6))
+                                    .foregroundColor(.white.opacity(0.7))
                                 Spacer(minLength: 12)
                                 if !timeStr.isEmpty {
                                     Text(timeStr)
                                         .font(.system(size: 8, weight: .medium))
-                                        .foregroundColor(isMe ? .deepVelvet.opacity(0.5) : .white.opacity(0.4))
+                                        .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
                                 }
                             }
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
                         .background(
-                            isMe ? 
-                            LinearGradient(colors: [Color.electricPurple, Color.electricPurple.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing) :
-                            LinearGradient(colors: [Color.white.opacity(0.18), Color.white.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                            isMe ? Color.activeCyan.opacity(0.18) : Color.white.opacity(0.12)
                         )
                         .clipShape(RoundedCorner(radius: 18, corners: corners))
                         .overlay(
                             RoundedCorner(radius: 18, corners: corners)
-                                .stroke(isMe ? Color.clear : Color.white.opacity(0.1), lineWidth: 1)
+                                .stroke(isMe ? Color.activeCyan.opacity(0.35) : Color.white.opacity(0.1), lineWidth: 1)
                         )
-                        .shadow(color: isMe ? Color.electricPurple.opacity(0.2) : Color.black.opacity(0.15), radius: 6, y: 3)
+                        .shadow(color: isMe ? Color.activeCyan.opacity(0.1) : Color.black.opacity(0.15), radius: 6, y: 3)
                     }
                     .buttonStyle(PlainButtonStyle())
                 } else {
@@ -571,13 +569,13 @@ struct ChatView: View {
                     VStack(alignment: .trailing, spacing: 4) {
                         Text(msg.message)
                             .font(.system(size: 13.5))
-                            .foregroundColor(isMe ? .deepVelvet : .white)
+                            .foregroundColor(.white)
                             .multilineTextAlignment(.leading)
                         
                         if !timeStr.isEmpty {
                             Text(timeStr)
                                 .font(.system(size: 8.5, weight: .medium))
-                                .foregroundColor(isMe ? .deepVelvet.opacity(0.6) : .white.opacity(0.4))
+                                .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
                         }
                     }
                     .padding(.horizontal, 11)
@@ -586,9 +584,9 @@ struct ChatView: View {
                     .clipShape(RoundedCorner(radius: 15, corners: corners))
                     .overlay(
                         RoundedCorner(radius: 15, corners: corners)
-                            .stroke(isMe ? Color.clear : Color.white.opacity(0.05), lineWidth: 1)
+                            .stroke(isMe ? Color.activeCyan.opacity(0.35) : Color.white.opacity(0.05), lineWidth: 1)
                     )
-                    .shadow(color: isMe ? Color.electricPurple.opacity(0.15) : Color.clear, radius: 6, y: 3)
+                    .shadow(color: isMe ? Color.activeCyan.opacity(0.1) : Color.clear, radius: 4, y: 2)
                 }
                 
                 if !isMe {

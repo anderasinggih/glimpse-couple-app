@@ -358,8 +358,8 @@ struct MainDashboardView: View {
                                             CachedImageView(urlString: auth.currentUser?.profile_photo_url ?? "")
                                                 .frame(width: 65, height: 65)
                                                 .clipShape(Circle())
-                                                .overlay(Circle().stroke(Color.electricPurple, lineWidth: 2))
-                                                .shadow(color: .electricPurple.opacity(0.6), radius: 12)
+                                                .overlay(Circle().stroke(Color.activeCyan, lineWidth: 2))
+                                                .shadow(color: .activeCyan.opacity(0.6), radius: 12)
                                                 .offset(x: togetherAnimation ? 6 : -6)
                                             
                                             // Glassmorphic Glowing Pulsing Heart in Between
@@ -594,9 +594,9 @@ struct MainDashboardView: View {
                                                         VStack(alignment: .leading, spacing: 4) {
                                                             HStack(spacing: 6) {
                                                                 Circle()
-                                                                    .fill(isMe ? Color.electricPurple : Color.activeCyan)
+                                                                    .fill(Color.activeCyan)
                                                                     .frame(width: 6, height: 6)
-                                                                    .shadow(color: isMe ? Color.electricPurple : Color.activeCyan, radius: 4)
+                                                                    .shadow(color: Color.activeCyan, radius: 4)
                                                                 
                                                                 Text(isMe ? "You" : flash.sender_name)
                                                                     .font(.system(size: 13, weight: .bold))
@@ -645,13 +645,13 @@ struct MainDashboardView: View {
                                                                     Annotation(flash.sender_name, coordinate: flash.coordinate) {
                                                                         ZStack {
                                                                             Circle()
-                                                                                .fill(isMe ? Color.electricPurple.opacity(0.3) : Color.activeCyan.opacity(0.3))
+                                                                                .fill(Color.activeCyan.opacity(0.3))
                                                                                 .frame(width: 32, height: 32)
                                                                             
                                                                             Circle()
-                                                                                .stroke(isMe ? Color.electricPurple : Color.activeCyan, lineWidth: 2)
+                                                                                .stroke(Color.activeCyan, lineWidth: 2)
                                                                                 .frame(width: 18, height: 18)
-                                                                                .shadow(color: isMe ? Color.electricPurple : Color.activeCyan, radius: 4)
+                                                                                .shadow(color: Color.activeCyan, radius: 4)
                                                                         }
                                                                     }
                                                                 }

@@ -582,6 +582,7 @@ class AuthManager {
         if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
            let token = json["access_token"] as? String {
             UserDefaults.standard.set(token, forKey: "auth_token")
+            UserDefaults(suiteName: "group.glimpse.app")?.set(token, forKey: "auth_token")
             withAnimation {
                 self.isAuthenticated = true
             }
@@ -612,6 +613,7 @@ class AuthManager {
         if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
            let token = json["access_token"] as? String {
             UserDefaults.standard.set(token, forKey: "auth_token")
+            UserDefaults(suiteName: "group.glimpse.app")?.set(token, forKey: "auth_token")
             withAnimation {
                 self.isAuthenticated = true
             }
@@ -625,6 +627,7 @@ class AuthManager {
     func logout() {
         self.disconnectWebSocket()
         UserDefaults.standard.removeObject(forKey: "auth_token")
+        UserDefaults(suiteName: "group.glimpse.app")?.removeObject(forKey: "auth_token")
         
         let sharedDefaults = UserDefaults(suiteName: "group.glimpse.app")
         sharedDefaults?.removeObject(forKey: "latest_partner_data")

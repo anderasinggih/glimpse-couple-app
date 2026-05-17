@@ -9,16 +9,41 @@ struct SplashScreenView: View {
             Color.deepVelvet.ignoresSafeArea()
             
             VStack(spacing: 20) {
+                Spacer()
+                
                 Image(systemName: "heart.fill")
                     .font(.system(size: 80))
-                    .foregroundColor(.electricPurple)
+                    .foregroundColor(.activeCyan)
                     .scaleEffect(pulse)
-                    .shadow(color: .electricPurple.opacity(0.5), radius: 20)
+                    .shadow(color: .activeCyan.opacity(0.5), radius: 20)
                 
                 Text("Glimpse")
                     .font(.system(size: 32, weight: .black, design: .rounded))
                     .foregroundColor(.white)
                     .opacity(opacity)
+                
+                Spacer()
+            }
+            
+            // Premium Splash Footer (Author & Copyright)
+            VStack {
+                Spacer()
+                
+                VStack(spacing: 4) {
+                    Text("GLIMPSE SPACE")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .tracking(3)
+                        .foregroundColor(.white.opacity(0.3))
+                    
+                    Text("Created by Lovinpeace")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundColor(.activeCyan.opacity(0.75))
+                    
+                    Text("© 2026 Lovinpeace. All Rights Reserved.")
+                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .foregroundColor(.white.opacity(0.25))
+                }
+                .padding(.bottom, 30)
             }
         }
         .onAppear {

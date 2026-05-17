@@ -106,8 +106,8 @@ struct FullPartnerMapView: View {
                                     CachedImageView(urlString: currentUser.profile_photo_url)
                                         .frame(width: 38, height: 38)
                                         .clipShape(Circle())
-                                        .overlay(Circle().stroke(Color.electricPurple, lineWidth: 1.5))
-                                        .shadow(color: .electricPurple.opacity(0.5), radius: 5)
+                                        .overlay(Circle().stroke(Color.activeCyan, lineWidth: 1.5))
+                                        .shadow(color: .activeCyan.opacity(0.5), radius: 5)
                                     
                                     Image(systemName: "heart.fill")
                                         .font(.system(size: 16))

@@ -63,25 +63,42 @@ struct GlassmorphicModifier: ViewModifier {
 }
 
 struct iOS26Background: View {
+    @AppStorage("glimpse_dynamic_orbs") var dynamicOrbsEnabled = true
+    @State private var animateOrbs = false
+    
     var body: some View {
         ZStack {
             Color.deepVelvet.ignoresSafeArea()
             
-            // Static Orbs for Performance
+            // Orb 1 (Adapts to Active Theme Accent!)
             Circle()
-                .fill(Color.electricPurple.opacity(0.12))
+                .fill(Color.activeCyan.opacity(0.12))
                 .frame(width: 400, height: 400)
                 .blur(radius: 80)
-                .offset(x: -80, y: -220)
+                .offset(
+                    x: dynamicOrbsEnabled ? (animateOrbs ? -40 : -120) : -80,
+                    y: dynamicOrbsEnabled ? (animateOrbs ? -160 : -260) : -220
+                )
             
+            // Orb 2 (Complementary royal purple)
             Circle()
                 .fill(Color.royalPurple.opacity(0.08))
                 .frame(width: 300, height: 300)
                 .blur(radius: 60)
-                .offset(x: 120, y: 180)
+                .offset(
+                    x: dynamicOrbsEnabled ? (animateOrbs ? 160 : 70) : 120,
+                    y: dynamicOrbsEnabled ? (animateOrbs ? 220 : 130) : 180
+                )
         }
         .drawingGroup()
         .ignoresSafeArea()
+        .onAppear {
+            if dynamicOrbsEnabled {
+                withAnimation(.easeInOut(duration: 8.0).repeatForever(autoreverses: true)) {
+                    animateOrbs = true
+                }
+            }
+        }
     }
 }
 

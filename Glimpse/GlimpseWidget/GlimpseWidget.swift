@@ -31,30 +31,97 @@ struct GlimpseWidgetProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<GlimpseWidgetEntry>) -> ()) {
-        let sharedDefaults = UserDefaults(suiteName: "group.glimpse.app")
-        let partnerData = sharedDefaults?.data(forKey: "latest_partner_data")
-        
-        var partner: GlimpseUser? = nil
-        if let data = partnerData {
-            partner = try? JSONDecoder().decode(GlimpseUser.self, from: data)
-        }
-        
-        var partnerImage: UIImage? = nil
-        if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
-            let fileURL = groupURL.appendingPathComponent("widget_photo.jpg")
-            if let data = try? Data(contentsOf: fileURL), let cachedImage = data.downsampledForWidget() {
-                partnerImage = cachedImage
+        Task {
+            let (fetchedPartner, fetchedImage) = await fetchLatestPartnerData()
+            
+            var finalPartner = fetchedPartner
+            var finalImage = fetchedImage
+            
+            // Cache Fallback if network fails
+            if finalPartner == nil {
+                let sharedDefaults = UserDefaults(suiteName: "group.glimpse.app")
+                let partnerData = sharedDefaults?.data(forKey: "latest_partner_data")
+                if let data = partnerData {
+                    finalPartner = try? JSONDecoder().decode(GlimpseUser.self, from: data)
+                }
+                
+                if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+                    let fileURL = groupURL.appendingPathComponent("widget_photo.jpg")
+                    if let data = try? Data(contentsOf: fileURL), let cachedImage = data.downsampledForWidget() {
+                        finalImage = cachedImage
+                    }
+                }
             }
+            
+            let finalPartnerWithMock = context.isPreview ? (finalPartner ?? .mockPartner) : finalPartner
+            let entry = GlimpseWidgetEntry(date: Date(), partner: finalPartnerWithMock, image: finalImage)
+            
+            // Set update policy (5 minutes for fresh active dev updates)
+            let nextUpdate = Calendar.current.date(byAdding: .minute, value: 5, to: Date())!
+            let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
+            completion(timeline)
+        }
+    }
+    
+    // Background Network Direct Fetch Helper
+    private func fetchLatestPartnerData() async -> (GlimpseUser?, UIImage?) {
+        let sharedDefaults = UserDefaults(suiteName: "group.glimpse.app")
+        guard let token = sharedDefaults?.string(forKey: "auth_token") else {
+            return (nil, nil)
         }
         
-        // Buat satu entry yang valid
-        let finalPartner = context.isPreview ? (partner ?? .mockPartner) : partner
-        let entry = GlimpseWidgetEntry(date: Date(), partner: finalPartner, image: partnerImage)
+        let urlString = "https://api.galleryfortwo.my.id/api/glimpse/state"
+        guard let url = URL(string: urlString) else {
+            return (nil, nil)
+        }
         
-        // Update setiap 15 menit
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date())!
-        let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
-        completion(timeline)
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                return (nil, nil)
+            }
+            
+            struct WidgetPartnerData: Codable {
+                let partner_data: GlimpseUser?
+            }
+            
+            let responseData = try JSONDecoder().decode(WidgetPartnerData.self, from: data)
+            guard let partner = responseData.partner_data else {
+                return (nil, nil)
+            }
+            
+            // Sync to shared Defaults Cache
+            if let encoded = try? JSONEncoder().encode(partner) {
+                sharedDefaults?.set(encoded, forKey: "latest_partner_data")
+            }
+            
+            var photoURLString = partner.latest_photo_url ?? partner.profile_photo_url
+            if !photoURLString.hasPrefix("http") {
+                let cleanPath = photoURLString.hasPrefix("/") ? String(photoURLString.dropFirst()) : photoURLString
+                let base = "https://api.galleryfortwo.my.id"
+                photoURLString = cleanPath.contains("storage/") ? "\(base)/\(cleanPath)" : "\(base)/storage/\(cleanPath)"
+            }
+            
+            var loadedImage: UIImage? = nil
+            if let photoURL = URL(string: photoURLString),
+               let (imageData, _) = try? await URLSession.shared.data(from: photoURL) {
+                loadedImage = imageData.downsampledForWidget()
+                
+                // Persist the image to App Group container for Widget filesystem access
+                if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+                    let fileURL = groupURL.appendingPathComponent("widget_photo.jpg")
+                    try? imageData.write(to: fileURL)
+                }
+            }
+            
+            return (partner, loadedImage)
+        } catch {
+            return (nil, nil)
+        }
     }
 }
 
