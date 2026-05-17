@@ -13,9 +13,9 @@ struct SplashScreenView: View {
                 
                 Image(systemName: "heart.fill")
                     .font(.system(size: 80))
-                    .foregroundColor(.activeCyan)
+                    .foregroundColor(.electricPurple)
                     .scaleEffect(pulse)
-                    .shadow(color: .activeCyan.opacity(0.5), radius: 20)
+                    .shadow(color: .electricPurple.opacity(0.5), radius: 20)
                 
                 Text("Glimpse")
                     .font(.system(size: 32, weight: .black, design: .rounded))
@@ -37,7 +37,7 @@ struct SplashScreenView: View {
                     
                     Text("Created by Lovinpeace")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundColor(.activeCyan.opacity(0.75))
+                        .foregroundColor(.electricPurple.opacity(0.85))
                     
                     Text("© 2026 Lovinpeace. All Rights Reserved.")
                         .font(.system(size: 9, weight: .medium, design: .rounded))
