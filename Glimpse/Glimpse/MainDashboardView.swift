@@ -7,6 +7,11 @@ struct MainDashboardView: View {
     @State private var streakPulse = false
     @State private var hearts: [FloatingHeart] = []
     @State private var lastSeenLoveBurstTimestamp: Double = 0.0
+    @State private var loveHeartOffset: CGFloat = 0.0
+    @State private var loveHeartOpacity: Double = 0.0
+    @State private var loveHeartClickCount: Int = 0
+    @State private var isShowingLoveHeart = false
+    @State private var heartResetTask: Task<Void, Never>? = nil
     private let dashboardPollTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
     
     var body: some View {
@@ -112,6 +117,28 @@ struct MainDashboardView: View {
             .ignoresSafeArea()
             .allowsHitTesting(false)
             .zIndex(999)
+            
+            // GLOBAL GROWING HEART OVERLAY
+            if isShowingLoveHeart {
+                ZStack {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 80))
+                        .foregroundColor(.red.opacity(0.15))
+                        .scaleEffect(1.0 + CGFloat(loveHeartClickCount) * 0.35 + 0.2)
+                        .blur(radius: 12)
+                    
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 80))
+                        .foregroundColor(.red)
+                        .shadow(color: .red.opacity(0.6), radius: 20)
+                        .scaleEffect(1.0 + CGFloat(loveHeartClickCount) * 0.35)
+                }
+                .offset(y: loveHeartOffset)
+                .opacity(loveHeartOpacity)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+                .zIndex(999)
+            }
         }
         .onAppear {
             Task { try? await auth.fetchState() }
@@ -289,7 +316,6 @@ struct MainDashboardView: View {
                                     .shadow(color: .electricPurple.opacity(0.2), radius: 15)
                                 }
                                 .buttonStyle(PlainButtonStyle())
-                                .scaleEffect(togetherAnimation ? 1.01 : 0.99)
                                 .padding(.bottom, 12)
                             }
                             
@@ -497,47 +523,30 @@ struct MainDashboardView: View {
     }
     
     private func triggerLoveBurst() {
-        var newHearts: [FloatingHeart] = []
-        for _ in 0..<15 {
-            let heart = FloatingHeart(
-                id: UUID(),
-                x: CGFloat.random(in: 50...UIScreen.main.bounds.width - 50),
-                y: UIScreen.main.bounds.height + 50,
-                scale: CGFloat.random(in: 0.6...1.6),
-                color: [Color.red, Color.pink, Color.electricPurple, Color(hex: "FF4D94")].randomElement()!,
-                opacity: Double.random(in: 0.7...1.0),
-                rotation: Double.random(in: -30...30)
-            )
-            newHearts.append(heart)
+        heartResetTask?.cancel()
+        
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            isShowingLoveHeart = true
+            loveHeartClickCount += 1
+            loveHeartOpacity = 1.0
+            loveHeartOffset = 0.0
         }
         
-        withAnimation(.easeOut(duration: 0.3)) {
-            self.hearts.append(contentsOf: newHearts)
-        }
-        
-        // Animate floating up
-        for i in 0..<newHearts.count {
-            let idx = self.hearts.firstIndex(where: { $0.id == newHearts[i].id })
-            if let idx = idx {
-                withAnimation(.easeOut(duration: Double.random(in: 2.0...3.5))) {
-                    self.hearts[idx] = FloatingHeart(
-                        id: newHearts[i].id,
-                        x: newHearts[i].x + CGFloat.random(in: -80...80),
-                        y: -100,
-                        scale: newHearts[i].scale * 1.2,
-                        color: newHearts[i].color,
-                        opacity: 0.0,
-                        rotation: newHearts[i].rotation + Double.random(in: -90...90)
-                    )
-                }
+        heartResetTask = Task {
+            try? await Task.sleep(for: .seconds(1.2))
+            guard !Task.isCancelled else { return }
+            
+            withAnimation(.easeOut(duration: 0.8)) {
+                loveHeartOffset = -350
+                loveHeartOpacity = 0.0
             }
-        }
-        
-        // Clean up
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
-            self.hearts.removeAll(where: { heart in
-                newHearts.contains(where: { $0.id == heart.id })
-            })
+            
+            try? await Task.sleep(for: .seconds(0.8))
+            guard !Task.isCancelled else { return }
+            
+            isShowingLoveHeart = false
+            loveHeartClickCount = 0
+            loveHeartOffset = 0.0
         }
     }
 }
