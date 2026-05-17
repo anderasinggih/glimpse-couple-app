@@ -52,6 +52,7 @@ struct MainDashboardView: View {
                     .tabItem {
                         Label("Chat", systemImage: "bubble.left.and.bubble.right.fill")
                     }
+                    .badge(auth.unreadMessagesCount > 0 ? auth.unreadMessagesCount : nil)
                     .tag(3)
                 
                 // Tab 4: Profile

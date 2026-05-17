@@ -14,7 +14,19 @@ class AuthManager {
     var coupleActive = false
     var invitedBy: Int?
     var showInviteDeclinedAlert = false
-    var selectedTab = 0
+    private var _selectedTab = 0
+    var selectedTab: Int {
+        get { _selectedTab }
+        set {
+            _selectedTab = newValue
+            if newValue == 3 {
+                clearUnreadMessages()
+            }
+        }
+    }
+    
+    var unreadMessagesCount = 0
+    var latestFetchedMessages: [ChatMessage] = []
     
     var userToken: String? {
         UserDefaults.standard.string(forKey: "auth_token")
@@ -101,6 +113,13 @@ class AuthManager {
                     try? FileManager.default.removeItem(at: fileURL)
                 }
                 WidgetCenter.shared.reloadAllTimelines()
+            }
+            
+            // Fetch messages to update unread count whenever state is fetched
+            if self.coupleActive {
+                Task {
+                    _ = try? await self.fetchMessages()
+                }
             }
         }
     }
@@ -267,7 +286,38 @@ class AuthManager {
             return []
         }
         
-        return try JSONDecoder().decode([ChatMessage].self, from: data)
+        let decoded = try JSONDecoder().decode([ChatMessage].self, from: data)
+        await MainActor.run {
+            self.latestFetchedMessages = decoded
+            self.updateUnreadCount()
+        }
+        return decoded
+    }
+    
+    func updateUnreadCount() {
+        if selectedTab == 3 {
+            if let lastMsg = latestFetchedMessages.last {
+                UserDefaults.standard.set(lastMsg.id, forKey: "last_read_message_id")
+            }
+            unreadMessagesCount = 0
+            return
+        }
+        
+        let lastReadId = UserDefaults.standard.integer(forKey: "last_read_message_id")
+        let partnerId = partner?.id ?? 0
+        
+        let unread = latestFetchedMessages.filter { msg in
+            msg.sender_id == partnerId && msg.id > lastReadId
+        }
+        
+        unreadMessagesCount = unread.count
+    }
+    
+    func clearUnreadMessages() {
+        if let lastMsg = latestFetchedMessages.last {
+            UserDefaults.standard.set(lastMsg.id, forKey: "last_read_message_id")
+        }
+        unreadMessagesCount = 0
     }
     
     func sendChatMessage(text: String) async throws -> ChatMessage {
