@@ -10,7 +10,7 @@ struct MainDashboardView: View {
     @State private var lastSeenLoveBurstTimestamp: Double = 0.0
     @State private var popHearts: [PopHeart] = []
     @State private var expandedFlashId: Int? = nil
-    @State private var showAllFlashes: Bool = false
+    @State private var visibleFlashLimit: Int = 4
     @State private var pollCounter = 0
     @State private var currentTime = Date()
     private let dashboardPollTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
@@ -572,7 +572,7 @@ struct MainDashboardView: View {
                                         .padding(.vertical, 20)
                                         .frame(maxWidth: .infinity)
                                 } else {
-                                    let visibleFlashes = showAllFlashes ? auth.flashes : Array(auth.flashes.prefix(3))
+                                    let visibleFlashes = Array(auth.flashes.prefix(visibleFlashLimit))
                                     
                                     VStack(spacing: 12) {
                                         ForEach(visibleFlashes) { flash in
@@ -697,27 +697,31 @@ struct MainDashboardView: View {
                                     }
                                     
                                     // "See More" / "See Less" Button
-                                    if auth.flashes.count > 3 {
+                                    if auth.flashes.count > 4 {
                                         Button {
                                             withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
-                                                showAllFlashes.toggle()
+                                                if visibleFlashLimit < auth.flashes.count {
+                                                    visibleFlashLimit += 4
+                                                } else {
+                                                    visibleFlashLimit = 4
+                                                }
                                             }
                                         } label: {
                                             HStack {
-                                                Text(showAllFlashes ? "See Less" : "See More Captures")
+                                                Text(visibleFlashLimit < auth.flashes.count ? "See More Captures" : "See Less")
                                                     .font(.system(size: 13, weight: .bold, design: .rounded))
-                                                    .foregroundColor(showAllFlashes ? .white.opacity(0.6) : .activeCyan)
-                                                Image(systemName: showAllFlashes ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
+                                                    .foregroundColor(visibleFlashLimit >= auth.flashes.count ? .white.opacity(0.6) : .activeCyan)
+                                                Image(systemName: visibleFlashLimit < auth.flashes.count ? "chevron.down.circle.fill" : "chevron.up.circle.fill")
                                                     .font(.system(size: 14))
-                                                    .foregroundColor(showAllFlashes ? .white.opacity(0.6) : .activeCyan)
+                                                    .foregroundColor(visibleFlashLimit >= auth.flashes.count ? .white.opacity(0.6) : .activeCyan)
                                             }
                                             .padding(.vertical, 12)
                                             .frame(maxWidth: .infinity)
-                                            .background(Color.white.opacity(showAllFlashes ? 0.02 : 0.04))
+                                            .background(Color.white.opacity(visibleFlashLimit >= auth.flashes.count ? 0.02 : 0.04))
                                             .cornerRadius(12)
                                             .overlay(
                                                 RoundedRectangle(cornerRadius: 12)
-                                                    .stroke(showAllFlashes ? Color.white.opacity(0.05) : Color.activeCyan.opacity(0.2), lineWidth: 1)
+                                                    .stroke(visibleFlashLimit >= auth.flashes.count ? Color.white.opacity(0.05) : Color.activeCyan.opacity(0.2), lineWidth: 1)
                                             )
                                         }
                                         .buttonStyle(PlainButtonStyle())
