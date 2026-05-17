@@ -21,6 +21,7 @@ struct FullPartnerMapView: View {
     }
     
     var body: some View {
+        ZStack(alignment: .top) {
             if !auth.isInitialStateLoaded {
                 // PRESTIGE LOADING / SHIMMERING STATE
                 VStack(spacing: 20) {
