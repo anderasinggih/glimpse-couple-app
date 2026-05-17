@@ -5,7 +5,6 @@ struct MainDashboardView: View {
     @State private var auth = AuthManager.shared
     @State private var togetherAnimation = false
     @State private var streakPulse = false
-    @State private var hearts: [FloatingHeart] = []
     @State private var lastSeenLoveBurstTimestamp: Double = 0.0
     @State private var popHearts: [PopHeart] = []
     private let dashboardPollTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
@@ -97,22 +96,7 @@ struct MainDashboardView: View {
                 BrandingHeader()
                     .zIndex(100)
             }
-            
-            // GLOBAL FLOATING HEARTS OVERLAY
-            ZStack {
-                ForEach(hearts) { heart in
-                    Image(systemName: "heart.fill")
-                        .font(.system(size: 30))
-                        .foregroundColor(heart.color)
-                        .scaleEffect(heart.scale)
-                        .rotationEffect(.degrees(heart.rotation))
-                        .opacity(heart.opacity)
-                        .position(x: heart.x, y: heart.y)
-                }
-            }
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
-            .zIndex(999)
+
             
             // GLOBAL POP HEARTS OVERLAY (IN CENTER OF SCREEN)
             ZStack {
