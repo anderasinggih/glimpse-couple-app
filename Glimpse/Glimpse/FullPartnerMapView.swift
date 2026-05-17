@@ -8,6 +8,7 @@ struct FullPartnerMapView: View {
     @State private var mapStyle: MapStyle = .standard(emphasis: .muted)
     @State private var isSatellite = true
     @State private var mapPulse = false
+    @State private var wavePhase = 0.0
     
     // Polling timer for maps: 3.0 seconds
     @State private var timer: Timer.TimerPublisher = Timer.publish(every: 3.0, on: .main, in: .common)
@@ -96,13 +97,39 @@ struct FullPartnerMapView: View {
                         if let currentUser = auth.currentUser,
                            let partnerLat = partner.latitude, partnerLat != 0.0,
                            let myLat = currentUser.latitude, myLat != 0.0 {
-                            MapPolyline(coordinates: generateWavyCoordinates(from: currentUser.coordinate, to: partner.coordinate))
+                            
+                            let startLoc = CLLocation(latitude: currentUser.coordinate.latitude, longitude: currentUser.coordinate.longitude)
+                            let endLoc = CLLocation(latitude: partner.coordinate.latitude, longitude: partner.coordinate.longitude)
+                            let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
+                            
+                            // Concept A Color Spectrum
+                            let colors: [Color] = {
+                                if distanceInKm <= 1.0 {
+                                    // DEKAT: Rose Pink & Crimson Red (warm passion)
+                                    return [Color(red: 1.0, green: 0.2, blue: 0.5), Color(red: 1.0, green: 0.1, blue: 0.3)]
+                                } else if distanceInKm >= 10.0 {
+                                    // JAUH: Neon Cyan & Electric Blue (steady aurora connection)
+                                    return [Color.activeCyan, Color(red: 0.0, green: 0.6, blue: 1.0)]
+                                } else {
+                                    // SEDANG: Electric Purple, Magenta & Rose gradient
+                                    return [Color.electricPurple, Color(red: 0.9, green: 0.2, blue: 0.8), Color(red: 1.0, green: 0.2, blue: 0.5)]
+                                }
+                            }()
+                            
+                            let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: partner.coordinate, distanceInKm: distanceInKm, phase: wavePhase)
+                            
+                            // 1. Bottom Layer: Outer Neon Glow
+                            MapPolyline(coordinates: wavyCoords)
                                 .stroke(
-                                    LinearGradient(
-                                        colors: [.electricPurple, .pink, .activeCyan],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    ),
+                                    LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
+                                    style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
+                                )
+                                .opacity(0.4)
+                            
+                            // 2. Top Layer: Core Saturated Line
+                            MapPolyline(coordinates: wavyCoords)
+                                .stroke(
+                                    LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
                                     style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
                                 )
                         }
@@ -244,6 +271,9 @@ struct FullPartnerMapView: View {
         .onAppear {
             startPolling()
             triggerImmediateSync()
+            withAnimation(.linear(duration: 2.0).repeatForever(autoreverses: false)) {
+                wavePhase = 2 * .pi
+            }
         }
         .onDisappear {
             stopPolling()
@@ -287,7 +317,12 @@ struct FullPartnerMapView: View {
         }
     }
     
-    private func generateWavyCoordinates(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D) -> [CLLocationCoordinate2D] {
+    private func generateWavyCoordinates(
+        from start: CLLocationCoordinate2D,
+        to end: CLLocationCoordinate2D,
+        distanceInKm: Double,
+        phase: Double
+    ) -> [CLLocationCoordinate2D] {
         let pointsCount = 60
         var coordinates: [CLLocationCoordinate2D] = []
         
@@ -302,8 +337,19 @@ struct FullPartnerMapView: View {
         let pLat = -dLon / distance
         let pLon = dLat / distance
         
+        // Closer distance -> Higher frequency (excited debaran), larger relative amplitude
+        // Farther distance -> Lower frequency (aurora calm), smooth wide waves
+        let waveFrequency: Double = {
+            if distanceInKm <= 1.0 {
+                return 10.0 // Fast excited waves
+            } else if distanceInKm >= 10.0 {
+                return 4.0  // Wide slow calm waves
+            } else {
+                return 7.0  // Moderate waves
+            }
+        }()
+        
         let amplitude = distance * 0.035
-        let waveFrequency = 6.0
         
         for i in 0...pointsCount {
             let t = Double(i) / Double(pointsCount)
@@ -311,7 +357,8 @@ struct FullPartnerMapView: View {
             let linearLon = start.longitude + dLon * t
             
             let envelope = sin(t * Double.pi)
-            let wave = sin(t * Double.pi * waveFrequency) * amplitude * envelope
+            // Ripple wave based on phase offset to physically animate the movement!
+            let wave = sin(t * Double.pi * waveFrequency - phase) * amplitude * envelope
             
             let waveLat = linearLat + pLat * wave
             let waveLon = linearLon + pLon * wave
