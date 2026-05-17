@@ -152,29 +152,42 @@ struct FlashCameraView: View {
                                 .font(.system(size: 15, weight: .bold, design: .rounded))
                                 .foregroundColor(.white)
                             
-                            // Captioned note text input - INLINED FOR 100% FOCUS ACCURACY
+                            // Captioned note text input & Send button side-by-side!
                             VStack(alignment: .trailing, spacing: 6) {
-                                TextField("Add a note...", text: $statusNote)
-                                    .focused($isInputFocused)
-                                    .submitLabel(.send)
-                                    .onSubmit {
-                                        if !isUploading {
+                                HStack(spacing: 12) {
+                                    TextField("Add a note...", text: $statusNote)
+                                        .focused($isInputFocused)
+                                        .submitLabel(.send)
+                                        .onSubmit {
                                             uploadPhoto(image)
                                         }
-                                    }
-                                    .padding(16)
-                                    .background(.ultraThinMaterial)
-                                    .cornerRadius(18)
-                                    .foregroundColor(.white)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 18)
-                                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                                    )
-                                    .onChange(of: statusNote) { oldValue, newValue in
-                                        if newValue.count > 30 {
-                                            statusNote = String(newValue.prefix(30))
+                                        .padding(16)
+                                        .background(.ultraThinMaterial)
+                                        .cornerRadius(18)
+                                        .foregroundColor(.white)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 18)
+                                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                        )
+                                        .onChange(of: statusNote) { oldValue, newValue in
+                                            if newValue.count > 30 {
+                                                statusNote = String(newValue.prefix(30))
+                                            }
                                         }
+                                    
+                                    Button {
+                                        uploadPhoto(image)
+                                    } label: {
+                                        Text("Send")
+                                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                                            .foregroundColor(.deepVelvet)
+                                            .padding(.horizontal, 24)
+                                            .padding(.vertical, 16)
+                                            .background(Color.electricPurple)
+                                            .cornerRadius(18)
+                                            .shadow(color: .electricPurple.opacity(0.3), radius: 8)
                                     }
+                                }
                                 
                                 Text("\(statusNote.count)/30")
                                     .font(.system(size: 10, design: .monospaced))
@@ -184,42 +197,16 @@ struct FlashCameraView: View {
                             .padding(.horizontal, 30)
                             .id("glimpse-input-field")
                             
-                            // Send & Retake Actions
-                            VStack(spacing: 12) {
-                                Button {
-                                    uploadPhoto(image)
-                                } label: {
-                                    if isUploading {
-                                        ProgressView().tint(.deepVelvet)
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 16)
-                                            .background(Color.electricPurple)
-                                            .cornerRadius(18)
-                                            .padding(.horizontal, 30)
-                                    } else {
-                                        Text("Send Glimpse")
-                                            .font(.headline)
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 16)
-                                            .background(Color.electricPurple)
-                                            .foregroundColor(.deepVelvet)
-                                            .cornerRadius(18)
-                                            .padding(.horizontal, 30)
-                                    }
-                                }
-                                .disabled(isUploading)
-                                .id("send-button")
-                                
-                                Button {
-                                    capturedImage = nil
-                                    statusNote = ""
-                                    model.startSession()
-                                } label: {
-                                    Text("Retake Photo")
-                                        .font(.subheadline.bold())
-                                        .foregroundColor(.white.opacity(0.6))
-                                        .padding(.vertical, 8)
-                                }
+                            // Retake Photo Button
+                            Button {
+                                capturedImage = nil
+                                statusNote = ""
+                                model.startSession()
+                            } label: {
+                                Text("Retake Photo")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .padding(.vertical, 8)
                             }
                             
                             Spacer().frame(height: 30)
@@ -464,54 +451,48 @@ struct FlashCameraView: View {
     }
     
     private func uploadPhoto(_ image: UIImage) {
-        isUploading = true
-        
         // Collect extra metadata
         let lat = model.lastLocation?.coordinate.latitude
         let lon = model.lastLocation?.coordinate.longitude
         let battery = Int(UIDevice.current.batteryLevel * 100)
+        let note = statusNote.isEmpty ? nil : statusNote
         
-        Task {
+        // 1. OPTIMISTIC UX: Trigger SUCCESS instantly so the user doesn't wait!
+        // Play signature "Sent" system sound (1004)
+        AudioServicesPlaySystemSound(1004)
+        
+        // Play signature success haptic vibration
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+        
+        // Trigger full-screen success animation state
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+            isUploadSuccess = true
+        }
+        
+        // 2. Dismiss and cleanup after 1.2 seconds so they can see the gorgeous checkmark
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            capturedImage = nil
+            statusNote = ""
+            isUploadSuccess = false
+            dismiss() // Close camera
+        }
+        
+        // 3. Perform image compression and upload COMPLETELY in the background
+        Task.detached(priority: .background) {
             do {
                 try await AuthManager.shared.uploadPhoto(
                     image, 
                     latitude: lat, 
                     longitude: lon, 
                     battery: battery, 
-                    note: statusNote.isEmpty ? nil : statusNote,
-                    locationName: nil // Skipped on upload, resolved dynamically in background by viewer/receiver!
+                    note: note,
+                    locationName: nil
                 )
-                
-                // SUCCESS MICRO-INTERACTION: Haptics, Sound, & Animation
-                await MainActor.run {
-                    // 1. Play signature "Sent" system sound (1004)
-                    AudioServicesPlaySystemSound(1004)
-                    
-                    // 2. Play signature success haptic vibration
-                    let generator = UINotificationFeedbackGenerator()
-                    generator.notificationOccurred(.success)
-                    
-                    // 3. Trigger full-screen success animation state
-                    withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
-                        isUploadSuccess = true
-                    }
-                }
-                
-                // 4. Delay for 1.5 seconds to let the user enjoy the gorgeous success state!
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
-                
-                await MainActor.run {
-                    capturedImage = nil
-                    statusNote = ""
-                    isUploadSuccess = false
-                    dismiss() // Close camera after success
-                }
+                print("✅ Background Glimpse upload succeeded!")
             } catch {
-                print("Upload failed: \(error)")
-                errorMessage = error.localizedDescription
-                isShowingError = true
+                print("❌ Background Glimpse upload failed: \(error)")
             }
-            isUploading = false
         }
     }
     
