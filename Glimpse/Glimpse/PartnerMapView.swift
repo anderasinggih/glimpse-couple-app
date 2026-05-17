@@ -93,6 +93,14 @@ struct PartnerMapView: View {
                                         )
                                 )
                             }
+                            .onTapGesture {
+                                withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                                    position = .region(MKCoordinateRegion(
+                                        center: user.coordinate,
+                                        span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                                    ))
+                                }
+                            }
                         }
                     } else {
                         if let currentUser = auth.currentUser, let myLat = currentUser.latitude, myLat != 0.0 {
@@ -104,6 +112,14 @@ struct PartnerMapView: View {
                                         .blur(radius: 10)
                                     
                                     PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false)
+                                }
+                                .onTapGesture {
+                                    withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                                        position = .region(MKCoordinateRegion(
+                                            center: currentUser.coordinate,
+                                            span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                                        ))
+                                    }
                                 }
                             }
                         }
@@ -117,6 +133,14 @@ struct PartnerMapView: View {
                                         .blur(radius: 20)
                                     
                                     PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline)
+                                }
+                                .onTapGesture {
+                                    withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                                        position = .region(MKCoordinateRegion(
+                                            center: user.coordinate,
+                                            span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                                        ))
+                                    }
                                 }
                             }
                         }

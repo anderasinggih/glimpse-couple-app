@@ -70,6 +70,14 @@ struct FullPartnerMapView: View {
                                         )
                                 )
                             }
+                            .onTapGesture {
+                                withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                                    position = .region(MKCoordinateRegion(
+                                        center: partner.coordinate,
+                                        span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                                    ))
+                                }
+                            }
                         }
                     } else {
                         if let currentUser = auth.currentUser {
@@ -82,6 +90,14 @@ struct FullPartnerMapView: View {
                                     
                                     PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false)
                                 }
+                                .onTapGesture {
+                                    withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                                        position = .region(MKCoordinateRegion(
+                                            center: currentUser.coordinate,
+                                            span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                                        ))
+                                    }
+                                }
                             }
                         }
                         
@@ -93,6 +109,14 @@ struct FullPartnerMapView: View {
                                     .blur(radius: 10)
                                 
                                 PartnerMarker(photoUrl: partner.profile_photo_url, isOffline: partner.isOffline)
+                            }
+                            .onTapGesture {
+                                withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                                    position = .region(MKCoordinateRegion(
+                                        center: partner.coordinate,
+                                        span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                                    ))
+                                }
                             }
                         }
                     }

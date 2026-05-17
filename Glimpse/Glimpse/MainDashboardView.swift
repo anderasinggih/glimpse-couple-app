@@ -7,11 +7,7 @@ struct MainDashboardView: View {
     @State private var streakPulse = false
     @State private var hearts: [FloatingHeart] = []
     @State private var lastSeenLoveBurstTimestamp: Double = 0.0
-    @State private var loveHeartOffset: CGFloat = 0.0
-    @State private var loveHeartOpacity: Double = 0.0
-    @State private var loveHeartClickCount: Int = 0
-    @State private var isShowingLoveHeart = false
-    @State private var heartResetTask: Task<Void, Never>? = nil
+    @State private var popHearts: [PopHeart] = []
     private let dashboardPollTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
     
     var body: some View {
@@ -118,27 +114,31 @@ struct MainDashboardView: View {
             .allowsHitTesting(false)
             .zIndex(999)
             
-            // GLOBAL GROWING HEART OVERLAY
-            if isShowingLoveHeart {
-                ZStack {
-                    Image(systemName: "heart.fill")
-                        .font(.system(size: 80))
-                        .foregroundColor(.red.opacity(0.15))
-                        .scaleEffect(1.0 + CGFloat(loveHeartClickCount) * 0.35 + 0.2)
-                        .blur(radius: 12)
-                    
-                    Image(systemName: "heart.fill")
-                        .font(.system(size: 80))
-                        .foregroundColor(.red)
-                        .shadow(color: .red.opacity(0.6), radius: 20)
-                        .scaleEffect(1.0 + CGFloat(loveHeartClickCount) * 0.35)
+            // GLOBAL POP HEARTS OVERLAY (IN CENTER OF SCREEN)
+            ZStack {
+                ForEach(popHearts) { heart in
+                    ZStack {
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 60))
+                            .foregroundColor(heart.color.opacity(0.15))
+                            .scaleEffect(heart.scale + 0.15)
+                            .blur(radius: 8)
+                        
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 60))
+                            .foregroundColor(heart.color)
+                            .shadow(color: heart.color.opacity(0.6), radius: 12)
+                            .scaleEffect(heart.scale)
+                    }
+                    .rotationEffect(.degrees(heart.rotation))
+                    .opacity(heart.opacity)
+                    .offset(x: heart.x, y: heart.y)
                 }
-                .offset(y: loveHeartOffset)
-                .opacity(loveHeartOpacity)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-                .zIndex(999)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+            .zIndex(999)
         }
         .onAppear {
             Task { try? await auth.fetchState() }
@@ -526,42 +526,44 @@ struct MainDashboardView: View {
     }
     
     private func triggerLoveBurst() {
-        heartResetTask?.cancel()
+        let heartId = UUID()
+        let heart = PopHeart(
+            id: heartId,
+            x: CGFloat.random(in: -90...90),
+            y: CGFloat.random(in: -90...90),
+            scale: CGFloat.random(in: 0.6...1.4),
+            color: [Color.red, Color.pink, Color.electricPurple, Color(hex: "FF4D94")].randomElement()!,
+            opacity: 1.0,
+            rotation: Double.random(in: -30...30)
+        )
         
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-            isShowingLoveHeart = true
-            loveHeartClickCount += 1
-            loveHeartOpacity = 1.0
-            loveHeartOffset = 0.0
+        self.popHearts.append(heart)
+        
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+        
+        withAnimation(.easeOut(duration: 1.0)) {
+            if let idx = self.popHearts.firstIndex(where: { $0.id == heartId }) {
+                self.popHearts[idx].y -= 120
+                self.popHearts[idx].opacity = 0.0
+                self.popHearts[idx].scale *= 1.2
+            }
         }
         
-        heartResetTask = Task {
-            try? await Task.sleep(for: .seconds(1.2))
-            guard !Task.isCancelled else { return }
-            
-            withAnimation(.easeOut(duration: 0.8)) {
-                loveHeartOffset = -350
-                loveHeartOpacity = 0.0
-            }
-            
-            try? await Task.sleep(for: .seconds(0.8))
-            guard !Task.isCancelled else { return }
-            
-            isShowingLoveHeart = false
-            loveHeartClickCount = 0
-            loveHeartOffset = 0.0
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            self.popHearts.removeAll(where: { $0.id == heartId })
         }
     }
 }
 
-struct FloatingHeart: Identifiable {
+struct PopHeart: Identifiable {
     let id: UUID
-    let x: CGFloat
-    let y: CGFloat
-    let scale: CGFloat
-    let color: Color
-    let opacity: Double
-    let rotation: Double
+    var x: CGFloat
+    var y: CGFloat
+    var scale: CGFloat
+    var color: Color
+    var opacity: Double
+    var rotation: Double
 }
 
 #Preview {
