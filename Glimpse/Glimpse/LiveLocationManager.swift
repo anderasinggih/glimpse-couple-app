@@ -33,6 +33,11 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters // High accuracy but highly energy efficient!
         locationManager.distanceFilter = 30.0 // Only trigger didUpdateLocations if user moves more than 30 meters!
         
+        // Background Tracking Capabilities
+        locationManager.allowsBackgroundLocationUpdates = true
+        locationManager.pausesLocationUpdatesAutomatically = false
+        locationManager.showsBackgroundLocationIndicator = false
+        
         setupNetworkPathMonitor()
     }
     
