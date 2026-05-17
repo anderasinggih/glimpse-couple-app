@@ -9,6 +9,7 @@ struct FullPartnerMapView: View {
     @State private var isSatellite = true
     @State private var mapPulse = false
     @State private var wavePhase = 0.0
+    @State private var recenterTargetMe = false
     
     // Polling timer for maps: 3.0 seconds
     @State private var timer: Timer.TimerPublisher = Timer.publish(every: 3.0, on: .main, in: .common)
@@ -216,12 +217,17 @@ struct FullPartnerMapView: View {
                             }
                             
                             // Re-center Scope
+                            // Re-center Scope
                             Button {
-                                withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
-                                    position = .region(MKCoordinateRegion(
-                                        center: partner.coordinate,
-                                        span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
-                                    ))
+                                guard let currentUser = auth.currentUser else { return }
+                                if recenterTargetMe {
+                                    // Flight to ME
+                                    triggerCinematicFlight(from: partner.coordinate, to: currentUser.coordinate)
+                                    recenterTargetMe = false
+                                } else {
+                                    // Flight to PARTNER
+                                    triggerCinematicFlight(from: currentUser.coordinate, to: partner.coordinate)
+                                    recenterTargetMe = true
                                 }
                             } label: {
                                 Image(systemName: "scope")
@@ -316,6 +322,75 @@ struct FullPartnerMapView: View {
         }
     }
     
+    private func triggerCinematicFlight(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D) {
+        // Calculate bearing/heading from start to end
+        let lat1 = start.latitude * .pi / 180.0
+        let lon1 = start.longitude * .pi / 180.0
+        let lat2 = end.latitude * .pi / 180.0
+        let lon2 = end.longitude * .pi / 180.0
+        
+        let dLon = lon2 - lon1
+        let y = sin(dLon) * cos(lat2)
+        let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+        let radiansBearing = atan2(y, x)
+        var bearing = radiansBearing * 180.0 / .pi
+        if bearing < 0 { bearing += 360.0 }
+        
+        let startLoc = CLLocation(latitude: start.latitude, longitude: start.longitude)
+        let endLoc = CLLocation(latitude: end.latitude, longitude: end.longitude)
+        let distance = startLoc.distance(from: endLoc)
+        
+        // Midpoint coordinate along the path
+        let midLat = (start.latitude + end.latitude) / 2.0
+        let midLon = (start.longitude + end.longitude) / 2.0
+        let midpoint = CLLocationCoordinate2D(latitude: midLat, longitude: midLon)
+        
+        Task {
+            // --- STAGE 1: TAKEOFF & PITCH & TURN ---
+            // Ascend to see the map in 3D perspective and rotate to face the destination
+            await MainActor.run {
+                withAnimation(.timingCurve(0.25, 1.0, 0.5, 1.0, duration: 1.5)) {
+                    position = .camera(MapCamera(
+                        centerCoordinate: start,
+                        distance: max(800.0, distance * 0.4),
+                        heading: bearing,
+                        pitch: 65.0
+                    ))
+                }
+            }
+            
+            try? await Task.sleep(nanoseconds: 1_200_000_000) // 1.2 seconds takeoff phase
+            
+            // --- STAGE 2: CRUISE POV ---
+            // Fly over the midpoint coordinate at a higher altitude looking down in 3D
+            await MainActor.run {
+                withAnimation(.timingCurve(0.35, 0.0, 0.25, 1.0, duration: 2.0)) {
+                    position = .camera(MapCamera(
+                        centerCoordinate: midpoint,
+                        distance: max(1500.0, distance * 1.3),
+                        heading: bearing,
+                        pitch: 60.0
+                    ))
+                }
+            }
+            
+            try? await Task.sleep(nanoseconds: 1_800_000_000) // 1.8 seconds cruise phase
+            
+            // --- STAGE 3: LUXURIOUS LANDING ---
+            // descend smoothly and center on target with soft cushion pitch
+            await MainActor.run {
+                withAnimation(.timingCurve(0.16, 1.0, 0.3, 1.0, duration: 1.8)) {
+                    position = .camera(MapCamera(
+                        centerCoordinate: end,
+                        distance: 450.0, // Low altitude details zoom
+                        heading: bearing,
+                        pitch: 45.0 // Soft landing pitch
+                    ))
+                }
+            }
+        }
+    }
+
     private func generateWavyCoordinates(
         from start: CLLocationCoordinate2D,
         to end: CLLocationCoordinate2D,
