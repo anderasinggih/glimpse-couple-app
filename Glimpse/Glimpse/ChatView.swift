@@ -92,8 +92,8 @@ struct ChatView: View {
                                     .padding(.top, 4)
                                 }
                                 
-                                // Larger bottom spacing to ensure the latest chat bubbles sit beautifully above the bottom transparent frosted panel
-                                Spacer().frame(height: isPartnerTyping ? 180 : 140)
+                                // Tiny bottom padding to prevent drop shadow clipping of the last bubble
+                                Spacer().frame(height: 15)
                             }
                             .padding(.horizontal, 16)
                             .frame(maxWidth: .infinity, minHeight: 600)
@@ -101,6 +101,23 @@ struct ChatView: View {
                             .onTapGesture {
                                 isInputFocused = false
                             }
+                        }
+                        .safeAreaInset(edge: .bottom) {
+                            VStack(spacing: 0) {
+                                Rectangle()
+                                    .fill(Color.white.opacity(0.08))
+                                    .frame(height: 0.8)
+                                
+                                floatingInputBar
+                                    .padding(.horizontal, 16)
+                                    .padding(.top, 12)
+                                    .padding(.bottom, 12)
+                            }
+                            .background(
+                                Color.white.opacity(0.01) // Super transparent base for see-through feel
+                                    .background(.ultraThinMaterial) // Clean glassmorphic transparent blur
+                                    .ignoresSafeArea(edges: .bottom)
+                            )
                         }
                         .onChange(of: messages) { oldMessages, newMessages in
                             if let lastMsg = newMessages.last {
@@ -137,26 +154,6 @@ struct ChatView: View {
                                 }
                             }
                         }
-                    }
-                    
-                    // Frosted Glass Bottom Panel covering Input Bar & Safe Area
-                    VStack {
-                        Spacer()
-                        VStack(spacing: 0) {
-                            Rectangle()
-                                .fill(Color.white.opacity(0.08))
-                                .frame(height: 0.8)
-                            
-                            floatingInputBar
-                                .padding(.horizontal, 16)
-                                .padding(.top, 12)
-                                .padding(.bottom, 12)
-                        }
-                        .background(
-                            Color.white.opacity(0.01) // Super transparent base for see-through feel
-                                .background(.ultraThinMaterial) // Clean glassmorphic transparent blur
-                                .ignoresSafeArea(edges: .bottom)
-                        )
                     }
                     
                     // Premium Small Header - aligned top overlaying ScrollView!
