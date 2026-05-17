@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import Combine
 
 struct PartnerMapView: View {
     let user: GlimpseUser
