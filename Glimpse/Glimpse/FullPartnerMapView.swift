@@ -341,48 +341,45 @@ struct FullPartnerMapView: View {
         let distance = startLoc.distance(from: endLoc)
         
         Task {
-            // --- PHASE 1: STARTING STATE ---
-            // Snap instantly to the User's current location strictly in 2D Top-Down (Pitch: 0.0)
-            // facing directly toward the flight destination (heading = bearing).
+            // --- STAGE 1: TAKEOFF, ZOOM OUT, TILT & ROTATE ---
+            // Stay at start point, but zoom out high, tilt to 3D, and rotate facing destination
             await MainActor.run {
-                withAnimation(.easeOut(duration: 0.25)) {
+                withAnimation(.timingCurve(0.25, 1.0, 0.5, 1.0, duration: 1.5)) {
                     position = .camera(MapCamera(
                         centerCoordinate: start,
-                        distance: 800.0,
+                        distance: max(3000.0, distance * 1.5),
                         heading: bearing,
-                        pitch: 0.0 // Strictly 2D straight down
+                        pitch: 65.0
                     ))
                 }
             }
             
-            try? await Task.sleep(nanoseconds: 250_000_000) // 0.25s stabilization delay
+            try? await Task.sleep(nanoseconds: 1_400_000_000) // 1.4 seconds takeoff phase
             
-            // --- PHASE 2: TRANSITION & FLIGHT ---
-            // Seamlessly transition camera angle to 3D Cockpit POV (Pitch: 75.0)
-            // and fly rapidly and smoothly toward the Partner's coordinate.
+            // --- STAGE 2: CRUISE FLIGHT POV ---
+            // Glide smoothly across the map to the destination while staying in 3D
             await MainActor.run {
-                withAnimation(.timingCurve(0.3, 0.0, 0.1, 1.0, duration: 2.5)) {
+                withAnimation(.timingCurve(0.35, 0.0, 0.25, 1.0, duration: 1.8)) {
                     position = .camera(MapCamera(
                         centerCoordinate: end,
-                        distance: max(600.0, distance * 0.18), // Low cockpit altitude flight
+                        distance: max(2000.0, distance * 1.2),
                         heading: bearing,
-                        pitch: 75.0 // Tilted forward looking at horizon
+                        pitch: 60.0
                     ))
                 }
             }
             
-            try? await Task.sleep(nanoseconds: 2_300_000_000) // Sleep 2.3s during flight
+            try? await Task.sleep(nanoseconds: 1_600_000_000) // 1.6 seconds cruise phase
             
-            // --- PHASE 3 & 4: ARRIVAL, POSITIONING & CINEMATIC ENDING ORBIT ---
-            // Settle on Partner's coordinate dead-center, adjust pitch to near-2D slightly tilted (Pitch: 25.0),
-            // and slowly orbit/rotate around them by 90.0 degrees with premium ease-in-out curve.
+            // --- STAGE 3: LANDING & FLATTEN TO 2D ---
+            // Settle close on destination, flatten pitch to 2D (0°), and reset heading to North (0°)
             await MainActor.run {
-                withAnimation(.timingCurve(0.2, 0.85, 0.25, 1.0, duration: 6.0)) {
+                withAnimation(.timingCurve(0.16, 1.0, 0.3, 1.0, duration: 1.6)) {
                     position = .camera(MapCamera(
                         centerCoordinate: end,
-                        distance: 350.0, // Zoom in close to details
-                        heading: bearing + 90.0, // 90° slow elegant orbit scan sweep
-                        pitch: 25.0 // Near 2D but slightly tilted
+                        distance: 500.0, // Close details zoom
+                        heading: 0.0, // Face North like normal 2D map
+                        pitch: 0.0 // Return to flat 2D
                     ))
                 }
             }
