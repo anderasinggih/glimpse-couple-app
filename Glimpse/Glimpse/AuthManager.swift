@@ -44,7 +44,7 @@ class AuthManager {
         UserDefaults.standard.string(forKey: "auth_token")
     }
     
-    let baseURL = "http://172.20.10.2:8000/api"
+    let baseURL = "https://api.galleryfortwo.my.id/api"
     
     init() {
         // FAST START: Don't do heavy work here
@@ -105,7 +105,7 @@ class AuthManager {
                     
                     if !urlString.hasPrefix("http") {
                         let cleanPath = urlString.hasPrefix("/") ? String(urlString.dropFirst()) : urlString
-                        let base = "http://172.20.10.2:8000"
+                        let base = "https://api.galleryfortwo.my.id"
                         urlString = cleanPath.contains("storage/") ? "\(base)/\(cleanPath)" : "\(base)/storage/\(cleanPath)"
                     }
                     
@@ -642,7 +642,7 @@ class AuthManager {
         // Close any existing connection first
         disconnectWebSocket()
         
-        guard let coupleId = currentUser?.couple_id, coupleActive else { return }
+        guard let _ = currentUser?.couple_id, coupleActive else { return }
         
         // Parse host from baseURL
         guard let urlComponents = URLComponents(string: baseURL),

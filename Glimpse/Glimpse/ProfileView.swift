@@ -15,6 +15,8 @@ struct ProfileView: View {
     @State private var isShowingApproveDisconnectConfirmation = false
     @State private var isShowingAcceptInviteConfirmation = false
     @State private var isShowingCancelInviteConfirmation = false
+    @State private var isShowingErrorAlert = false
+    @State private var errorMessage = ""
     @AppStorage("glimpse_theme_accent") var themeAccentHex = "00FFFF"
     @AppStorage("glimpse_haptic_strength") var hapticStrength = "rigid"
     
@@ -309,6 +311,11 @@ struct ProfileView: View {
         } message: {
             Text("Do you want to cancel your pending invite to \(auth.partner?.name ?? "your partner")?")
         }
+        .alert("Connection Error", isPresented: $isShowingErrorAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage)
+        }
     }
     
     private func formattedUrl(_ urlString: String) -> String {
@@ -404,6 +411,10 @@ struct ProfileView: View {
                 try await auth.connectPartner(inviteCode: inviteCodeInput)
                 inviteCodeInput = ""
             } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    isShowingErrorAlert = true
+                }
                 print("Connection failed: \(error)")
             }
         }

@@ -533,9 +533,19 @@ struct CachedImageView: View {
     }
     
     private func cacheFileURL(for urlStr: String) -> URL? {
-        guard let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") else { return nil }
         let cleanName = urlStr.components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
-        return groupURL.appendingPathComponent("img_cache_\(cleanName).jpg")
+        let filename = "img_cache_\(cleanName).jpg"
+        
+        if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+            return groupURL.appendingPathComponent(filename)
+        }
+        
+        // Fallback to standard caches directory if App Group is not configured in Xcode
+        if let cachesURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
+            return cachesURL.appendingPathComponent(filename)
+        }
+        
+        return nil
     }
     
     private func loadImage() async {
