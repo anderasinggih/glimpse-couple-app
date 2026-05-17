@@ -194,6 +194,8 @@ struct FullPartnerMapView: View {
                 }
                 .ignoresSafeArea()
                 .onMapCameraChange(frequency: .onEnd) { context in
+                    guard !isFlying else { return } // Ignore updates during cinematic flight transitions!
+                    
                     currentCameraCenter = context.camera.centerCoordinate
                     
                     guard let currentUser = auth.currentUser else { return }
@@ -255,18 +257,19 @@ struct FullPartnerMapView: View {
                                 
                                 let targetCoord: CLLocationCoordinate2D
                                 let startCoord: CLLocationCoordinate2D
+                                let nextTarget: MapFocusTarget
                                 
                                 if currentlyFocusedTarget == .me {
                                     targetCoord = partnerCoord
                                     startCoord = myCoord
-                                    currentlyFocusedTarget = .partner
+                                    nextTarget = .partner
                                 } else {
                                     targetCoord = myCoord
                                     startCoord = partnerCoord
-                                    currentlyFocusedTarget = .me
+                                    nextTarget = .me
                                 }
                                 
-                                triggerCinematicFlight(from: startCoord, to: targetCoord)
+                                triggerCinematicFlight(from: startCoord, to: targetCoord, targetFocus: nextTarget)
                             } label: {
                                 Image(systemName: "scope")
                                     .font(.system(size: 20, weight: .semibold))
@@ -364,7 +367,7 @@ struct FullPartnerMapView: View {
         }
     }
     
-    private func triggerCinematicFlight(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D) {
+    private func triggerCinematicFlight(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D, targetFocus: MapFocusTarget) {
         let startLoc = CLLocation(latitude: start.latitude, longitude: start.longitude)
         let endLoc = CLLocation(latitude: end.latitude, longitude: end.longitude)
         let distance = startLoc.distance(from: endLoc)
@@ -411,6 +414,10 @@ struct FullPartnerMapView: View {
             try? await Task.sleep(nanoseconds: 2_200_000_000)
             
             await MainActor.run {
+                // Update bottom overlay info card ONLY when camera has fully arrived at destination!
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+                    currentlyFocusedTarget = targetFocus
+                }
                 isFlying = false
             }
         }
