@@ -66,6 +66,14 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             guard let self = self, let activity = activity else { return }
             
             Task { @MainActor in
+                // Bypass motion sleep if location is simulated
+                if #available(iOS 15.0, *) {
+                    if self.locationManager.location?.sourceInformation?.isSimulatedBySoftware == true {
+                        self.locationManager.startUpdatingLocation()
+                        return
+                    }
+                }
+                
                 if activity.stationary {
                     if !self.isStationary {
                         self.isStationary = true
@@ -122,19 +130,38 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                 
                 print("[Glimpse WiFi] Anchored to Wi-Fi BSSID: \(bssid)")
                 
-                // If we already have a cached location for this Wi-Fi, we can immediately lock to it and stop GPS!
+                // If we already have a cached location for this Wi-Fi, lock to it (unless simulated!)
                 if let cached = self.cachedWiFiLocations[bssid] {
-                    print("[Glimpse WiFi] Using cached coordinates for Wi-Fi. Stopping GPS to save 99% battery.")
-                    self.locationManager.stopUpdatingLocation()
+                    var shouldStop = true
+                    if #available(iOS 15.0, *) {
+                        if self.locationManager.location?.sourceInformation?.isSimulatedBySoftware == true {
+                            shouldStop = false
+                        }
+                    }
+                    
+                    if shouldStop {
+                        print("[Glimpse WiFi] Using cached coordinates for Wi-Fi. Stopping GPS to save 99% battery.")
+                        self.locationManager.stopUpdatingLocation()
+                    }
                     
                     let dummyLocation = CLLocation(latitude: cached.latitude, longitude: cached.longitude)
                     self.processAndUploadLocation(dummyLocation)
                 } else {
-                    // Otherwise, get current coordinate first to cache it
+                    // Otherwise, get current coordinate first to cache it (unless simulated!)
                     if let currentLoc = self.locationManager.location {
                         self.cachedWiFiLocations[bssid] = currentLoc.coordinate
                         print("[Glimpse WiFi] Cached location for BSSID: \(bssid)")
-                        self.locationManager.stopUpdatingLocation()
+                        
+                        var shouldStop = true
+                        if #available(iOS 15.0, *) {
+                            if currentLoc.sourceInformation?.isSimulatedBySoftware == true {
+                                shouldStop = false
+                            }
+                        }
+                        
+                        if shouldStop {
+                            self.locationManager.stopUpdatingLocation()
+                        }
                     }
                 }
             }
@@ -145,11 +172,21 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
         
-        // Cache WiFi location if we just connected
+        // Cache WiFi location if we just connected (but bypass if simulated!)
         if let bssid = currentWiFiBSSID, cachedWiFiLocations[bssid] == nil {
             cachedWiFiLocations[bssid] = location.coordinate
             print("[Glimpse WiFi] Cached location for BSSID: \(bssid) on active GPS update.")
-            locationManager.stopUpdatingLocation()
+            
+            var shouldStop = true
+            if #available(iOS 15.0, *) {
+                if location.sourceInformation?.isSimulatedBySoftware == true {
+                    shouldStop = false
+                }
+            }
+            
+            if shouldStop {
+                locationManager.stopUpdatingLocation()
+            }
         }
         
         processAndUploadLocation(location)
