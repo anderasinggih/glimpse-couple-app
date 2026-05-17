@@ -768,7 +768,6 @@ class AuthManager {
             self.uploadProgress = 1.0
         }
     }
-    }
     
     func triggerServerLoveBurst() async throws {
         guard let url = URL(string: "\(baseURL)/glimpse/love-burst") else { return }

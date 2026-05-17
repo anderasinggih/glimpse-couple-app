@@ -187,7 +187,7 @@ struct MainDashboardView: View {
                 triggerLoveBurst()
             }
         }
-        .alert("Request Declined", isPresented: Bindable(auth).showInviteDeclinedAlert) {
+        .alert("Request Declined", isPresented: $bindableAuth.showInviteDeclinedAlert) {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Your connection request was declined or cancelled.")
