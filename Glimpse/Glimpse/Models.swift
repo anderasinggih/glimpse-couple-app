@@ -1,6 +1,17 @@
 import Foundation
 import CoreLocation
 
+struct LocationHistoryEntry: Codable, Identifiable {
+    var id: Double { timestamp }
+    let latitude: Double
+    let longitude: Double
+    let timestamp: Double
+    
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+}
+
 struct GlimpseUser: Codable, Identifiable {
     let id: Int
     let name: String
@@ -17,6 +28,7 @@ struct GlimpseUser: Codable, Identifiable {
     let invite_code: String?
     let couple_id: Int?
     let last_seen_message_id: Int?
+    let location_history: [LocationHistoryEntry]?
     
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude ?? 0, longitude: longitude ?? 0)

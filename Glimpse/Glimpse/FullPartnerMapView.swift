@@ -49,6 +49,45 @@ struct FullPartnerMapView: View {
             } else if let partner = auth.partner {
                 // Full Screen Map with Pulsing Partner Marker
                 Map(position: $position) {
+                    // 👣 Neon Footprints Trail for Partner (Zenly-Style)
+                    if let partnerHistory = partner.location_history, partnerHistory.count >= 2 {
+                        let coords = partnerHistory.map { $0.coordinate }
+                        
+                        // 1. Neon Glow Layer
+                        MapPolyline(coordinates: coords)
+                            .stroke(
+                                Color.activeCyan.opacity(0.35),
+                                style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
+                            )
+                        
+                        // 2. Core Saturated Neon Layer
+                        MapPolyline(coordinates: coords)
+                            .stroke(
+                                Color.activeCyan,
+                                style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+                            )
+                    }
+                    
+                    // 👣 Neon Footprints Trail for Me (Zenly-Style)
+                    if let myUser = auth.currentUser,
+                       let myHistory = myUser.location_history, myHistory.count >= 2 {
+                        let coords = myHistory.map { $0.coordinate }
+                        
+                        // 1. Neon Glow Layer
+                        MapPolyline(coordinates: coords)
+                            .stroke(
+                                Color.electricPurple.opacity(0.35),
+                                style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
+                            )
+                        
+                        // 2. Core Saturated Neon Layer
+                        MapPolyline(coordinates: coords)
+                            .stroke(
+                                Color.electricPurple,
+                                style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+                            )
+                    }
+
                     if auth.isTogether, let currentUser = auth.currentUser {
                         Annotation("Together", coordinate: partner.coordinate) {
                             ZStack {

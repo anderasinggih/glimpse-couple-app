@@ -33,6 +33,7 @@ class User extends Authenticatable
         'latest_photo_url',
         'profile_photo_url',
         'last_seen_message_id',
+        'location_history',
     ];
 
     protected static function boot()
@@ -63,6 +64,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'location_history' => 'array',
         ];
     }
 }

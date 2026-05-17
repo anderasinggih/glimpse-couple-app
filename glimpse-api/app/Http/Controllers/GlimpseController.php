@@ -95,6 +95,7 @@ class GlimpseController extends Controller
                 'latest_photo_url' => $latestPhotoUrl,
                 'last_updated' => $user->updated_at->toIso8601String(),
                 'last_seen_message_id' => $user->last_seen_message_id !== null ? (int)$user->last_seen_message_id : null,
+                'location_history' => $user->location_history ?? [],
             ],
             'partner_data' => $partner ? [
                 'id' => (int)$partner->id,
@@ -111,6 +112,7 @@ class GlimpseController extends Controller
                 'latest_photo_url' => $partnerLatestPhotoUrl,
                 'last_updated' => $partner->updated_at->toIso8601String(),
                 'last_seen_message_id' => $partner->last_seen_message_id !== null ? (int)$partner->last_seen_message_id : null,
+                'location_history' => $partner->location_history ?? [],
             ] : null,
             'anniversary_start_date' => $couple ? $couple->anniversary_start_date : null,
             'disconnect_requested_by' => $couple && $couple->disconnect_requested_by !== null ? (int)$couple->disconnect_requested_by : null,
@@ -287,6 +289,10 @@ class GlimpseController extends Controller
         if ($request->has('status_note')) $user->status_note = $request->status_note;
         if ($request->has('location_name')) $user->location_name = $request->location_name;
 
+        if ($request->has('latitude') && $request->has('longitude')) {
+            $this->appendLocationHistory($user, $request->latitude, $request->longitude);
+        }
+
         if ($request->hasFile('photo')) {
             $path = $request->file('photo')->store('glimpse_photos', 'public');
             $user->latest_photo_url = Storage::url($path);
@@ -450,6 +456,10 @@ class GlimpseController extends Controller
         if ($request->has('status_note')) $user->status_note = $request->status_note;
         if ($request->has('location_name')) $user->location_name = $request->location_name;
 
+        if ($request->has('latitude') && $request->has('longitude')) {
+            $this->appendLocationHistory($user, $request->latitude, $request->longitude);
+        }
+
         $user->save();
 
         // Broadcast live state updates to the partner instantly over WebSockets
@@ -514,6 +524,34 @@ class GlimpseController extends Controller
         }
 
         return $isTogether;
+    }
+
+    private function appendLocationHistory($user, $lat, $lng)
+    {
+        if ($lat === null || $lng === null) return;
+
+        $history = $user->location_history ?? [];
+        
+        // Prevent duplicate consecutive updates
+        if (!empty($history)) {
+            $last = end($history);
+            if (abs($last['latitude'] - $lat) < 0.00001 && abs($last['longitude'] - $lng) < 0.00001) {
+                return;
+            }
+        }
+
+        $history[] = [
+            'latitude' => (double)$lat,
+            'longitude' => (double)$lng,
+            'timestamp' => now()->timestamp
+        ];
+
+        // Keep last 30 coordinates for the footprints trail
+        if (count($history) > 30) {
+            array_shift($history);
+        }
+
+        $user->location_history = $history;
     }
 
     public function sendLoveBurst(Request $request)
