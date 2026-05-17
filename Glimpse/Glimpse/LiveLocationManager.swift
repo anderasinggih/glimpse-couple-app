@@ -23,6 +23,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     private var currentWiFiBSSID: String? = nil
     private var cachedWiFiLocations: [String: CLLocationCoordinate2D] = [:] // [BSSID: Coordinate]
     private var isWiFiScanning = false
+    private var wasUsingWiFi = false
     
     private var lastUploadedLocation: CLLocation?
     private var lastUploadTime: Date?
@@ -141,13 +142,21 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             
             Task { @MainActor in
                 if isUsingWiFi {
-                    self.fetchCurrentWiFiAndLock()
+                    // Only call Wi-Fi fetch if we weren't previously using Wi-Fi (transition state!)
+                    // This prevents spamming NEHotspotNetwork.fetchCurrent and lighting up the GPS indicator arrow!
+                    if !self.wasUsingWiFi {
+                        self.wasUsingWiFi = true
+                        self.fetchCurrentWiFiAndLock()
+                    }
                 } else {
                     // Disconnected from Wi-Fi: Resume standard GPS tracking
-                    self.log("📴 Wi-Fi Terputus: Jaringan berpindah ke Data Seluler. Menyalakan kembali GPS aktif!")
-                    self.currentWiFiBSSID = nil
-                    self.locationManager.startUpdatingLocation()
-                    LiveDebugLogger.shared.setGPSStatus("Active GPS 🛰️")
+                    if self.wasUsingWiFi {
+                        self.wasUsingWiFi = false
+                        self.log("📴 Wi-Fi Terputus: Jaringan berpindah ke Data Seluler. Menyalakan kembali GPS aktif!")
+                        self.currentWiFiBSSID = nil
+                        self.locationManager.startUpdatingLocation()
+                        LiveDebugLogger.shared.setGPSStatus("Active GPS 🛰️")
+                    }
                 }
             }
         }
