@@ -710,6 +710,7 @@ class GlimpseCameraModel: NSObject, AVCapturePhotoCaptureDelegate, CLLocationMan
         sessionQueue.async {
             self.output.capturePhoto(with: settings, delegate: self)
         }
+        
     }
     
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {

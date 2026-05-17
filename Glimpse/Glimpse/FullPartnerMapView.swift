@@ -340,51 +340,33 @@ struct FullPartnerMapView: View {
         let endLoc = CLLocation(latitude: end.latitude, longitude: end.longitude)
         let distance = startLoc.distance(from: endLoc)
         
-        // Midpoint coordinate along the path
-        let midLat = (start.latitude + end.latitude) / 2.0
-        let midLon = (start.longitude + end.longitude) / 2.0
-        let midpoint = CLLocationCoordinate2D(latitude: midLat, longitude: midLon)
-        
         Task {
-            // --- STAGE 1: TAKEOFF & PITCH & TURN ---
-            // Ascend to see the map in 3D perspective and rotate to face the destination
+            // --- STAGE 1: PLANE NOSE POV TAKEOFF & HIGH-SPEED FLYBY ---
+            // From flat view, we instantly tilt up to 78° (Plane Nose POV),
+            // rotate heading towards the target, and fly fast close to the ground.
             await MainActor.run {
-                withAnimation(.timingCurve(0.25, 1.0, 0.5, 1.0, duration: 1.5)) {
-                    position = .camera(MapCamera(
-                        centerCoordinate: start,
-                        distance: max(800.0, distance * 0.4),
-                        heading: bearing,
-                        pitch: 65.0
-                    ))
-                }
-            }
-            
-            try? await Task.sleep(nanoseconds: 1_200_000_000) // 1.2 seconds takeoff phase
-            
-            // --- STAGE 2: CRUISE POV ---
-            // Fly over the midpoint coordinate at a higher altitude looking down in 3D
-            await MainActor.run {
-                withAnimation(.timingCurve(0.35, 0.0, 0.25, 1.0, duration: 2.0)) {
-                    position = .camera(MapCamera(
-                        centerCoordinate: midpoint,
-                        distance: max(1500.0, distance * 1.3),
-                        heading: bearing,
-                        pitch: 60.0
-                    ))
-                }
-            }
-            
-            try? await Task.sleep(nanoseconds: 1_800_000_000) // 1.8 seconds cruise phase
-            
-            // --- STAGE 3: LUXURIOUS LANDING ---
-            // descend smoothly and center on target with soft cushion pitch
-            await MainActor.run {
-                withAnimation(.timingCurve(0.16, 1.0, 0.3, 1.0, duration: 1.8)) {
+                withAnimation(.timingCurve(0.4, 0.0, 0.2, 1.0, duration: 2.2)) {
                     position = .camera(MapCamera(
                         centerCoordinate: end,
-                        distance: 450.0, // Low altitude details zoom
+                        distance: max(600.0, distance * 0.15), // Fly low to the ground
                         heading: bearing,
-                        pitch: 45.0 // Soft landing pitch
+                        pitch: 78.0 // Low plane nose angle looking at horizon
+                    ))
+                }
+            }
+            
+            try? await Task.sleep(nanoseconds: 2_000_000_000) // Sleep 2.0s during flyby
+            
+            // --- STAGE 2: LUXURIOUS ORBIT & SETTLE ---
+            // Settle on the destination coordinate, transition pitch to a gorgeous 45° angle,
+            // and slowly orbit/circle around the partner by 120° in a smooth cinematic sweep!
+            await MainActor.run {
+                withAnimation(.timingCurve(0.1, 0.8, 0.2, 1.0, duration: 6.0)) {
+                    position = .camera(MapCamera(
+                        centerCoordinate: end,
+                        distance: 350.0, // Zoom in closer on target
+                        heading: bearing + 120.0, // Orbit/rotate camera heading
+                        pitch: 45.0 // Near 2D but tilted 3D angle
                     ))
                 }
             }
