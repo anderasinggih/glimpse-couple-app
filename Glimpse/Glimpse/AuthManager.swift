@@ -53,6 +53,10 @@ class AuthManager {
         let token = UserDefaults.standard.string(forKey: "auth_token")
         if token != nil {
             self.isAuthenticated = true
+            
+            // 1. Instantly load cached session for offline resilience
+            loadCachedSession()
+            
             Task {
                 try? await self.fetchState()
                 self.connectWebSocket()
@@ -77,6 +81,7 @@ class AuthManager {
         }
         
         let responseData = try JSONDecoder().decode(CoupleResponse.self, from: data)
+        saveSessionCache(data)
         await MainActor.run {
             let isNowDisconnected = responseData.partner_data == nil
             
@@ -848,6 +853,65 @@ class AuthManager {
             print("🔄 Attempting to reconnect to WebSocket...")
             self?.connectWebSocket()
         }
+    }
+    
+    // MARK: - SESSION CACHING
+    private func saveSessionCache(_ data: Data) {
+        UserDefaults.standard.set(data, forKey: "cached_couple_response")
+    }
+    
+    private func loadCachedSession() {
+        guard let cachedData = UserDefaults.standard.data(forKey: "cached_couple_response") else { return }
+        do {
+            let responseData = try JSONDecoder().decode(CoupleResponse.self, from: cachedData)
+            self.currentUser = responseData.user
+            self.partner = responseData.partner_data
+            self.anniversaryDate = responseData.anniversaryDate
+            self.disconnectRequestedBy = responseData.disconnect_requested_by
+            self.coupleActive = responseData.couple_active ?? false
+            self.invitedBy = responseData.invited_by
+            self.isTogether = responseData.is_together ?? false
+            self.togetherStreak = responseData.together_streak ?? 0
+            self.totalMeetings = responseData.total_meetings ?? 0
+            self.lastLoveBurstTimestamp = responseData.love_burst_timestamp ?? 0.0
+            
+            // Mark loaded so that it doesn't show loading spinner if cached data is present!
+            self.isInitialStateLoaded = true
+        } catch {
+            print("❌ Failed to decode cached session: \(error)")
+        }
+    }
+    
+    // MARK: - CLEAR IMAGE CACHE
+    func clearImageCache() {
+        let fileManager = FileManager.default
+        
+        // 1. Clear standard Apple URL Cache
+        URLCache.shared.removeAllCachedResponses()
+        
+        // 2. Clear App Group Cache files
+        if let groupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+            if let files = try? fileManager.contentsOfDirectory(at: groupURL, includingPropertiesForKeys: nil) {
+                for file in files {
+                    if file.lastPathComponent.hasPrefix("img_cache_") {
+                        try? fileManager.removeItem(at: file)
+                    }
+                }
+            }
+        }
+        
+        // 3. Clear standard Caches directory files
+        if let cachesURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first {
+            if let files = try? fileManager.contentsOfDirectory(at: cachesURL, includingPropertiesForKeys: nil) {
+                for file in files {
+                    if file.lastPathComponent.hasPrefix("img_cache_") {
+                        try? fileManager.removeItem(at: file)
+                    }
+                }
+            }
+        }
+        
+        print("✅ Image cache successfully cleared!")
     }
 }
 

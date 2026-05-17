@@ -17,6 +17,8 @@ struct ProfileView: View {
     @State private var isShowingCancelInviteConfirmation = false
     @State private var isShowingErrorAlert = false
     @State private var errorMessage = ""
+    @State private var isShowingClearCacheAlert = false
+    @State private var isShowingClearCacheSuccess = false
     @AppStorage("glimpse_theme_accent") var themeAccentHex = "00FFFF"
     @AppStorage("glimpse_haptic_strength") var hapticStrength = "rigid"
     
@@ -203,6 +205,12 @@ struct ProfileView: View {
                                 CompactMenuRow(icon: "location.viewfinder", title: "Location sharing", value: locationStatus(), color: .green)
                             }
                             
+                            Button {
+                                isShowingClearCacheAlert = true
+                            } label: {
+                                CompactMenuRow(icon: "trash.fill", title: "Clear cache storage", value: "Clear photos", color: .red)
+                            }
+                            
                             Link(destination: URL(string: "https://api.galleryfortwo.my.id/privacy")!) {
                                 CompactMenuRow(icon: "shield.fill", title: "Privacy policy", value: "View", color: .secondary)
                             }
@@ -328,6 +336,21 @@ struct ProfileView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage)
+        }
+        .alert("Clear Image Cache?", isPresented: $isShowingClearCacheAlert) {
+            Button("Clear", role: .destructive) {
+                auth.clearImageCache()
+                UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                isShowingClearCacheSuccess = true
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will remove all downloaded cached images of your partner. They will be re-downloaded seamlessly when needed.")
+        }
+        .alert("Cache Cleared!", isPresented: $isShowingClearCacheSuccess) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("All image cache has been successfully removed to free up your phone storage.")
         }
     }
     
