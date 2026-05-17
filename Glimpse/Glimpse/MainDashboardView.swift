@@ -4,6 +4,9 @@ struct MainDashboardView: View {
     @State private var auth = AuthManager.shared
     @State private var togetherAnimation = false
     @State private var streakPulse = false
+    @State private var hearts: [FloatingHeart] = []
+    @State private var lastSeenLoveBurstTimestamp: Double = 0.0
+    private let dashboardPollTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
     
     var body: some View {
         @Bindable var bindableAuth = auth
@@ -92,9 +95,36 @@ struct MainDashboardView: View {
                 BrandingHeader()
                     .zIndex(100)
             }
+            
+            // GLOBAL FLOATING HEARTS OVERLAY
+            ZStack {
+                ForEach(hearts) { heart in
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 30))
+                        .foregroundColor(heart.color)
+                        .scaleEffect(heart.scale)
+                        .rotationEffect(.degrees(heart.rotation))
+                        .opacity(heart.opacity)
+                        .position(x: heart.x, y: heart.y)
+                }
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+            .zIndex(999)
         }
         .onAppear {
             Task { try? await auth.fetchState() }
+        }
+        .onReceive(dashboardPollTimer) { _ in
+            Task {
+                try? await auth.fetchState()
+                
+                // Check if a new love burst was sent by partner
+                if auth.lastLoveBurstTimestamp > lastSeenLoveBurstTimestamp {
+                    lastSeenLoveBurstTimestamp = auth.lastLoveBurstTimestamp
+                    triggerLoveBurst()
+                }
+            }
         }
         .alert("Request Declined", isPresented: Bindable(auth).showInviteDeclinedAlert) {
             Button("OK", role: .cancel) {}
@@ -172,78 +202,94 @@ struct MainDashboardView: View {
                             }
                             
                             if auth.isTogether {
-                                VStack(spacing: 16) {
-                                    HStack {
-                                        Image(systemName: "sparkles")
-                                            .foregroundColor(.yellow)
-                                            .font(.title3)
-                                        Text("TOGETHER RIGHT NOW")
-                                            .font(.system(size: 14, weight: .black, design: .rounded))
-                                            .foregroundColor(.white)
-                                            .tracking(2.0)
-                                        Image(systemName: "sparkles")
-                                            .foregroundColor(.yellow)
-                                            .font(.title3)
+                                Button {
+                                    triggerLoveBurst()
+                                    Task {
+                                        try? await auth.triggerServerLoveBurst()
                                     }
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 6)
-                                    .background(Color.black.opacity(0.3))
-                                    .cornerRadius(12)
                                     
-                                    // Animated overlapping avatars
-                                    HStack(spacing: -15) {
-                                        // Self Profile Photo
-                                        CachedImageView(urlString: auth.currentUser?.profile_photo_url ?? "")
-                                            .frame(width: 60, height: 60)
-                                            .clipShape(Circle())
-                                            .overlay(Circle().stroke(Color.electricPurple, lineWidth: 2))
-                                            .shadow(color: .electricPurple.opacity(0.5), radius: 10)
-                                            .offset(x: togetherAnimation ? 5 : -5)
+                                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                                    generator.impactOccurred()
+                                } label: {
+                                    VStack(spacing: 12) {
+                                        Text("Together right now")
+                                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                                            .foregroundColor(.white)
+                                            .opacity(0.9)
                                         
-                                        // Neon Pulsing Heart in Between
-                                        Image(systemName: "heart.fill")
-                                            .font(.system(size: 26))
-                                            .foregroundColor(.red)
-                                            .scaleEffect(togetherAnimation ? 1.25 : 0.85)
-                                            .shadow(color: .red, radius: 12)
+                                        // Animated overlapping avatars
+                                        HStack(spacing: -12) {
+                                            // Self Profile Photo
+                                            CachedImageView(urlString: auth.currentUser?.profile_photo_url ?? "")
+                                                .frame(width: 65, height: 65)
+                                                .clipShape(Circle())
+                                                .overlay(Circle().stroke(Color.electricPurple, lineWidth: 2))
+                                                .shadow(color: .electricPurple.opacity(0.6), radius: 12)
+                                                .offset(x: togetherAnimation ? 6 : -6)
+                                            
+                                            // Glassmorphic Glowing Pulsing Heart in Between
+                                            ZStack {
+                                                Circle()
+                                                    .fill(Color.red.opacity(0.15))
+                                                    .frame(width: 38, height: 38)
+                                                    .blur(radius: 4)
+                                                
+                                                Image(systemName: "heart.fill")
+                                                    .font(.system(size: 24))
+                                                    .foregroundColor(.red)
+                                                    .shadow(color: .red.opacity(0.8), radius: 10)
+                                            }
+                                            .scaleEffect(togetherAnimation ? 1.3 : 0.85)
                                             .zIndex(10)
+                                            
+                                            // Partner Profile Photo
+                                            CachedImageView(urlString: partner.profile_photo_url)
+                                                .frame(width: 65, height: 65)
+                                                .clipShape(Circle())
+                                                .overlay(Circle().stroke(Color.activeCyan, lineWidth: 2))
+                                                .shadow(color: .activeCyan.opacity(0.6), radius: 12)
+                                                .offset(x: togetherAnimation ? -6 : 6)
+                                        }
+                                        .padding(.vertical, 8)
+                                        .onAppear {
+                                            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                                                togetherAnimation = true
+                                            }
+                                        }
                                         
-                                        // Partner Profile Photo
-                                        CachedImageView(urlString: partner.profile_photo_url)
-                                            .frame(width: 60, height: 60)
-                                            .clipShape(Circle())
-                                            .overlay(Circle().stroke(Color.activeCyan, lineWidth: 2))
-                                            .shadow(color: .activeCyan.opacity(0.5), radius: 10)
-                                            .offset(x: togetherAnimation ? -5 : 5)
+                                        Text("Tap to send love sparks")
+                                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                            .foregroundColor(.white.opacity(0.4))
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 4)
+                                            .background(Color.white.opacity(0.06))
+                                            .clipShape(Capsule())
                                     }
-                                    .onAppear {
-                                        withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                                            togetherAnimation = true
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 24)
+                                    .background {
+                                        ZStack {
+                                            Color.clear.liquidGlass()
+                                            
+                                            // Dynamic subtle pulse background circle
+                                            Circle()
+                                                .stroke(Color.electricPurple.opacity(0.1), lineWidth: 1)
+                                                .scaleEffect(togetherAnimation ? 1.2 : 0.9)
+                                                .opacity(togetherAnimation ? 0.0 : 0.8)
                                         }
                                     }
-                                    
-                                    Text("You are physically close! Love is in the air.")
-                                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                                        .foregroundColor(.white.opacity(0.8))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 24)
+                                            .stroke(
+                                                LinearGradient(colors: [.electricPurple.opacity(0.4), .activeCyan.opacity(0.4)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                                lineWidth: 1.5
+                                            )
+                                    )
+                                    .shadow(color: .electricPurple.opacity(0.2), radius: 15)
                                 }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 20)
-                                .background {
-                                    ZStack {
-                                        Color.deepVelvet.opacity(0.4)
-                                        LinearGradient(colors: [.electricPurple.opacity(0.15), .activeCyan.opacity(0.15)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                                    }
-                                }
-                                .cornerRadius(24)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 24)
-                                        .stroke(
-                                            LinearGradient(colors: [.electricPurple.opacity(0.5), .activeCyan.opacity(0.5)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                                            lineWidth: 1.5
-                                        )
-                                )
-                                .shadow(color: .electricPurple.opacity(0.3), radius: 15)
-                                .padding(.bottom, 10)
+                                .buttonStyle(PlainButtonStyle())
+                                .scaleEffect(togetherAnimation ? 1.01 : 0.99)
+                                .padding(.bottom, 12)
                             }
                             
                             PartnerMapView(user: partner)
@@ -448,6 +494,60 @@ struct MainDashboardView: View {
             }
         }
     }
+    
+    private func triggerLoveBurst() {
+        var newHearts: [FloatingHeart] = []
+        for _ in 0..<15 {
+            let heart = FloatingHeart(
+                x: CGFloat.random(in: 50...UIScreen.main.bounds.width - 50),
+                y: UIScreen.main.bounds.height + 50,
+                scale: CGFloat.random(in: 0.6...1.6),
+                color: [Color.red, Color.pink, Color.electricPurple, Color(hex: "FF4D94")].randomElement()!,
+                opacity: Double.random(in: 0.7...1.0),
+                rotation: Double.random(in: -30...30)
+            )
+            newHearts.append(heart)
+        }
+        
+        withAnimation(.easeOut(duration: 0.3)) {
+            self.hearts.append(contentsOf: newHearts)
+        }
+        
+        // Animate floating up
+        for i in 0..<newHearts.count {
+            let idx = self.hearts.firstIndex(where: { $0.id == newHearts[i].id })
+            if let idx = idx {
+                withAnimation(.easeOut(duration: Double.random(in: 2.0...3.5))) {
+                    self.hearts[idx] = FloatingHeart(
+                        id: newHearts[i].id,
+                        x: newHearts[i].x + CGFloat.random(in: -80...80),
+                        y: -100,
+                        scale: newHearts[i].scale * 1.2,
+                        color: newHearts[i].color,
+                        opacity: 0.0,
+                        rotation: newHearts[i].rotation + Double.random(in: -90...90)
+                    )
+                }
+            }
+        }
+        
+        // Clean up
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+            self.hearts.removeAll(where: { heart in
+                newHearts.contains(where: { $0.id == heart.id })
+            })
+        }
+    }
+}
+
+struct FloatingHeart: Identifiable {
+    let id = UUID()
+    let x: CGFloat
+    let y: CGFloat
+    let scale: CGFloat
+    let color: Color
+    let opacity: Double
+    let rotation: Double
 }
 
 #Preview {

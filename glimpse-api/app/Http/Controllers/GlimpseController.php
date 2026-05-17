@@ -72,6 +72,12 @@ class GlimpseController extends Controller
             }
         }
 
+        $loveBurstInfo = \Illuminate\Support\Facades\Cache::get("couple_{$user->couple_id}_love_burst");
+        $loveBurstTimestamp = 0.0;
+        if ($loveBurstInfo && $loveBurstInfo['sender_id'] !== $user->id) {
+            $loveBurstTimestamp = (double)$loveBurstInfo['timestamp'];
+        }
+
         return response()->json([
             'user' => [
                 'id' => $user->id,
@@ -111,6 +117,7 @@ class GlimpseController extends Controller
             'is_together' => $isTogether,
             'together_streak' => $togetherStreak,
             'total_meetings' => $totalMeetings,
+            'love_burst_timestamp' => $loveBurstTimestamp,
         ]);
     }
 
@@ -418,5 +425,24 @@ class GlimpseController extends Controller
         }
 
         return $isTogether;
+    }
+
+    public function sendLoveBurst(Request $request)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active relationship'], 400);
+        }
+
+        $timestamp = microtime(true);
+        \Illuminate\Support\Facades\Cache::put("couple_{$user->couple_id}_love_burst", [
+            'timestamp' => $timestamp,
+            'sender_id' => $user->id
+        ], 60);
+
+        return response()->json([
+            'message' => 'Love burst triggered!',
+            'timestamp' => $timestamp
+        ]);
     }
 }

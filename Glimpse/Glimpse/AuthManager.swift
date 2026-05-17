@@ -16,6 +16,7 @@ class AuthManager {
     var isTogether = false
     var togetherStreak = 0
     var totalMeetings = 0
+    var lastLoveBurstTimestamp: Double = 0.0
     var showInviteDeclinedAlert = false
     private var _selectedTab = 0
     var selectedTab: Int {
@@ -77,6 +78,7 @@ class AuthManager {
             self.isTogether = responseData.is_together ?? false
             self.togetherStreak = responseData.together_streak ?? 0
             self.totalMeetings = responseData.total_meetings ?? 0
+            self.lastLoveBurstTimestamp = responseData.love_burst_timestamp ?? 0.0
             
             if wasPending && isNowDisconnected {
                 self.showInviteDeclinedAlert = true
@@ -566,6 +568,21 @@ class AuthManager {
         
         // 2. Refresh state after upload to reflect changes
         try? await fetchState()
+    }
+    
+    func triggerServerLoveBurst() async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/love-burst") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 500, userInfo: [NSLocalizedDescriptionKey: "Love burst failed"])
+        }
     }
 }
 

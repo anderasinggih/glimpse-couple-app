@@ -43,6 +43,7 @@ struct CoupleResponse: Codable {
     let is_together: Bool?
     let together_streak: Int?
     let total_meetings: Int?
+    let love_burst_timestamp: Double?
     
     var anniversaryDate: Date? {
         guard let start = anniversary_start_date else { return nil }
