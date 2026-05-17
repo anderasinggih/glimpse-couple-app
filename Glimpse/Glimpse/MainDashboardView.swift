@@ -450,7 +450,7 @@ struct MainDashboardView: View {
                             if let anniversary = auth.anniversaryDate {
                                 VStack(spacing: 8) {
                                     HStack(spacing: 10) {
-                                        Image(systemName: "heart.calendar.fill")
+                                        Image(systemName: "calendar.badge.heart")
                                             .foregroundColor(.activeCyan)
                                             .font(.system(size: 22))
                                             .shadow(color: .activeCyan.opacity(0.4), radius: 5)
