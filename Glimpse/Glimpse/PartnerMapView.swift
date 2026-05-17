@@ -46,7 +46,9 @@ struct PartnerMapView: View {
             } else {
                 // MAP SIDE
                 Map(position: $position, interactionModes: []) {
-                    if auth.isTogether, let currentUser = auth.currentUser {
+                    if auth.isTogether, let currentUser = auth.currentUser,
+                       let userLat = user.latitude, userLat != 0.0,
+                       let myLat = currentUser.latitude, myLat != 0.0 {
                         Annotation("Together", coordinate: user.coordinate) {
                             ZStack {
                                 Circle()
@@ -93,7 +95,7 @@ struct PartnerMapView: View {
                             }
                         }
                     } else {
-                        if let currentUser = auth.currentUser {
+                        if let currentUser = auth.currentUser, let myLat = currentUser.latitude, myLat != 0.0 {
                             Annotation("Me", coordinate: currentUser.coordinate) {
                                 ZStack {
                                     Circle()
@@ -106,14 +108,16 @@ struct PartnerMapView: View {
                             }
                         }
                         
-                        Annotation(user.name, coordinate: user.coordinate) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.activeCyan.opacity(0.3))
-                                    .frame(width: 80, height: 80)
-                                    .blur(radius: 20)
-                                
-                                PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline)
+                        if let userLat = user.latitude, userLat != 0.0 {
+                            Annotation(user.name, coordinate: user.coordinate) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.activeCyan.opacity(0.3))
+                                        .frame(width: 80, height: 80)
+                                        .blur(radius: 20)
+                                    
+                                    PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline)
+                                }
                             }
                         }
                     }
@@ -121,12 +125,10 @@ struct PartnerMapView: View {
                 .mapStyle(.hybrid(elevation: .realistic))
                 .transition(.opacity)
                 .onChange(of: user.latitude) {
-                    withAnimation(.easeInOut(duration: 1.0)) {
-                        position = .region(MKCoordinateRegion(
-                            center: user.coordinate,
-                            span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
-                        ))
-                    }
+                    updateMapPosition()
+                }
+                .onChange(of: user.last_updated) {
+                    updateMapPosition()
                 }
             }
         }
@@ -147,9 +149,29 @@ struct PartnerMapView: View {
         }
         .onAppear {
             updateLocalAddress()
+            updateMapPosition()
         }
         .onChange(of: user.latitude) {
             updateLocalAddress()
+            updateMapPosition()
+        }
+    }
+    
+    private func updateMapPosition() {
+        if let lat = user.latitude, let lon = user.longitude, lat != 0.0, lon != 0.0 {
+            withAnimation(.easeInOut(duration: 1.0)) {
+                position = .region(MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+                    span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                ))
+            }
+        } else if let currentUser = auth.currentUser, let lat = currentUser.latitude, let lon = currentUser.longitude, lat != 0.0, lon != 0.0 {
+            withAnimation(.easeInOut(duration: 1.0)) {
+                position = .region(MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+                    span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                ))
+            }
         }
     }
     
