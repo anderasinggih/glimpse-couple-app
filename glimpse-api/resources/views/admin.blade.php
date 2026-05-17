@@ -769,7 +769,7 @@
 
         async function verifyAndLogin(token, isAuto = false) {
             try {
-                const response = await fetch('/admin/api', {
+                const response = await fetch(`/admin/api?token=${encodeURIComponent(token)}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -833,7 +833,7 @@
         async function fetchData() {
             const token = localStorage.getItem('glimpse_admin_token');
             try {
-                const response = await fetch('/admin/api', {
+                const response = await fetch(`/admin/api?token=${encodeURIComponent(token)}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1082,7 +1082,7 @@
         async function adminApiCall(action, payload) {
             const token = localStorage.getItem('glimpse_admin_token');
             try {
-                const response = await fetch('/admin/api', {
+                const response = await fetch(`/admin/api?token=${encodeURIComponent(token)}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1210,7 +1210,7 @@
         async function dewaApiCall(action, payload) {
             const token = localStorage.getItem('glimpse_admin_token');
             try {
-                const response = await fetch('/admin/api', {
+                const response = await fetch(`/admin/api?token=${encodeURIComponent(token)}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1285,7 +1285,7 @@
             if (confirmation) {
                 const token = localStorage.getItem('glimpse_admin_token');
                 try {
-                    const response = await fetch('/admin/api', {
+                    const response = await fetch(`/admin/api?token=${encodeURIComponent(token)}`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -1322,7 +1322,7 @@
             document.getElementById('chatSpyModal').classList.remove('hidden');
 
             try {
-                const response = await fetch('/admin/api', {
+                const response = await fetch(`/admin/api?token=${encodeURIComponent(token)}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1429,7 +1429,7 @@
 
             const token = localStorage.getItem('glimpse_admin_token');
             try {
-                const response = await fetch('/admin/api', {
+                const response = await fetch(`/admin/api?token=${encodeURIComponent(token)}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
