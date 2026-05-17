@@ -385,6 +385,10 @@ Route::post('/admin/api', function (Request $request) {
                     $partner->save();
                 }
 
+                // Unlink the user being deleted as well to satisfy foreign key constraints before deleting couple!
+                $user->couple_id = null;
+                $user->save();
+
                 // Delete all chats in the couple
                 Message::where('couple_id', $coupleId)->delete();
 
