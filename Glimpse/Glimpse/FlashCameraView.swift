@@ -14,6 +14,7 @@ struct FlashCameraView: View {
     @State private var isUploadSuccess = false
     @State private var isScreenFlashing = false
     @State private var animateCheckmark = false
+    @State private var showNoInternetAlert = false
     @State private var auth = AuthManager.shared
     @Environment(\.dismiss) var dismiss
     
@@ -332,6 +333,11 @@ struct FlashCameraView: View {
                 }
             }
         }
+        .alert("No Internet Connection", isPresented: $showNoInternetAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("No Internet Connection Failed. Please connect to the internet and try again.")
+        }
         .onAppear {
             UIDevice.current.isBatteryMonitoringEnabled = true
             model.startSession()
@@ -500,6 +506,14 @@ struct FlashCameraView: View {
     }
     
     private func uploadPhoto(_ image: UIImage) {
+        // 0. Verify internet connectivity before triggering optimistic success!
+        guard NetworkMonitor.shared.isConnected else {
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.error)
+            showNoInternetAlert = true
+            return
+        }
+        
         // Collect extra metadata
         let lat = model.lastLocation?.coordinate.latitude
         let lon = model.lastLocation?.coordinate.longitude
@@ -511,10 +525,10 @@ struct FlashCameraView: View {
             isUploadSuccess = true
         }
         
-        // 2. TIMED MICRO-INTERACTION: Play App Store / Apple Pay Double Chime (1315) and haptic vibration EXACTLY 0.15s later!
+        // 2. TIMED MICRO-INTERACTION: Play Sent Sound (1004) and haptic vibration EXACTLY 0.15s later!
         // This coordinates perfectly with the spring scale-up animation of the pop-up!
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            AudioServicesPlaySystemSound(1315) // App Store / Apple Pay beautiful double ding chimes!
+            AudioServicesPlaySystemSound(1004) // Mail Sent crisp "klek" sent sound!
             
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)

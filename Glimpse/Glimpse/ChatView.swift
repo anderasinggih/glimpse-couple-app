@@ -16,6 +16,7 @@ struct ChatView: View {
     @State private var isSearchingChat = false
     @State private var searchQuery = ""
     @State private var isShowingScrollToBottomButton = false
+    @State private var showNoInternetAlert = false
     
     var filteredMessages: [ChatMessage] {
         let cleanQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -127,6 +128,27 @@ struct ChatView: View {
                                 Rectangle()
                                     .fill(Color.white.opacity(0.08))
                                     .frame(height: 0.8)
+                                
+                                if !NetworkMonitor.shared.isConnected {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "wifi.slash")
+                                            .foregroundColor(.red)
+                                            .font(.system(size: 13, weight: .bold))
+                                        Text("No Internet Connection")
+                                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                            .foregroundColor(.white.opacity(0.85))
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(Color.red.opacity(0.15))
+                                    .cornerRadius(10)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                                    )
+                                    .padding(.top, 8)
+                                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                                }
                                 
                                 floatingInputBar
                                     .padding(.horizontal, 16)
@@ -269,6 +291,11 @@ struct ChatView: View {
             } else if cleanNew.isEmpty && !cleanOld.isEmpty {
                 auth.sendTypingStatus(isTyping: false)
             }
+        }
+        .alert("No Internet Connection", isPresented: $showNoInternetAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("No internet connection. Please connect to the internet and try again.")
         }
     }
     
@@ -593,6 +620,14 @@ struct ChatView: View {
     private func sendMessage() {
         let cleanText = messageInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanText.isEmpty else { return }
+        
+        // 0. Verify network connectivity
+        guard NetworkMonitor.shared.isConnected else {
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.error)
+            showNoInternetAlert = true
+            return
+        }
         
         // 1. Clear input instantly
         messageInput = ""
