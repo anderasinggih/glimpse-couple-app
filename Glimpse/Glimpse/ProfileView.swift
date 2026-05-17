@@ -668,18 +668,20 @@ struct EditProfileView: View {
                 Button {
                     saveProfile()
                 } label: {
-                    if isSaving {
-                        ProgressView().tint(.deepVelvet)
-                    } else {
-                        Text("Save changes")
-                            .font(.headline)
+                    Group {
+                        if isSaving {
+                            ProgressView().tint(.deepVelvet)
+                        } else {
+                            Text("Save changes")
+                                .font(.headline)
+                        }
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.electricPurple)
+                    .foregroundColor(.deepVelvet)
+                    .cornerRadius(16)
                 }
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.electricPurple)
-                .foregroundColor(.deepVelvet)
-                .cornerRadius(16)
                 .padding(.horizontal)
                 .disabled(isSaving || isProcessingImage)
                 
@@ -731,18 +733,20 @@ struct EditAnniversaryView: View {
                 Button {
                     saveAnniversary()
                 } label: {
-                    if isSaving {
-                        ProgressView().tint(.deepVelvet)
-                    } else {
-                        Text("Update date")
-                            .font(.headline)
+                    Group {
+                        if isSaving {
+                            ProgressView().tint(.deepVelvet)
+                        } else {
+                            Text("Update date")
+                                .font(.headline)
+                        }
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.electricPurple)
+                    .foregroundColor(.deepVelvet)
+                    .cornerRadius(16)
                 }
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.electricPurple)
-                .foregroundColor(.deepVelvet)
-                .cornerRadius(16)
                 .padding(.horizontal)
                 .disabled(isSaving)
                 
