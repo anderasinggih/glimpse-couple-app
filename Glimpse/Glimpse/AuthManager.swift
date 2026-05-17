@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import WidgetKit
 import AudioToolbox
+import Combine
 
 @Observable
 class AuthManager {
@@ -21,10 +22,17 @@ class AuthManager {
     var totalMeetings = 0
     var lastLoveBurstTimestamp: Double = 0.0
     var showInviteDeclinedAlert = false
+    let chatTabDoubleTapPublisher = PassthroughSubject<Void, Never>()
+    
     private var _selectedTab = 0
     var selectedTab: Int {
         get { _selectedTab }
         set {
+            if _selectedTab == newValue {
+                if newValue == 3 {
+                    chatTabDoubleTapPublisher.send()
+                }
+            }
             _selectedTab = newValue
             if newValue == 3 {
                 let currentUserId = currentUser?.id ?? 0

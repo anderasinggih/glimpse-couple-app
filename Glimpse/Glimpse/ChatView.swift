@@ -202,6 +202,13 @@ struct ChatView: View {
                                 }
                             }
                         }
+                        .onReceive(auth.chatTabDoubleTapPublisher) { _ in
+                            if let lastMsg = messages.last {
+                                withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                                    proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                                }
+                            }
+                        }
                         
                         // Floating Scroll To Bottom Button
                         if isShowingScrollToBottomButton {
