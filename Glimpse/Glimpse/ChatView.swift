@@ -56,6 +56,12 @@ struct ChatView: View {
                                         if shouldShowDateHeader(for: index) {
                                             dateHeaderBadge(for: msg)
                                         }
+                                        
+                                        // 🌟 Premium Unread Messages Divider
+                                        if msg.id == firstUnreadMessageId {
+                                            unreadMessagesDivider()
+                                        }
+                                        
                                         chatBubble(msg: msg)
                                             .transition(.asymmetric(
                                                 insertion: .scale(scale: 0.8, anchor: msg.sender_id == auth.currentUser?.id ? .bottomTrailing : .bottomLeading)
@@ -799,6 +805,40 @@ struct ChatView: View {
             outputFormatter.dateFormat = "d MMMM yyyy"
             return outputFormatter.string(from: validDate)
         }
+    }
+    
+    // --- UNREAD MESSAGES SEPARATOR UTILITIES ---
+    private var firstUnreadMessageId: Int? {
+        let partnerId = auth.partner?.id ?? 0
+        let initialReadId = auth.initialLastReadId
+        
+        // Find the oldest message sent by the partner that has an ID greater than our initial last read ID
+        return messages.first(where: { msg in
+            msg.sender_id == partnerId && msg.id > initialReadId
+        })?.id
+    }
+    
+    private func unreadMessagesDivider() -> some View {
+        HStack {
+            VStack { Divider().background(Color(hex: "FF4D6D").opacity(0.3)) }
+            
+            Text("NEW MESSAGES")
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundColor(Color(hex: "FF4D6D"))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color(hex: "FF4D6D").opacity(0.1))
+                .cornerRadius(6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color(hex: "FF4D6D").opacity(0.2), lineWidth: 1)
+                )
+            
+            VStack { Divider().background(Color(hex: "FF4D6D").opacity(0.3)) }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .transition(.opacity)
     }
 }
 

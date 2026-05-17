@@ -26,6 +26,16 @@ class AuthManager {
         set {
             _selectedTab = newValue
             if newValue == 3 {
+                let currentUserId = currentUser?.id ?? 0
+                if currentUserId > 0 {
+                    let userDefaultsKey = "last_read_message_id_\(currentUserId)"
+                    let localLastReadId = UserDefaults.standard.integer(forKey: userDefaultsKey)
+                    let dbLastReadId = currentUser?.last_seen_message_id ?? 0
+                    initialLastReadId = max(localLastReadId, dbLastReadId)
+                } else {
+                    initialLastReadId = 0
+                }
+                
                 clearUnreadMessages()
                 if let lastMsg = latestFetchedMessages.last {
                     Task {
@@ -37,6 +47,7 @@ class AuthManager {
     }
     
     var unreadMessagesCount = 0
+    var initialLastReadId = 0
     var latestFetchedMessages: [ChatMessage] = []
     var flashes: [GlimpseFlash] = []
     
@@ -352,15 +363,23 @@ class AuthManager {
     }
     
     func updateUnreadCount() {
+        let currentUserId = currentUser?.id ?? 0
+        if currentUserId == 0 { return }
+        
+        let userDefaultsKey = "last_read_message_id_\(currentUserId)"
+        
         if selectedTab == 3 {
             if let lastMsg = latestFetchedMessages.last {
-                UserDefaults.standard.set(lastMsg.id, forKey: "last_read_message_id")
+                UserDefaults.standard.set(lastMsg.id, forKey: userDefaultsKey)
             }
             unreadMessagesCount = 0
             return
         }
         
-        let lastReadId = UserDefaults.standard.integer(forKey: "last_read_message_id")
+        let localLastReadId = UserDefaults.standard.integer(forKey: userDefaultsKey)
+        let dbLastReadId = currentUser?.last_seen_message_id ?? 0
+        let lastReadId = max(localLastReadId, dbLastReadId)
+        
         let partnerId = partner?.id ?? 0
         
         let unread = latestFetchedMessages.filter { msg in
@@ -371,8 +390,12 @@ class AuthManager {
     }
     
     func clearUnreadMessages() {
-        if let lastMsg = latestFetchedMessages.last {
-            UserDefaults.standard.set(lastMsg.id, forKey: "last_read_message_id")
+        let currentUserId = currentUser?.id ?? 0
+        if currentUserId > 0 {
+            let userDefaultsKey = "last_read_message_id_\(currentUserId)"
+            if let lastMsg = latestFetchedMessages.last {
+                UserDefaults.standard.set(lastMsg.id, forKey: userDefaultsKey)
+            }
         }
         unreadMessagesCount = 0
     }
