@@ -80,43 +80,43 @@ class GlimpseController extends Controller
 
         return response()->json([
             'user' => [
-                'id' => $user->id,
+                'id' => (int)$user->id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'invite_code' => $user->invite_code,
                 'profile_photo_url' => $photoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($user->name),
-                'couple_id' => $user->couple_id,
-                'latitude' => $user->latitude,
-                'longitude' => $user->longitude,
+                'couple_id' => $user->couple_id !== null ? (int)$user->couple_id : null,
+                'latitude' => $user->latitude !== null ? (double)$user->latitude : null,
+                'longitude' => $user->longitude !== null ? (double)$user->longitude : null,
                 'location_name' => $user->location_name,
-                'battery_level' => $user->battery_level,
+                'battery_level' => $user->battery_level !== null ? (int)$user->battery_level : null,
                 'is_charging' => (bool)$user->is_charging,
                 'status_note' => $user->status_note,
                 'latest_photo_url' => $latestPhotoUrl,
                 'last_updated' => $user->updated_at->toIso8601String(),
             ],
             'partner_data' => $partner ? [
-                'id' => $partner->id,
+                'id' => (int)$partner->id,
                 'name' => $partner->name,
                 'email' => $partner->email,
                 'profile_photo_url' => $partnerPhotoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($partner->name),
-                'couple_id' => $partner->couple_id,
-                'latitude' => $partner->latitude,
-                'longitude' => $partner->longitude,
+                'couple_id' => $partner->couple_id !== null ? (int)$partner->couple_id : null,
+                'latitude' => $partner->latitude !== null ? (double)$partner->latitude : null,
+                'longitude' => $partner->longitude !== null ? (double)$partner->longitude : null,
                 'location_name' => $partner->location_name,
-                'battery_level' => $partner->battery_level,
+                'battery_level' => $partner->battery_level !== null ? (int)$partner->battery_level : null,
                 'is_charging' => (bool)$partner->is_charging,
                 'status_note' => $partner->status_note,
                 'latest_photo_url' => $partnerLatestPhotoUrl,
                 'last_updated' => $partner->updated_at->toIso8601String(),
             ] : null,
             'anniversary_start_date' => $couple ? $couple->anniversary_start_date : null,
-            'disconnect_requested_by' => $couple ? $couple->disconnect_requested_by : null,
+            'disconnect_requested_by' => $couple && $couple->disconnect_requested_by !== null ? (int)$couple->disconnect_requested_by : null,
             'couple_active' => $couple ? (bool) $couple->is_active : false,
-            'invited_by' => $couple ? $couple->invited_by : null,
+            'invited_by' => $couple && $couple->invited_by !== null ? (int)$couple->invited_by : null,
             'is_together' => $isTogether,
-            'together_streak' => $togetherStreak,
-            'total_meetings' => $totalMeetings,
+            'together_streak' => (int)$togetherStreak,
+            'total_meetings' => (int)$totalMeetings,
             'love_burst_timestamp' => $loveBurstTimestamp,
         ]);
     }
@@ -125,8 +125,8 @@ class GlimpseController extends Controller
     {
         $user = $request->user();
         $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'email' => 'sometimes|email|unique:users,email,' . $user->id,
+            'name' => 'sometimes|string|max:30',
+            'email' => 'sometimes|email|max:100|unique:users,email,' . $user->id,
             'profile_photo' => 'sometimes|image|max:5120'
         ]);
 
@@ -135,7 +135,7 @@ class GlimpseController extends Controller
         
         if ($request->hasFile('profile_photo')) {
             if ($user->profile_photo_url && !str_contains($user->profile_photo_url, 'ui-avatars')) {
-                Storage::disk('public')->delete(str_replace('/storage/', '', $user->profile_photo_url));
+                Storage::disk('public')->delete('avatars/' . basename($user->profile_photo_url));
             }
             $path = $request->file('profile_photo')->store('avatars', 'public');
             $user->profile_photo_url = Storage::url($path);
@@ -272,7 +272,7 @@ class GlimpseController extends Controller
             'latitude' => 'nullable|numeric',
             'longitude' => 'nullable|numeric',
             'battery_level' => 'nullable|integer',
-            'status_note' => 'nullable|string|max:255',
+            'status_note' => 'nullable|string|max:30',
             'location_name' => 'nullable|string|max:255',
         ]);
 
@@ -302,7 +302,11 @@ class GlimpseController extends Controller
                     'battery_level' => $user->battery_level
                 ]);
                 
-                broadcast(new PartnerStateUpdated($user))->toOthers();
+                try {
+                    broadcast(new PartnerStateUpdated($user))->toOthers();
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+                }
             }
 
             return response()->json([
@@ -379,7 +383,7 @@ class GlimpseController extends Controller
 
     public function sendMessage(Request $request)
     {
-        $request->validate(['message' => 'required|string']);
+        $request->validate(['message' => 'required|string|max:500']);
         $user = $request->user();
 
         if (!$user->couple_id) {
@@ -398,7 +402,11 @@ class GlimpseController extends Controller
         ]);
 
         // Broadcast MessageSent event to the partner over WebSockets
-        broadcast(new \App\Events\MessageSent($msg))->toOthers();
+        try {
+            broadcast(new \App\Events\MessageSent($msg))->toOthers();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+        }
 
         return response()->json($msg);
     }
@@ -410,7 +418,7 @@ class GlimpseController extends Controller
             'longitude' => 'nullable|numeric',
             'battery_level' => 'nullable|integer',
             'is_charging' => 'nullable|boolean',
-            'status_note' => 'nullable|string|max:255',
+            'status_note' => 'nullable|string|max:30',
             'location_name' => 'nullable|string|max:255',
         ]);
 
@@ -426,7 +434,11 @@ class GlimpseController extends Controller
         $user->save();
 
         // Broadcast live state updates to the partner instantly over WebSockets
-        broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
+        try {
+            broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Status updated successfully!',
@@ -473,7 +485,11 @@ class GlimpseController extends Controller
                     $couple->save();
                     
                     // Broadcast meeting milestone event
-                    broadcast(new PartnerStateUpdated($user))->toOthers();
+                    try {
+                        broadcast(new PartnerStateUpdated($user))->toOthers();
+                    } catch (\Exception $e) {
+                        \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+                    }
                 }
             }
         }
@@ -495,7 +511,11 @@ class GlimpseController extends Controller
         ], 60);
 
         // Broadcast LoveBurstSent event to partner instantly over WebSockets
-        broadcast(new \App\Events\LoveBurstSent($user->couple_id, $user->id, $timestamp))->toOthers();
+        try {
+            broadcast(new \App\Events\LoveBurstSent($user->couple_id, $user->id, $timestamp))->toOthers();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Love burst triggered!',
@@ -512,7 +532,11 @@ class GlimpseController extends Controller
         }
 
         // Broadcast typing status with 0 database queries
-        broadcast(new \App\Events\PartnerTyping($user->couple_id, $user->id, $request->is_typing))->toOthers();
+        try {
+            broadcast(new \App\Events\PartnerTyping($user->couple_id, $user->id, $request->is_typing))->toOthers();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+        }
 
         return response()->json(['status' => 'ok']);
     }

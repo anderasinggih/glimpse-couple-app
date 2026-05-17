@@ -17,6 +17,15 @@ class Flash extends Model
         'battery_level'
     ];
 
+    protected $casts = [
+        'id' => 'integer',
+        'couple_id' => 'integer',
+        'sender_id' => 'integer',
+        'latitude' => 'double',
+        'longitude' => 'double',
+        'battery_level' => 'integer',
+    ];
+
     public function sender()
     {
         return $this->belongsTo(User::class, 'sender_id');

