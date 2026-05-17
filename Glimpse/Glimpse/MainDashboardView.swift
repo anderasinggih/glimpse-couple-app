@@ -384,65 +384,6 @@ struct MainDashboardView: View {
                                 .aspectRatio(1, contentMode: .fit)
                                 .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
                             
-                            // 💖 Premium "Send Love Sparks" Button (Always accessible to ping with neon vector animations!)
-                            if !auth.isTogether {
-                                Button {
-                                    triggerLoveBurst()
-                                    Task {
-                                        try? await auth.triggerServerLoveBurst()
-                                    }
-                                    
-                                    let generator = UIImpactFeedbackGenerator(style: .medium)
-                                    generator.impactOccurred()
-                                } label: {
-                                    HStack(spacing: 12) {
-                                        ZStack {
-                                            Circle()
-                                                .fill(LinearGradient(colors: [.electricPurple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                                .frame(width: 40, height: 40)
-                                                .shadow(color: .electricPurple.opacity(0.4), radius: 6)
-                                            
-                                            Image(systemName: "sparkles")
-                                                .font(.system(size: 16, weight: .bold))
-                                                .foregroundColor(.white)
-                                        }
-                                        
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text("Send Love Sparks")
-                                                .font(.system(size: 15, weight: .bold, design: .rounded))
-                                                .foregroundColor(.white)
-                                            Text("Ping \(partner.name) with glowing neon sparkles")
-                                                .font(.system(size: 11))
-                                                .foregroundColor(.white.opacity(0.6))
-                                                .multilineTextAlignment(.leading)
-                                        }
-                                        
-                                        Spacer()
-                                        
-                                        Image(systemName: "heart.fill")
-                                            .font(.system(size: 20))
-                                            .foregroundColor(.red)
-                                            .shadow(color: .red.opacity(0.8), radius: 6)
-                                            .scaleEffect(togetherAnimation ? 1.15 : 0.95)
-                                    }
-                                    .padding(16)
-                                    .background {
-                                        Color.clear.liquidGlass()
-                                    }
-                                    .cornerRadius(20)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 20)
-                                            .stroke(
-                                                LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .topLeading, endPoint: .bottomTrailing),
-                                                lineWidth: 1
-                                            )
-                                    )
-                                    .shadow(color: .black.opacity(0.15), radius: 10, y: 5)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                                .padding(.bottom, 4)
-                            }
-                            
                             // Together Streak & Meeting Counters Card
                             VStack(spacing: 12) {
                                 HStack(spacing: 16) {
