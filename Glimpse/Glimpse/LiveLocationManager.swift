@@ -106,6 +106,21 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                 } else {
                     // Non-stationary: Device is moving (walking, automotive, shaking, etc.)
                     
+                    // 🏡 Wi-Fi Home Shield: If connected to Wi-Fi, only wake up GPS for vehicle movement (automotive/cycling)
+                    // If we are just walking, playing games, or moving the phone at home, keep the GPS 100% powered down!
+                    if self.currentWiFiBSSID != nil && !activity.automotive && !activity.cycling {
+                        if self.motionDebounceTimer != nil {
+                            self.motionDebounceTimer?.invalidate()
+                            self.motionDebounceTimer = nil
+                        }
+                        if !self.isStationary {
+                            self.isStationary = true
+                            self.locationManager.stopUpdatingLocation()
+                        }
+                        LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi Shield) 📶🏡😴")
+                        return
+                    }
+                    
                     // Pre-emptive Dynamic GPS configuration based on activity type
                     var accuracy = kCLLocationAccuracyNearestTenMeters
                     var filter = 30.0
