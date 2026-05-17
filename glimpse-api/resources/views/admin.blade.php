@@ -735,9 +735,11 @@
         // Check if already authenticated on load
         window.addEventListener('DOMContentLoaded', () => {
             const savedToken = localStorage.getItem('glimpse_admin_token');
-            if (savedToken) {
-                document.getElementById('adminToken').value = savedToken;
-                verifyAndLogin(savedToken, true); // Silent auto-login
+            if (savedToken && savedToken !== 'undefined' && savedToken !== 'null' && savedToken.trim() !== '') {
+                document.getElementById('adminToken').value = savedToken.trim();
+                verifyAndLogin(savedToken.trim(), true); // Silent auto-login
+            } else {
+                localStorage.removeItem('glimpse_admin_token');
             }
         });
 

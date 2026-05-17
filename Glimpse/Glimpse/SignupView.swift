@@ -51,18 +51,18 @@ struct SignupView: View {
                 .padding(.horizontal)
                 
                 VStack(spacing: 16) {
-                    CustomTextField(icon: "person.fill", placeholder: "Full Name", text: $name)
+                    CustomTextField(icon: "person.fill", placeholder: "Full Name", text: $name, maxLength: 30)
                         .focused($focusedField, equals: .name)
                         .submitLabel(.next)
                         .onTapGesture { focusedField = .name }
                     
-                    CustomTextField(icon: "envelope.fill", placeholder: "Email", text: $email)
+                    CustomTextField(icon: "envelope.fill", placeholder: "Email", text: $email, maxLength: 100)
                         .keyboardType(.emailAddress)
                         .focused($focusedField, equals: .email)
                         .submitLabel(.next)
                         .onTapGesture { focusedField = .email }
                     
-                    CustomTextField(icon: "lock.fill", placeholder: "Password", text: $password, isSecure: true)
+                    CustomTextField(icon: "lock.fill", placeholder: "Password", text: $password, isSecure: true, maxLength: 32)
                         .focused($focusedField, equals: .password)
                         .submitLabel(.done)
                         .onTapGesture { focusedField = .password }

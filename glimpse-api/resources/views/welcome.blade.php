@@ -100,7 +100,7 @@
                 <!-- Left Content -->
                 <div class="lg:col-span-7 space-y-6 text-left relative z-10">
                     <div class="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-electricPurple/10 border border-electricPurple/20 text-electricPurple text-xs font-semibold uppercase tracking-wider">
-                        <span>✨ iOS 26 Liquid Glass Design System</span>
+                        <span>iOS 26 Liquid Glass Design System</span>
                     </div>
                     
                     <h2 class="text-4xl sm:text-6xl font-extrabold text-white tracking-tight leading-[1.1] mb-4">
@@ -145,7 +145,12 @@
                                             <span class="block text-[8px] text-white/50">Online</span>
                                         </div>
                                     </div>
-                                    <span class="text-xs text-activeCyan font-bold">🔋 84%</span>
+                                    <div class="flex items-center space-x-1 text-activeCyan">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5">
+                                            <path fill-rule="evenodd" d="M3.75 6.75a3 3 0 00-3 3v4.5a3 3 0 003 3h15a3 3 0 003-3v-4.5a3 3 0 00-3-3h-15zM22.5 10.5a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5a.75.75 0 01.75-.75z" clip-rule="evenodd" />
+                                        </svg>
+                                        <span class="text-xs font-bold">84%</span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -249,13 +254,14 @@
                     </div>
                 </div>
             </div>
-        </section>
-
-        <!-- API DOCUMENTATION SECTION -->
+        </sec        <!-- API DOCUMENTATION SECTION -->
         <section id="docs" class="border-t border-white/10 bg-slate-950/40 backdrop-blur-xl py-20">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="text-center max-w-3xl mx-auto mb-16 space-y-4">
-                    <h3 class="text-3xl sm:text-4xl font-extrabold tracking-tight">API Documentation</h3>
+                    <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-electricPurple/10 border border-electricPurple/20 text-electricPurple text-[10px] font-bold uppercase tracking-wider animate-pulse">
+                        <span>📖 Complete REST & WebSocket API Specification</span>
+                    </div>
+                    <h3 class="text-3xl sm:text-4xl font-extrabold tracking-tight">API Reference Docs</h3>
                     <p class="text-white/60 text-sm">Review Glimpse's highly structured REST endpoints to integrate companion services, handle authentication flow, send messages, and synchronize live map states.</p>
                 </div>
 
@@ -265,19 +271,19 @@
                     <div class="lg:col-span-4 space-y-2 lg:sticky lg:top-24">
                         <button onclick="switchDocTab('auth')" id="doc-tab-auth" class="w-full text-left p-4 rounded-xl border border-electricPurple/20 bg-electricPurple/10 text-white font-semibold transition-all">
                             <span class="block text-sm">1. Authentication Flow</span>
-                            <span class="block text-xs text-white/50 font-normal mt-0.5">Register, Login, & Invite pair setup</span>
+                            <span class="block text-xs text-white/50 font-normal mt-0.5">Register, Login, & Pair linking</span>
                         </button>
                         <button onclick="switchDocTab('state')" id="doc-tab-state" class="w-full text-left p-4 rounded-xl border border-white/5 bg-white/5 text-white/70 hover:text-white transition-all">
                             <span class="block text-sm">2. Companion State Sync</span>
-                            <span class="block text-xs text-white/50 font-normal mt-0.5">Retrieve active state & profile update</span>
+                            <span class="block text-xs text-white/50 font-normal mt-0.5">Real-time status, heartbeats, & profile sync</span>
                         </button>
                         <button onclick="switchDocTab('location')" id="doc-tab-location" class="w-full text-left p-4 rounded-xl border border-white/5 bg-white/5 text-white/70 hover:text-white transition-all">
                             <span class="block text-sm">3. Map & Battery Pushes</span>
-                            <span class="block text-xs text-white/50 font-normal mt-0.5">Push location name & battery triggers</span>
+                            <span class="block text-xs text-white/50 font-normal mt-0.5">GPS location, reverse geocoding, & charge pulses</span>
                         </button>
                         <button onclick="switchDocTab('chat')" id="doc-tab-chat" class="w-full text-left p-4 rounded-xl border border-white/5 bg-white/5 text-white/70 hover:text-white transition-all">
                             <span class="block text-sm">4. Intimate Chats & Flash</span>
-                            <span class="block text-xs text-white/50 font-normal mt-0.5">Real-time chats & self-destruct cards</span>
+                            <span class="block text-xs text-white/50 font-normal mt-0.5">Real-time chat, Seen receipts, & Flash photo uploads</span>
                         </button>
                     </div>
 
@@ -286,25 +292,27 @@
                         
                         <!-- AUTH DOCS -->
                         <div id="doc-content-auth" class="doc-content space-y-4">
-                            <h4 class="text-xl font-bold text-white flex items-center space-x-2">
-                                <span class="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold font-mono">POST</span>
-                                <span>/api/register</span>
-                            </h4>
-                            <p class="text-sm text-white/60">Creates a new companion account and returns an access token along with a unique couple invite code.</p>
-                            
-                            <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-4 font-mono text-xs text-left">
-                                <span class="block text-[10px] text-white/40 uppercase font-bold tracking-wider mb-2">Request Body</span>
-                                <pre class="text-electricPurple font-medium">{
+                            <div class="space-y-2 border-b border-white/5 pb-4">
+                                <h4 class="text-lg font-bold text-white flex items-center space-x-2">
+                                    <span class="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold font-mono">POST</span>
+                                    <span>/api/glimpse/register</span>
+                                </h4>
+                                <p class="text-xs text-white/60">Creates a new companion account and returns an access token along with a unique couple invite code.</p>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-3 font-mono text-[11px] text-left">
+                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">Request Body</span>
+                                        <pre class="text-electricPurple font-medium">{
   "name": "Jane Doe",
   "email": "jane@example.com",
   "password": "secure_password"
 }</pre>
-                            </div>
-                            
-                            <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-4 font-mono text-xs text-left">
-                                <span class="block text-[10px] text-white/40 uppercase font-bold tracking-wider mb-2">JSON Response (200 OK)</span>
-                                <pre class="text-activeCyan font-medium">{
-  "token": "1|sanctum_access_token_hash",
+                                    </div>
+                                    
+                                    <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-3 font-mono text-[11px] text-left">
+                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">JSON Response (200 OK)</span>
+                                        <pre class="text-activeCyan font-medium">{
+  "token": "1|sanctum_access_token",
   "user": {
     "id": 2,
     "name": "Jane Doe",
@@ -312,72 +320,225 @@
     "invite_code": "4D8F3E9C"
   }
 }</pre>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="space-y-2 pt-2">
+                                <h4 class="text-lg font-bold text-white flex items-center space-x-2">
+                                    <span class="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold font-mono">POST</span>
+                                    <span>/api/glimpse/login</span>
+                                </h4>
+                                <p class="text-xs text-white/60">Authenticate your existing developer/companion account to retrieve your persistent token.</p>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-3 font-mono text-[11px] text-left">
+                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">Request Body</span>
+                                        <pre class="text-electricPurple font-medium">{
+  "email": "alex@example.com",
+  "password": "secure_password"
+}</pre>
+                                    </div>
+                                    
+                                    <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-3 font-mono text-[11px] text-left">
+                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">JSON Response (200 OK)</span>
+                                        <pre class="text-activeCyan font-medium">{
+  "token": "2|sanctum_access_token",
+  "user": {
+    "id": 1,
+    "name": "Alex",
+    "email": "alex@example.com",
+    "couple_id": 5
+  }
+}</pre>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         <!-- STATE DOCS -->
                         <div id="doc-content-state" class="doc-content space-y-4 hidden">
-                            <h4 class="text-xl font-bold text-white flex items-center space-x-2">
-                                <span class="px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-bold font-mono">GET</span>
-                                <span>/api/state</span>
-                            </h4>
-                            <p class="text-sm text-white/60">Retrieves the complete real-time dashboard state, including your profile information, partner details, active couple connection info, and anniversary details.</p>
-                            
-                            <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-4 font-mono text-xs text-left">
-                                <span class="block text-[10px] text-white/40 uppercase font-bold tracking-wider mb-2">JSON Response (200 OK)</span>
-                                <pre class="text-activeCyan font-medium">{
+                            <div class="space-y-2 border-b border-white/5 pb-4">
+                                <h4 class="text-lg font-bold text-white flex items-center space-x-2">
+                                    <span class="px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-bold font-mono">GET</span>
+                                    <span>/api/glimpse/state</span>
+                                </h4>
+                                <p class="text-xs text-white/60">Retrieves the complete real-time dashboard state, including your profile information, partner details, active couple connection info, and anniversary details.</p>
+                                
+                                <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-4 font-mono text-[11px] text-left">
+                                    <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">JSON Response (200 OK)</span>
+                                    <pre class="text-activeCyan font-medium">{
   "user": {
     "id": 1,
     "name": "Alex",
     "battery_level": 94,
-    "location_name": "Grand Indonesia"
+    "is_charging": true,
+    "location_name": "Grand Indonesia",
+    "last_seen_message_id": 124
   },
   "partner_data": {
     "id": 2,
     "name": "Jane",
     "battery_level": 72,
-    "location_name": "Monas, Jakarta"
+    "is_charging": false,
+    "location_name": "Monas, Jakarta",
+    "last_seen_message_id": 123
   },
   "couple_active": true,
-  "anniversary_start_date": "2024-05-17"
+  "anniversary_start_date": "2024-05-17 14:00:00"
 }</pre>
+                                </div>
+                            </div>
+
+                            <div class="space-y-2 pt-2">
+                                <h4 class="text-lg font-bold text-white flex items-center space-x-2">
+                                    <span class="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold font-mono">POST</span>
+                                    <span>/api/glimpse/couple/link</span>
+                                </h4>
+                                <p class="text-xs text-white/60">Binds two users into a permanent connected couple by linking partner's unique 8-character invite code.</p>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-3 font-mono text-[11px] text-left">
+                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">Request Body</span>
+                                        <pre class="text-electricPurple font-medium">{
+  "invite_code": "4D8F3E9C"
+}</pre>
+                                    </div>
+                                    
+                                    <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-3 font-mono text-[11px] text-left">
+                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">JSON Response (200 OK)</span>
+                                        <pre class="text-activeCyan font-medium">{
+  "message": "Couple link successfully established!",
+  "couple_id": 5
+}</pre>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         <!-- LOCATION DOCS -->
                         <div id="doc-content-location" class="doc-content space-y-4 hidden">
-                            <h4 class="text-xl font-bold text-white flex items-center space-x-2">
-                                <span class="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold font-mono">POST</span>
-                                <span>/api/location</span>
-                            </h4>
-                            <p class="text-sm text-white/60">Pushes your current GPS coordinates, reverse geocoded landmark name, and battery metrics. Connected partner devices will immediately update.</p>
-                            
-                            <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-4 font-mono text-xs text-left">
-                                <span class="block text-[10px] text-white/40 uppercase font-bold tracking-wider mb-2">Request Body</span>
-                                <pre class="text-electricPurple font-medium">{
+                            <div class="space-y-2 border-b border-white/5 pb-4">
+                                <h4 class="text-lg font-bold text-white flex items-center space-x-2">
+                                    <span class="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold font-mono">POST</span>
+                                    <span>/api/glimpse/location</span>
+                                </h4>
+                                <p class="text-xs text-white/60">Pushes your current GPS coordinates, speed, and geocoded landmark name. Connected partner devices will immediately update.</p>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-3 font-mono text-[11px] text-left">
+                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">Request Body</span>
+                                        <pre class="text-electricPurple font-medium">{
   "latitude": -6.200000,
   "longitude": 106.816666,
-  "location_name": "Grand Indonesia Mall, Jakarta",
-  "battery_level": 84,
-  "is_charging": false
+  "location_name": "Grand Indonesia Mall, Jakarta"
 }</pre>
+                                    </div>
+                                    
+                                    <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-3 font-mono text-[11px] text-left">
+                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">JSON Response (200 OK)</span>
+                                        <pre class="text-activeCyan font-medium">{
+  "success": true,
+  "message": "Location coordinates updated and broadcasted!"
+}</pre>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="space-y-2 pt-2">
+                                <h4 class="text-lg font-bold text-white flex items-center space-x-2">
+                                    <span class="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold font-mono">POST</span>
+                                    <span>/api/glimpse/battery</span>
+                                </h4>
+                                <p class="text-xs text-white/60">Push real-time battery status changes (percentage and charging power adapter status) to trigger indicators.</p>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-3 font-mono text-[11px] text-left">
+                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">Request Body</span>
+                                        <pre class="text-electricPurple font-medium">{
+  "battery_level": 84,
+  "is_charging": true
+}</pre>
+                                    </div>
+                                    
+                                    <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-3 font-mono text-[11px] text-left">
+                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">JSON Response (200 OK)</span>
+                                        <pre class="text-activeCyan font-medium">{
+  "success": true,
+  "message": "Battery pulse metrics synchronized!"
+}</pre>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         <!-- CHAT DOCS -->
                         <div id="doc-content-chat" class="doc-content space-y-4 hidden">
-                            <h4 class="text-xl font-bold text-white flex items-center space-x-2">
-                                <span class="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold font-mono">POST</span>
-                                <span>/api/messages</span>
-                            </h4>
-                            <p class="text-sm text-white/60">Sends an intimate chat bubble or a private flash card attachment that instantly routes to the companion device.</p>
-                            
-                            <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-4 font-mono text-xs text-left">
-                                <span class="block text-[10px] text-white/40 uppercase font-bold tracking-wider mb-2">Request Body</span>
-                                <pre class="text-electricPurple font-medium">{
-  "message": "See you in 10 minutes! ❤️",
-  "is_flash": false
+                            <div class="space-y-2 border-b border-white/5 pb-4">
+                                <h4 class="text-lg font-bold text-white flex items-center space-x-2">
+                                    <span class="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold font-mono">POST</span>
+                                    <span>/api/glimpse/chat</span>
+                                </h4>
+                                <p class="text-xs text-white/60">Sends an intimate chat bubble or a private flash card attachment that instantly routes to the companion device.</p>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-3 font-mono text-[11px] text-left">
+                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">Request Body</span>
+                                        <pre class="text-electricPurple font-medium">{
+  "message": "Did you see my flash photo? ❤️"
 }</pre>
+                                    </div>
+                                    
+                                    <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-3 font-mono text-[11px] text-left">
+                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">JSON Response (200 OK)</span>
+                                        <pre class="text-activeCyan font-medium">{
+  "id": 125,
+  "couple_id": 5,
+  "sender_id": 1,
+  "message": "Did you see my flash photo? ❤️",
+  "created_at": "2026-05-17T21:56:00Z"
+}</pre>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="space-y-2 border-b border-white/5 pb-4 pt-2">
+                                <h4 class="text-lg font-bold text-white flex items-center space-x-2">
+                                    <span class="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold font-mono">POST</span>
+                                    <span>/api/glimpse/chat/read</span>
+                                </h4>
+                                <p class="text-xs text-white/60">Notifies the partner device that you have read up to a specific message ID, updating the 'Seen' checkmark status instantly.</p>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-3 font-mono text-[11px] text-left">
+                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">Request Body</span>
+                                        <pre class="text-electricPurple font-medium">{
+  "message_id": 125
+}</pre>
+                                    </div>
+                                    
+                                    <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-3 font-mono text-[11px] text-left">
+                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">JSON Response (200 OK)</span>
+                                        <pre class="text-activeCyan font-medium">{
+  "success": true,
+  "last_seen_message_id": 125
+}</pre>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="space-y-2 pt-2">
+                                <h4 class="text-lg font-bold text-white flex items-center space-x-2">
+                                    <span class="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold font-mono">POST</span>
+                                    <span>/api/glimpse/flashes</span>
+                                </h4>
+                                <p class="text-xs text-white/60">Uploads an intimate, secure flash photograph as a multi-part form-data capture to share on the active timeline feed.</p>
+                                
+                                <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-4 font-mono text-[11px] text-left">
+                                    <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">Request Headers</span>
+                                    <pre class="text-electricPurple font-medium">Content-Type: multipart/form-data
+Authorization: Bearer 2|sanctum_access_token</pre>
+                                </div>
                             </div>
                         </div>
 
@@ -472,7 +633,7 @@
 
         <!-- Premium Footer -->
         <footer class="border-t border-white/10 py-8 text-center text-xs text-white/40 mt-auto">
-            &copy; 2026 Glimpse Intimacy Companion &bull; Powered by Laravel Octane & SwiftUI
+            &copy; 2026 Glimpse App &bull; Crafted with infinite love by Lovinpeace &bull; Powered by Laravel Octane & SwiftUI
         </footer>
     </div>
 

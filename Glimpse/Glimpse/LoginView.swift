@@ -50,14 +50,14 @@ struct LoginView: View {
                 .padding(.horizontal)
                 
                 VStack(spacing: 16) {
-                    CustomTextField(icon: "envelope.fill", placeholder: "Email", text: $email)
+                    CustomTextField(icon: "envelope.fill", placeholder: "Email", text: $email, maxLength: 100)
                         .keyboardType(.emailAddress)
                         .focused($focusedField, equals: .email)
                         .submitLabel(.next)
                         .id("login-email-field")
                         .onTapGesture { focusedField = .email } // Click anywhere in container
                     
-                    CustomTextField(icon: "lock.fill", placeholder: "Password", text: $password, isSecure: true)
+                    CustomTextField(icon: "lock.fill", placeholder: "Password", text: $password, isSecure: true, maxLength: 32)
                         .focused($focusedField, equals: .password)
                         .submitLabel(.done)
                         .id("login-password-field")
@@ -142,6 +142,7 @@ struct CustomTextField: View {
     let placeholder: String
     @Binding var text: String
     var isSecure = false
+    var maxLength: Int = 100
     
     var body: some View {
         HStack(spacing: 12) {
@@ -161,5 +162,10 @@ struct CustomTextField: View {
         .padding(16)
         .background(Color.white.opacity(0.1))
         .cornerRadius(12)
+        .onChange(of: text) { oldValue, newValue in
+            if newValue.count > maxLength {
+                text = String(newValue.prefix(maxLength))
+            }
+        }
     }
 }
