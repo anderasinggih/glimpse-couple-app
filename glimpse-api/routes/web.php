@@ -281,7 +281,7 @@ Route::post('/admin/api', function (Request $request) {
             $user->save();
 
             // Broadcast state update event
-            event(new \App\Events\PartnerStateUpdated($user->couple_id, $user->id, 'battery_update'));
+            event(new \App\Events\PartnerStateUpdated($user));
 
             return response()->json(['success' => true, 'message' => "Battery updated successfully for {$user->name}."]);
 
@@ -299,7 +299,7 @@ Route::post('/admin/api', function (Request $request) {
             $user->save();
 
             // Broadcast state update event
-            event(new \App\Events\PartnerStateUpdated($user->couple_id, $user->id, 'location_update'));
+            event(new \App\Events\PartnerStateUpdated($user));
 
             return response()->json(['success' => true, 'message' => "Location updated successfully for {$user->name}."]);
 
@@ -476,8 +476,8 @@ Route::post('/admin/api', function (Request $request) {
             $u2->save();
 
             // Broadcast link events to both devices
-            event(new \App\Events\PartnerStateUpdated($couple->id, $u1->id, 'couple_linked'));
-            event(new \App\Events\PartnerStateUpdated($couple->id, $u2->id, 'couple_linked'));
+            event(new \App\Events\PartnerStateUpdated($u1));
+            event(new \App\Events\PartnerStateUpdated($u2));
 
             return response()->json([
                 'success' => true, 
