@@ -555,7 +555,10 @@ class AuthManager {
             throw NSError(domain: "Auth", code: 500, userInfo: [NSLocalizedDescriptionKey: "Upload failed"])
         }
         
-        // Refresh state after upload to reflect changes
+        // 1. Send automatic flash attachment message
+        _ = try? await sendChatMessage(text: "📷 Sent a Flash! [FLASH_ATTACHMENT]")
+        
+        // 2. Refresh state after upload to reflect changes
         try? await fetchState()
     }
 }

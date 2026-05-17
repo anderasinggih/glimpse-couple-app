@@ -437,27 +437,74 @@ struct ChatView: View {
                 Spacer()
             }
             
-            VStack(alignment: .trailing, spacing: 4) {
-                Text(msg.message)
-                    .font(.system(size: 13.5))
-                    .foregroundColor(isMe ? .deepVelvet : .white)
-                    .multilineTextAlignment(.leading)
-                
-                if !timeStr.isEmpty {
-                    Text(timeStr)
-                        .font(.system(size: 8.5, weight: .medium))
-                        .foregroundColor(isMe ? .deepVelvet.opacity(0.6) : .white.opacity(0.4))
+            if msg.message.contains("[FLASH_ATTACHMENT]") {
+                // SPECIAL INTERACTIVE FLASH ATTACHMENT CARD
+                Button {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        auth.selectedTab = 0 // Switch to Dashboard Tab
+                    }
+                } label: {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "camera.shutter.button.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(isMe ? .deepVelvet : .activeCyan)
+                            Text("Sent a Flash!")
+                                .font(.system(size: 13.5, weight: .bold))
+                                .foregroundColor(isMe ? .deepVelvet : .white)
+                        }
+                        
+                        HStack {
+                            Text("Tap to view on Dashboard")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(isMe ? .deepVelvet.opacity(0.7) : .white.opacity(0.6))
+                            Spacer(minLength: 12)
+                            if !timeStr.isEmpty {
+                                Text(timeStr)
+                                    .font(.system(size: 8, weight: .medium))
+                                    .foregroundColor(isMe ? .deepVelvet.opacity(0.5) : .white.opacity(0.4))
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(
+                        isMe ? 
+                        LinearGradient(colors: [Color.electricPurple, Color.electricPurple.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing) :
+                        LinearGradient(colors: [Color.white.opacity(0.18), Color.white.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+                    .clipShape(RoundedCorner(radius: 18, corners: corners))
+                    .overlay(
+                        RoundedCorner(radius: 18, corners: corners)
+                            .stroke(isMe ? Color.clear : Color.white.opacity(0.1), lineWidth: 1)
+                    )
+                    .shadow(color: isMe ? Color.electricPurple.opacity(0.2) : Color.black.opacity(0.15), radius: 6, y: 3)
                 }
+                .buttonStyle(PlainButtonStyle())
+            } else {
+                // STANDARD CHAT BUBBLE
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(msg.message)
+                        .font(.system(size: 13.5))
+                        .foregroundColor(isMe ? .deepVelvet : .white)
+                        .multilineTextAlignment(.leading)
+                    
+                    if !timeStr.isEmpty {
+                        Text(timeStr)
+                            .font(.system(size: 8.5, weight: .medium))
+                            .foregroundColor(isMe ? .deepVelvet.opacity(0.6) : .white.opacity(0.4))
+                    }
+                }
+                .padding(.horizontal, 11)
+                .padding(.vertical, 7)
+                .background(bubbleBackground(isMe: isMe))
+                .clipShape(RoundedCorner(radius: 15, corners: corners))
+                .overlay(
+                    RoundedCorner(radius: 15, corners: corners)
+                        .stroke(isMe ? Color.clear : Color.white.opacity(0.05), lineWidth: 1)
+                )
+                .shadow(color: isMe ? Color.electricPurple.opacity(0.15) : Color.clear, radius: 6, y: 3)
             }
-            .padding(.horizontal, 11)
-            .padding(.vertical, 7)
-            .background(bubbleBackground(isMe: isMe))
-            .clipShape(RoundedCorner(radius: 15, corners: corners))
-            .overlay(
-                RoundedCorner(radius: 15, corners: corners)
-                    .stroke(isMe ? Color.clear : Color.white.opacity(0.05), lineWidth: 1)
-            )
-            .shadow(color: isMe ? Color.electricPurple.opacity(0.15) : Color.clear, radius: 6, y: 3)
             
             if !isMe {
                 Spacer()
