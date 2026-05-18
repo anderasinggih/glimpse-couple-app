@@ -18,18 +18,19 @@ struct GlimpseUser: Codable, Identifiable {
     let email: String
     let profile_photo_url: String
     let born_date: String?
-    let latitude: Double?
-    let longitude: Double?
-    let location_name: String?
-    let status_note: String?
-    let battery_level: Int?
-    let is_charging: Bool?
-    let is_sleeping: Bool?
-    let latest_photo_url: String?
-    let last_updated: String?
+    var latitude: Double?
+    var longitude: Double?
+    var location_name: String?
+    var status_note: String?
+    var battery_level: Int?
+    var is_charging: Bool?
+    var is_sleeping: Bool?
+    var wifi_bssid: String?
+    var latest_photo_url: String?
+    var last_updated: String?
     let invite_code: String?
     let couple_id: Int?
-    let last_seen_message_id: Int?
+    var last_seen_message_id: Int?
     let location_history: [LocationHistoryEntry]?
     
     var coordinate: CLLocationCoordinate2D {
@@ -137,6 +138,7 @@ extension GlimpseUser {
         battery_level: 100,
         is_charging: false,
         is_sleeping: false,
+        wifi_bssid: nil,
         latest_photo_url: nil,
         last_updated: ISO8601DateFormatter().string(from: Date()),
         invite_code: "GLMP-1234",
@@ -158,6 +160,7 @@ extension GlimpseUser {
         battery_level: 0,
         is_charging: false,
         is_sleeping: false,
+        wifi_bssid: nil,
         latest_photo_url: nil,
         last_updated: ISO8601DateFormatter().string(from: Date()),
         invite_code: "UNKNOWN",

@@ -1208,7 +1208,7 @@ class AuthManager {
                                 if let lat = update.latitude { p.latitude = lat }
                                 if let lon = update.longitude { p.longitude = lon }
                                 if let batt = update.batteryLevel { p.battery_level = batt }
-                                if let char = update.isCharging { p.is_charging = char ? 1 : 0 }
+                                if let char = update.isCharging { p.is_charging = char }
                                 p.status_note = update.statusNote
                                 p.location_name = update.locationName
                                 p.wifi_bssid = update.wifiBssid
