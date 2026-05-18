@@ -23,6 +23,7 @@ struct ChatView: View {
     @State private var swipeOffset: CGFloat = 0
     
     @State private var messages: [ChatMessage] = []
+    @State private var messagesCache: [Int: [ChatMessage]] = [:] // Local cache for instant message loads
     @State private var messageInput = ""
     @State private var isSending = false
     @State private var timer: Timer.TimerPublisher = Timer.publish(every: 5.0, on: .main, in: .common)
@@ -317,9 +318,15 @@ struct ChatView: View {
                             bottomInputInsetView
                         }
                         .onChange(of: messages) { oldMessages, newMessages in
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                if oldMessages.isEmpty {
+                                    // Initial load: Scroll instantly to bottom to avoid sliding down from the top
                                     proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                } else {
+                                    // Subsequent updates / new messages: Scroll with a smooth spring animation
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                        proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                    }
                                 }
                             }
                             if let lastMsg = newMessages.last {
@@ -409,6 +416,7 @@ struct ChatView: View {
                                     dragOffset = screenWidth
                                 }
                                 // Re-assign selectedRoom to nil after transition finishes
+                                // Load from cache instantly if available to prevent 1s blank screen on next tap
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
                                     withAnimation(.spring(response: 0.22, dampingFraction: 0.8)) {
                                         selectedRoom = nil
@@ -424,6 +432,7 @@ struct ChatView: View {
                             }
                         }
                 )
+                .padding(.top, 100) // Avoid blocking the back button in the header!
         }
         .offset(x: dragOffset)
     }
@@ -464,7 +473,12 @@ struct ChatView: View {
                     ForEach(sortedChatRooms) { room in
                         Button {
                             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                            self.messages = [] // Instantly clear messages on room change
+                            // Load from local cache instantly to prevent 1-second blank screen!
+                            if let cached = messagesCache[room.id] {
+                                self.messages = cached
+                            } else {
+                                self.messages = []
+                            }
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                 selectedRoom = room
                             }
@@ -1283,6 +1297,7 @@ struct ChatView: View {
             do {
                 let msgs = try await auth.fetchMessages(roomId: activeRoom.id)
                 self.messages = msgs
+                self.messagesCache[activeRoom.id] = msgs // Cache fetched messages for instant loading next time
                 // Reset unread counter locally upon entering the room
                 if let index = chatRooms.firstIndex(where: { $0.id == activeRoom.id }) {
                     chatRooms[index].unread_count = 0
