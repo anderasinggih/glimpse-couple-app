@@ -1197,12 +1197,24 @@ class AuthManager {
                 print("🔔 Live State Updated from partner!")
                 if let eventDataString = pusherEvent.data,
                    let eventData = eventDataString.data(using: .utf8) {
-                    struct StatePayload: Codable {
-                        let user: GlimpseUser
+                    struct ProtobufPayload: Codable {
+                        let pb: String?
                     }
-                    if let payload = try? JSONDecoder().decode(StatePayload.self, from: eventData) {
+                    if let pbPayload = try? JSONDecoder().decode(ProtobufPayload.self, from: eventData),
+                       let pbString = pbPayload.pb,
+                       let update = GlimpsePartnerStateUpdate.decodeProtobuf(from: pbString) {
                         DispatchQueue.main.async {
-                            self.partner = payload.user
+                            if var p = self.partner, p.id == update.userId {
+                                if let lat = update.latitude { p.latitude = lat }
+                                if let lon = update.longitude { p.longitude = lon }
+                                if let batt = update.batteryLevel { p.battery_level = batt }
+                                if let char = update.isCharging { p.is_charging = char ? 1 : 0 }
+                                p.status_note = update.statusNote
+                                p.location_name = update.locationName
+                                p.wifi_bssid = update.wifiBssid
+                                self.partner = p
+                            }
+                            
                             // Trigger immediate local state notification
                             NotificationCenter.default.post(name: Notification.Name("GlimpseLiveStateUpdated"), object: nil)
                             Task {
@@ -1331,15 +1343,16 @@ class AuthManager {
                 print("⌨️ Live typing status broadcast received!")
                 if let eventDataString = pusherEvent.data,
                    let eventData = eventDataString.data(using: .utf8) {
-                    struct TypingPayload: Codable {
-                        let user_id: Int
-                        let is_typing: Bool
+                    struct ProtobufPayload: Codable {
+                        let pb: String?
                     }
-                    if let payload = try? JSONDecoder().decode(TypingPayload.self, from: eventData) {
+                    if let pbPayload = try? JSONDecoder().decode(ProtobufPayload.self, from: eventData),
+                       let pbString = pbPayload.pb,
+                       let state = GlimpseTypingState.decodeProtobuf(from: pbString) {
                         DispatchQueue.main.async {
                             // Update partner typing status ONLY if it comes from the partner, not me!
-                            if payload.user_id != self.currentUser?.id {
-                                self.isPartnerTyping = payload.is_typing
+                            if state.userId != self.currentUser?.id {
+                                self.isPartnerTyping = state.isTyping
                             }
                         }
                     }

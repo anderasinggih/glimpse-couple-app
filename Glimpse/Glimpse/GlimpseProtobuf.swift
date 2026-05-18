@@ -192,3 +192,94 @@ struct GlimpseUserStatus {
         return writer.data
     }
 }
+
+struct GlimpseTypingState {
+    var userId: Int
+    var isTyping: Bool
+    
+    static func decodeProtobuf(from base64String: String) -> GlimpseTypingState? {
+        guard let data = Data(base64Encoded: base64String) else { return nil }
+        var reader = ProtobufReader(data: data)
+        var userId = 0
+        var isTyping = false
+        
+        while reader.hasMoreBytes {
+            let tag = reader.readVarint()
+            let fieldNumber = Int(tag >> 3)
+            let wireType = Int(tag & 0x07)
+            
+            switch fieldNumber {
+            case 1:
+                userId = Int(reader.readVarint())
+            case 2:
+                isTyping = reader.readVarint() != 0
+            default:
+                reader.skipField(wireType: wireType)
+            }
+        }
+        return GlimpseTypingState(userId: userId, isTyping: isTyping)
+    }
+}
+
+struct GlimpsePartnerStateUpdate {
+    var userId: Int
+    var latitude: Double?
+    var longitude: Double?
+    var batteryLevel: Int?
+    var isCharging: Bool?
+    var statusNote: String?
+    var locationName: String?
+    var wifiBssid: String?
+    
+    static func decodeProtobuf(from base64String: String) -> GlimpsePartnerStateUpdate? {
+        guard let data = Data(base64Encoded: base64String) else { return nil }
+        var reader = ProtobufReader(data: data)
+        var userId = 0
+        var latitude: Double? = nil
+        var longitude: Double? = nil
+        var batteryLevel: Int? = nil
+        var isCharging: Bool? = nil
+        var statusNote: String? = nil
+        var locationName: String? = nil
+        var wifiBssid: String? = nil
+        
+        while reader.hasMoreBytes {
+            let tag = reader.readVarint()
+            let fieldNumber = Int(tag >> 3)
+            let wireType = Int(tag & 0x07)
+            
+            switch fieldNumber {
+            case 1:
+                userId = Int(reader.readVarint())
+            case 2:
+                let latStr = reader.readString()
+                latitude = Double(latStr)
+            case 3:
+                let lonStr = reader.readString()
+                longitude = Double(lonStr)
+            case 4:
+                batteryLevel = Int(reader.readVarint())
+            case 5:
+                isCharging = reader.readVarint() != 0
+            case 6:
+                statusNote = reader.readString()
+            case 7:
+                locationName = reader.readString()
+            case 8:
+                wifiBssid = reader.readString()
+            default:
+                reader.skipField(wireType: wireType)
+            }
+        }
+        return GlimpsePartnerStateUpdate(
+            userId: userId,
+            latitude: latitude,
+            longitude: longitude,
+            batteryLevel: batteryLevel,
+            isCharging: isCharging,
+            statusNote: statusNote,
+            locationName: locationName,
+            wifiBssid: wifiBssid
+        )
+    }
+}
