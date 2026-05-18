@@ -269,7 +269,7 @@ struct ChatView: View {
                                     chatBubble(msg: msg, isPending: true)
                                 }
                                 
-                                Spacer().frame(height: 15)
+                                Spacer().frame(height: 4)
                                 
                                 Color.clear
                                     .frame(height: 1)
@@ -609,8 +609,8 @@ struct ChatView: View {
             
             floatingInputBar
                 .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 12)
+                .padding(.top, 6)
+                .padding(.bottom, 8)
         }
         .background(
             Color.white.opacity(0.01)
@@ -1424,25 +1424,25 @@ struct ChatView: View {
         guard NetworkMonitor.shared.isConnected else { return }
         do {
             let sentMsg = try await auth.sendChatMessage(text: msg.message, roomId: selectedRoom?.id)
-            withAnimation(.easeOut(duration: 0.2)) {
-                var newPending: [ChatMessage] = []
-                for p in self.pendingMessages {
-                    if p.id != msg.id {
-                        newPending.append(p)
-                    }
+            
+            // Update the pending queue and messages list instantly without animation to avoid a flash
+            var newPending: [ChatMessage] = []
+            for p in self.pendingMessages {
+                if p.id != msg.id {
+                    newPending.append(p)
                 }
-                self.pendingMessages = newPending
-                
-                var exists = false
-                for m in self.messages {
-                    if m.id == sentMsg.id {
-                        exists = true
-                        break
-                    }
+            }
+            self.pendingMessages = newPending
+            
+            var exists = false
+            for m in self.messages {
+                if m.id == sentMsg.id {
+                    exists = true
+                    break
                 }
-                if !exists {
-                    self.messages.append(sentMsg)
-                }
+            }
+            if !exists {
+                self.messages.append(sentMsg)
             }
         } catch {
             print("❌ Failed to send pending message: \(error)")
