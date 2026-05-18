@@ -1349,13 +1349,16 @@ struct ChatView: View {
     
     private func togglePinRoom(_ room: GlimpseChatRoom) {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            if pinnedRoomIds.contains(room.id) {
-                pinnedRoomIds.remove(room.id)
-            } else {
-                pinnedRoomIds.insert(room.id)
+        // Delay the sorting change slightly to let the swipe action close cleanly first!
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                if self.pinnedRoomIds.contains(room.id) {
+                    self.pinnedRoomIds.remove(room.id)
+                } else {
+                    self.pinnedRoomIds.insert(room.id)
+                }
+                UserDefaults.standard.set(Array(self.pinnedRoomIds), forKey: "glimpse_pinned_room_ids")
             }
-            UserDefaults.standard.set(Array(pinnedRoomIds), forKey: "glimpse_pinned_room_ids")
         }
     }
     
