@@ -256,3 +256,34 @@ struct GlimpseSchedule: Codable, Identifiable, Equatable {
         return Date()
     }
 }
+
+// --- 💬 Chat Reply Extension ---
+extension ChatMessage {
+    struct ParsedReply: Equatable {
+        let parentId: Int
+        let senderName: String
+        let parentMessage: String
+        let actualMessage: String
+    }
+    
+    var replyInfo: ParsedReply? {
+        guard message.hasPrefix("{{reply:") else { return nil }
+        // Find closing tag "}}"
+        guard let closingRange = message.range(of: "}}") else { return nil }
+        
+        let headerStr = String(message[message.startIndex..<closingRange.lowerBound])
+            .replacingOccurrences(of: "{{reply:", with: "")
+        
+        let actualMessage = String(message[closingRange.upperBound...])
+        
+        let parts = headerStr.components(separatedBy: "|")
+        guard parts.count >= 3, let parentId = Int(parts[0]) else { return nil }
+        
+        return ParsedReply(
+            parentId: parentId,
+            senderName: parts[1],
+            parentMessage: parts[2],
+            actualMessage: actualMessage
+        )
+    }
+}
