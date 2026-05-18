@@ -95,106 +95,14 @@ struct ChatView: View {
         }
         // WebSocket synchronization for chat rooms
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomCreated"))) { notification in
-            if let newRoom = notification.object as? GlimpseChatRoom {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    if !chatRooms.contains(where: { $0.id == newRoom.id }) {
-                        chatRooms.append(newRoom)
-                    }
-                }
-            }
+            self.handleChatRoomCreated(notification)
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomDeleted"))) { notification in
-            if let deletedId = notification.object as? Int {
-                var shouldResetSelected = false
-                if let activeRoom = selectedRoom {
-                    shouldResetSelected = activeRoom.id == deletedId
-                }
-                
-                var filteredRooms: [GlimpseChatRoom] = []
-                for room in chatRooms {
-                    if room.id != deletedId {
-                        filteredRooms.append(room)
-                    }
-                }
-                
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    chatRooms = filteredRooms
-                    if shouldResetSelected {
-                        selectedRoom = nil
-                    }
-                }
-            }
+            self.handleChatRoomDeleted(notification)
         }
         // Listen to live WebSocket message broadcasts from Partner
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatMessageReceived"))) { notification in
-            if let newMsg = notification.object as? ChatMessage {
-                let isMainRoom = selectedRoom?.is_main ?? false
-                let isSameRoom = selectedRoom?.id == newMsg.room_id
-                let isCurrentRoom = isSameRoom || (isMainRoom && newMsg.room_id == nil)
-                
-                let currentUserId = auth.currentUser?.id ?? 0
-                let partnerId = auth.partner?.id ?? 0
-                let isMyMessage = newMsg.sender_id == currentUserId
-                let isPartnerMessage = newMsg.sender_id == partnerId
-                
-                if isCurrentRoom {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-                        if isMyMessage {
-                            var foundTemp = false
-                            for i in 0..<self.messages.count {
-                                if self.messages[i].id < 0 {
-                                    self.messages[i] = newMsg
-                                    foundTemp = true
-                                    break
-                                }
-                            }
-                            if foundTemp {
-                                return
-                            }
-                        }
-                        
-                        var alreadyExists = false
-                        for m in self.messages {
-                            if m.id == newMsg.id {
-                                alreadyExists = true
-                                break
-                            }
-                        }
-                        if !alreadyExists {
-                            self.messages.append(newMsg)
-                        }
-                    }
-                }
-                
-                // Update latest message in rooms list
-                var targetIndex: Int? = nil
-                for i in 0..<chatRooms.count {
-                    let r = chatRooms[i]
-                    if r.id == newMsg.room_id || (r.is_main && newMsg.room_id == nil) {
-                        targetIndex = i
-                        break
-                    }
-                }
-                
-                if let index = targetIndex {
-                    var updated = chatRooms[index]
-                    updated.latest_message = RoomLatestMessage(
-                        id: newMsg.id,
-                        message: newMsg.message,
-                        sender_id: newMsg.sender_id,
-                        created_at: newMsg.created_at
-                    )
-                    
-                    let isDifferentRoom = selectedRoom?.id != updated.id
-                    if isDifferentRoom && isPartnerMessage {
-                        updated.unread_count += 1
-                    }
-                    
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        chatRooms[index] = updated
-                    }
-                }
-            }
+            self.handleChatMessageReceived(notification)
         }
         .onChange(of: networkMonitor.isConnected) { _, isConnected in
             if isConnected {
@@ -202,13 +110,7 @@ struct ChatView: View {
             }
         }
         .onChange(of: messageInput) { oldValue, newValue in
-            let cleanNew = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            let cleanOld = oldValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !cleanNew.isEmpty && cleanOld.isEmpty {
-                auth.sendTypingStatus(isTyping: true)
-            } else if cleanNew.isEmpty && !cleanOld.isEmpty {
-                auth.sendTypingStatus(isTyping: false)
-            }
+            self.handleMessageInputChanged(oldValue: oldValue, newValue: newValue)
         }
         // Custom creation and deletion alerts
         .alert("New Chat Room", isPresented: $showCreateRoomAlert) {
@@ -1224,6 +1126,126 @@ struct ChatView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .transition(.opacity)
+    }
+    
+    // --- 📡 WEBSOCKET & STATE CHANGE HANDLERS (Decoupled from SwiftUI hierarchy) ---
+    private func handleChatRoomCreated(_ notification: Notification) {
+        guard let newRoom = notification.object as? GlimpseChatRoom else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            var exists = false
+            for room in chatRooms {
+                if room.id == newRoom.id {
+                    exists = true
+                    break
+                }
+            }
+            if !exists {
+                chatRooms.append(newRoom)
+            }
+        }
+    }
+    
+    private func handleChatRoomDeleted(_ notification: Notification) {
+        guard let deletedId = notification.object as? Int else { return }
+        var shouldResetSelected = false
+        if let activeRoom = selectedRoom {
+            shouldResetSelected = activeRoom.id == deletedId
+        }
+        
+        var filteredRooms: [GlimpseChatRoom] = []
+        for room in chatRooms {
+            if room.id != deletedId {
+                filteredRooms.append(room)
+            }
+        }
+        
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            chatRooms = filteredRooms
+            if shouldResetSelected {
+                selectedRoom = nil
+            }
+        }
+    }
+    
+    private func handleChatMessageReceived(_ notification: Notification) {
+        guard let newMsg = notification.object as? ChatMessage else { return }
+        let isMainRoom = selectedRoom?.is_main ?? false
+        let isSameRoom = selectedRoom?.id == newMsg.room_id
+        let isCurrentRoom = isSameRoom || (isMainRoom && newMsg.room_id == nil)
+        
+        let currentUserId = auth.currentUser?.id ?? 0
+        let partnerId = auth.partner?.id ?? 0
+        let isMyMessage = newMsg.sender_id == currentUserId
+        let isPartnerMessage = newMsg.sender_id == partnerId
+        
+        if isCurrentRoom {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                if isMyMessage {
+                    var foundTemp = false
+                    for i in 0..<self.messages.count {
+                        if self.messages[i].id < 0 {
+                            self.messages[i] = newMsg
+                            foundTemp = true
+                            break
+                        }
+                    }
+                    if foundTemp {
+                        return
+                    }
+                }
+                
+                var alreadyExists = false
+                for m in self.messages {
+                    if m.id == newMsg.id {
+                        alreadyExists = true
+                        break
+                    }
+                }
+                if !alreadyExists {
+                    self.messages.append(newMsg)
+                }
+            }
+        }
+        
+        // Update latest message in rooms list
+        var targetIndex: Int? = nil
+        for i in 0..<chatRooms.count {
+            let r = chatRooms[i]
+            if r.id == newMsg.room_id || (r.is_main && newMsg.room_id == nil) {
+                targetIndex = i
+                break
+            }
+        }
+        
+        if let index = targetIndex {
+            var updated = chatRooms[index]
+            updated.latest_message = RoomLatestMessage(
+                id: newMsg.id,
+                message: newMsg.message,
+                sender_id: newMsg.sender_id,
+                created_at: newMsg.created_at
+            )
+            
+            let isDifferentRoom = selectedRoom?.id != updated.id
+            if isDifferentRoom && isPartnerMessage {
+                updated.unread_count += 1
+            }
+            
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                chatRooms[index] = updated
+            }
+        }
+    }
+    
+    private func handleMessageInputChanged(oldValue: String, newValue: String) {
+        let cleanNew = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanOld = oldValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if !cleanNew.isEmpty && cleanOld.isEmpty {
+            auth.sendTypingStatus(isTyping: true)
+        } else if cleanNew.isEmpty && !cleanOld.isEmpty {
+            auth.sendTypingStatus(isTyping: false)
+        }
     }
 }
 
