@@ -354,7 +354,7 @@ struct ChatView: View {
                 List {
                     // Transparent Spacer to clear the blurred header (closer, snug fit)
                     Color.clear
-                        .frame(height: 75)
+                        .frame(height: 50)
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                     
@@ -555,16 +555,16 @@ struct ChatView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack {
                         Text(room.name)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
+                            .font(.system(size: 16, weight: room.unread_count > 0 ? .bold : .semibold))
+                            .foregroundColor(room.unread_count > 0 ? .white : .white.opacity(0.9))
                             .lineLimit(1)
                         
                         Spacer()
                         
                         if let latest = room.latest_message, let rawTime = latest.created_at {
                             Text(formatMessageTime(rawTime))
-                                .font(.system(size: 11))
-                                .foregroundColor(.white.opacity(0.4))
+                                .font(.system(size: 11, weight: room.unread_count > 0 ? .semibold : .regular))
+                                .foregroundColor(room.unread_count > 0 ? .activeCyan : .white.opacity(0.4))
                         }
                     }
                     
@@ -572,8 +572,8 @@ struct ChatView: View {
                         if let latest = room.latest_message {
                             let senderName = latest.sender_id == auth.currentUser?.id ? "You: " : ""
                             Text("\(senderName)\(latest.message)")
-                                .font(.system(size: 13))
-                                .foregroundColor(.white.opacity(0.55))
+                                .font(.system(size: 13, weight: room.unread_count > 0 ? .medium : .regular))
+                                .foregroundColor(room.unread_count > 0 ? .white.opacity(0.85) : .white.opacity(0.55))
                                 .lineLimit(1)
                         } else {
                             Text("No messages yet")
@@ -594,12 +594,17 @@ struct ChatView: View {
                 }
             }
             .padding(.vertical, 12)
+            .padding(.horizontal, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(room.unread_count > 0 ? Color.activeCyan.opacity(0.06) : Color.clear)
+            )
             .contentShape(Rectangle())
             
             // Telegram/WhatsApp Style thin divider line below each row
             Divider()
                 .background(Color.white.opacity(0.06))
-                .padding(.leading, 62)
+                .padding(.leading, 72)
         }
     }
     
