@@ -574,7 +574,36 @@ struct MainDashboardView: View {
                 if isSuppressingGlobalLoveBurst {
                     isSuppressingGlobalLoveBurst = false
                 } else {
-                    triggerLoveBurst()
+                    if let reaction = auth.lastLoveBurstReaction {
+                        // Partner reacted! Display reaction animations ONLY (no full screen sparks!)
+                        triggerEdgeReactionAnimation(reaction)
+                        activeReactionBadge = reaction
+                        reactionBadgeAngle = Double.random(in: -15...15)
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+                            showReactionBadge = true
+                            reactionBadgeScale = 1.2
+                        }
+                        
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                reactionBadgeScale = 1.0
+                            }
+                        }
+                        
+                        let currentBadge = reaction
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+                            if activeReactionBadge == currentBadge {
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    reactionBadgeScale = 0.0
+                                    showReactionBadge = false
+                                }
+                            }
+                        }
+                        auth.lastLoveBurstReaction = nil
+                    } else {
+                        // General love ping! Display standard floating hearts
+                        triggerLoveBurst()
+                    }
                 }
             }
         }
@@ -779,12 +808,12 @@ struct MainDashboardView: View {
                                                 if touchStartTime == nil {
                                                     touchStartTime = Date()
                                                     let startLoc = value.startLocation
-                                                    // Trigger fast long-press overlay after 150ms hold
-                                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                                    // Trigger fast long-press overlay after 120ms hold (snappy Haptic Touch)
+                                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
                                                         guard let startTime = touchStartTime else { return }
                                                         if !isLongPressActive {
                                                             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                            withAnimation(.spring(response: 0.22, dampingFraction: 0.65)) {
                                                                 reactionCardScale = 0.94
                                                                 showReactions = true
                                                                 isLongPressActive = true
@@ -812,11 +841,11 @@ struct MainDashboardView: View {
                                                 let duration = Date().timeIntervalSince(touchStartTime ?? Date())
                                                 touchStartTime = nil
                                                 
-                                                if !isLongPressActive || duration < 0.15 {
+                                                if !isLongPressActive || duration < 0.12 {
                                                     // Quick tap flips the card!
                                                     NotificationCenter.default.post(name: NSNotification.Name("FlipDashboardCard"), object: nil)
                                                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.75)) {
                                                         reactionCardScale = 1.0
                                                         showReactions = false
                                                         isLongPressActive = false
@@ -834,14 +863,14 @@ struct MainDashboardView: View {
                                                         // Show Locket-style edge floating badge
                                                         activeReactionBadge = selectedEmoji
                                                         reactionBadgeAngle = Double.random(in: -15...15)
-                                                        withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+                                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
                                                             showReactionBadge = true
                                                             reactionBadgeScale = 1.2
                                                         }
                                                         
                                                         // Bounce effect
-                                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                                                            withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
                                                                 reactionBadgeScale = 1.0
                                                             }
                                                         }
@@ -850,7 +879,7 @@ struct MainDashboardView: View {
                                                         let currentBadge = selectedEmoji
                                                         DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
                                                             if activeReactionBadge == currentBadge {
-                                                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                                                     reactionBadgeScale = 0.0
                                                                     showReactionBadge = false
                                                                 }
@@ -860,14 +889,14 @@ struct MainDashboardView: View {
                                                         // Prevent the subsequent WebSocket broadcast from triggering double full-screen sparkles!
                                                         isSuppressingGlobalLoveBurst = true
                                                         
-                                                        // Sync love burst to server in background
+                                                        // Sync love burst to server in background with the reaction emoji!
                                                         Task {
-                                                            try? await auth.triggerServerLoveBurst()
+                                                            try? await auth.triggerServerLoveBurst(reaction: selectedEmoji)
                                                         }
                                                     }
                                                     
                                                     // Reset card scale and hide reactions
-                                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.75)) {
                                                         reactionCardScale = 1.0
                                                         showReactions = false
                                                         isLongPressActive = false

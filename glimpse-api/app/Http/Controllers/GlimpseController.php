@@ -650,14 +650,17 @@ class GlimpseController extends Controller
         }
 
         $timestamp = microtime(true);
+        $reaction = $request->input('reaction');
+        
         \Illuminate\Support\Facades\Cache::put("couple_{$user->couple_id}_love_burst", [
             'timestamp' => $timestamp,
-            'sender_id' => $user->id
+            'sender_id' => $user->id,
+            'reaction' => $reaction
         ], 60);
 
         // Broadcast LoveBurstSent event to partner instantly over WebSockets
         try {
-            broadcast(new \App\Events\LoveBurstSent($user->couple_id, $user->id, $timestamp))->toOthers();
+            broadcast(new \App\Events\LoveBurstSent($user->couple_id, $user->id, $timestamp, $reaction))->toOthers();
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
         }

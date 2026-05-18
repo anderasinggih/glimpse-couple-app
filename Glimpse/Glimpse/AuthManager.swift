@@ -22,6 +22,7 @@ class AuthManager {
     var highestTogetherStreak = 0
     var totalMeetings = 0
     var lastLoveBurstTimestamp: Double = 0.0
+    var lastLoveBurstReaction: String? = nil
     var activeSchedule: GlimpseSchedule? = nil
     var showScheduleSheet = false
     var showInviteDeclinedAlert = false
@@ -987,7 +988,7 @@ class AuthManager {
         }
     }
     
-    func triggerServerLoveBurst() async throws {
+    func triggerServerLoveBurst(reaction: String? = nil) async throws {
         guard let url = URL(string: "\(baseURL)/glimpse/love-burst") else { return }
         guard let token = userToken else { return }
         
@@ -995,6 +996,12 @@ class AuthManager {
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let reaction = reaction {
+            let body: [String: String] = ["reaction": reaction]
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        }
         
         let (_, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
@@ -1168,10 +1175,12 @@ class AuthManager {
                     struct LoveBurstPayload: Codable {
                         let timestamp: Double
                         let sender_id: Int
+                        let reaction: String?
                     }
                     if let payload = try? JSONDecoder().decode(LoveBurstPayload.self, from: eventData) {
                         DispatchQueue.main.async {
                             // Update lastLoveBurstTimestamp in real-time!
+                            self.lastLoveBurstReaction = payload.reaction
                             self.lastLoveBurstTimestamp = payload.timestamp
                         }
                     }

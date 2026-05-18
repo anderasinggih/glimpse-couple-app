@@ -15,12 +15,14 @@ class LoveBurstSent implements ShouldBroadcast
     public $coupleId;
     public $senderId;
     public $timestamp;
+    public $reaction;
 
-    public function __construct($coupleId, $senderId, $timestamp)
+    public function __construct($coupleId, $senderId, $timestamp, $reaction = null)
     {
         $this->coupleId = $coupleId;
         $this->senderId = $senderId;
         $this->timestamp = $timestamp;
+        $this->reaction = $reaction;
     }
 
     public function broadcastOn(): array
@@ -34,7 +36,8 @@ class LoveBurstSent implements ShouldBroadcast
     {
         return [
             'sender_id' => $this->senderId,
-            'timestamp' => $this->timestamp
+            'timestamp' => $this->timestamp,
+            'reaction' => $this->reaction
         ];
     }
 }
