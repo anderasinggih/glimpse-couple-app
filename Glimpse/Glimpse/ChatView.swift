@@ -348,27 +348,27 @@ struct ChatView: View {
                     }
                     Spacer()
                 }
-            } else {
                 List {
-                    // Transparent Spacer to clear the blurred header
+                    // Transparent Spacer to clear the blurred header (closer, snug fit)
                     Color.clear
-                        .frame(height: 110)
+                        .frame(height: 80)
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                     
                     ForEach(chatRooms) { room in
-                        roomRow(room)
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                    selectedRoom = room
-                                }
-                                loadMessagesForSelectedRoom()
+                        Button {
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                selectedRoom = room
                             }
+                            loadMessagesForSelectedRoom()
+                        } label: {
+                            roomRow(room)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                     }
                     .onDelete { indexSet in
                         if let index = indexSet.first {
@@ -527,12 +527,6 @@ struct ChatView: View {
                 .background(.ultraThinMaterial)
         )
         .ignoresSafeArea(edges: .top)
-        .overlay(
-            VStack {
-                Spacer()
-                Divider().background(Color.white.opacity(0.08))
-            }
-        )
     }
     
     // --- 🏷️ ROOM ROW COMPONENT (WhatsApp style row) ---
@@ -636,7 +630,7 @@ struct ChatView: View {
                 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(room.is_main ? partner.name : "\(partner.name) (\(room.name))")
+                        Text(room.name)
                             .font(.system(size: 15, weight: .bold))
                             .foregroundColor(.white)
                             .lineLimit(1)
@@ -743,12 +737,6 @@ struct ChatView: View {
                 .background(.ultraThinMaterial)
         )
         .ignoresSafeArea(edges: .top)
-        .overlay(
-            VStack {
-                Spacer()
-                Divider().background(Color.white.opacity(0.08))
-            }
-        )
     }
     
     // FLOATING MESSAGE INPUT BAR (Fully floating, glassmorphic, separate rounded capsule and button)
