@@ -213,10 +213,16 @@ struct MainDashboardView: View {
             
             // MASTER HEADER (Like app.blade.php)
             if auth.selectedTab != 3 {
-                BrandingHeader()
-                    .opacity(headerOpacity)
-                    .allowsHitTesting(headerOpacity > 0.1) // Avoid blocking interaction when transparent
-                    .zIndex(100)
+                BrandingHeader(
+                    coupleActive: auth.coupleActive,
+                    selectedTab: auth.selectedTab,
+                    onCalendarTap: {
+                        auth.showScheduleSheet = true
+                    }
+                )
+                .opacity(headerOpacity)
+                .allowsHitTesting(headerOpacity > 0.1) // Avoid blocking interaction when transparent
+                .zIndex(100)
             }
 
             

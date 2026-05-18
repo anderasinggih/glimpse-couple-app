@@ -166,6 +166,10 @@ extension View {
 }
 
 struct BrandingHeader: View {
+    var coupleActive: Bool = false
+    var selectedTab: Int = 0
+    var onCalendarTap: (() -> Void)? = nil
+    
     var body: some View {
         HStack {
             HStack(spacing: 10) {
@@ -179,11 +183,11 @@ struct BrandingHeader: View {
             
             Spacer()
             
-            if AuthManager.shared.coupleActive && AuthManager.shared.selectedTab == 0 {
+            if coupleActive && selectedTab == 0 {
                 Button {
                     let generator = UIImpactFeedbackGenerator(style: .medium)
                     generator.impactOccurred()
-                    AuthManager.shared.showScheduleSheet = true
+                    onCalendarTap?()
                 } label: {
                     ZStack {
                         Circle()
