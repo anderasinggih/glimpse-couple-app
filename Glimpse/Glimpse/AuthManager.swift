@@ -361,6 +361,9 @@ class AuthManager {
             if let loc = locationName {
                 body["location_name"] = loc
             }
+            if let wifi = LiveLocationManager.shared.currentWiFiBSSID {
+                body["wifi_bssid"] = wifi
+            }
             
             request.httpBody = try? JSONSerialization.data(withJSONObject: body)
             

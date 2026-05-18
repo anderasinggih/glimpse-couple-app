@@ -178,7 +178,7 @@ struct FullPartnerMapView: View {
                                         .frame(width: 60, height: 60)
                                         .blur(radius: 10)
                                     
-                                    PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name)
+                                    PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name, isSleeping: currentUser.is_sleeping)
                                 }
                                 .onTapGesture {
                                     currentlyFocusedTarget = .me
@@ -199,7 +199,7 @@ struct FullPartnerMapView: View {
                                     .frame(width: 60, height: 60)
                                     .blur(radius: 10)
                                 
-                                PartnerMarker(photoUrl: partner.profile_photo_url, isOffline: partner.isOffline, batteryLevel: partner.battery_level, isCharging: partner.is_charging, locationName: partner.location_name)
+                                PartnerMarker(photoUrl: partner.profile_photo_url, isOffline: partner.isOffline, batteryLevel: partner.battery_level, isCharging: partner.is_charging, locationName: partner.location_name, isSleeping: partner.is_sleeping)
                             }
                             .onTapGesture {
                                 currentlyFocusedTarget = .partner

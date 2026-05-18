@@ -103,6 +103,7 @@ class GlimpseController extends Controller
                     'location_name' => $user->location_name,
                     'battery_level' => $user->battery_level !== null ? (int)$user->battery_level : null,
                     'is_charging' => (bool)$user->is_charging,
+                    'is_sleeping' => (bool)\Cache::get("user_{$user->id}_is_sleeping", false),
                     'status_note' => $user->status_note,
                     'latest_photo_url' => $latestPhotoUrl,
                     'last_updated' => $user->updated_at->toIso8601String(),
@@ -121,6 +122,7 @@ class GlimpseController extends Controller
                     'location_name' => $partner->location_name,
                     'battery_level' => $partner->battery_level !== null ? (int)$partner->battery_level : null,
                     'is_charging' => (bool)$partner->is_charging,
+                    'is_sleeping' => (bool)\Cache::get("user_{$partner->id}_is_sleeping", false),
                     'status_note' => $partner->status_note,
                     'latest_photo_url' => $partnerLatestPhotoUrl,
                     'last_updated' => $partner->updated_at->toIso8601String(),
@@ -532,6 +534,7 @@ class GlimpseController extends Controller
             'is_charging' => 'nullable|boolean',
             'status_note' => 'nullable|string|max:30',
             'location_name' => 'nullable|string|max:255',
+            'wifi_bssid' => 'nullable|string|max:255',
         ]);
 
         $user = $request->user();
@@ -546,7 +549,10 @@ class GlimpseController extends Controller
         // 🏡 Smart Place Anchor & Cozy Labeling (Zenly Style)
         $lat = $user->latitude;
         $lng = $user->longitude;
+        $wifiBssid = $request->input('wifi_bssid');
+
         if ($lat !== null && $lng !== null) {
+            $today = now()->format('Y-m-d');
             $hour = (int)now()->format('H');
             $dayOfWeek = (int)now()->format('N'); // 1 (Mon) - 7 (Sun)
             
@@ -565,14 +571,122 @@ class GlimpseController extends Controller
             }
             
             if ($isStationary) {
+                // Get or initialize the user's place visits log from Cache
+                $placeLog = \Cache::get("user_{$user->id}_place_visits_log", [
+                    'work_visits' => [],
+                    'home_visits' => []
+                ]);
+                
+                $roundedLat = round($lat, 4);
+                $roundedLng = round($lng, 4);
+                
+                // 1. Log visits based on timeslots
+                if ($hour >= 9 && $hour <= 17 && $dayOfWeek >= 1 && $dayOfWeek <= 5) {
+                    // Day slot (Work) - Mon to Fri
+                    $placeLog['work_visits'][$today] = [
+                        'lat' => $roundedLat,
+                        'lng' => $roundedLng
+                    ];
+                }
+                
                 if ($hour >= 20 || $hour < 6) {
-                    $user->location_name = "Home";
-                } elseif ($hour >= 9 && $hour <= 17) {
-                    if ($dayOfWeek >= 1 && $dayOfWeek <= 5) {
-                        $user->location_name = "Work";
-                    } else {
-                        $user->location_name = "School";
+                    // Night slot (Home)
+                    $placeLog['home_visits'][$today] = [
+                        'lat' => $roundedLat,
+                        'lng' => $roundedLng,
+                        'wifi' => $wifiBssid
+                    ];
+                }
+                
+                // Keep only the last 7 days of logs to avoid bloating
+                $sevenDaysAgo = now()->subDays(7)->format('Y-m-d');
+                $placeLog['work_visits'] = array_filter($placeLog['work_visits'], function($date) use ($sevenDaysAgo) {
+                    return $date >= $sevenDaysAgo;
+                }, ARRAY_FILTER_USE_KEY);
+                $placeLog['home_visits'] = array_filter($placeLog['home_visits'], function($date) use ($sevenDaysAgo) {
+                    return $date >= $sevenDaysAgo;
+                }, ARRAY_FILTER_USE_KEY);
+                
+                \Cache::put("user_{$user->id}_place_visits_log", $placeLog, 86400 * 7); // Cache for 7 days
+                
+                // 2. Classify based on 3 consecutive days rule
+                $isHomeClassified = false;
+                $isWorkClassified = false;
+                
+                // Check Home: 3 consecutive days during night hours
+                $consecutiveHomeDays = 0;
+                $matchingWifiName = false;
+                
+                for ($i = 0; $i < 3; $i++) {
+                    $checkDate = now()->subDays($i)->format('Y-m-d');
+                    if (isset($placeLog['home_visits'][$checkDate])) {
+                        $visit = $placeLog['home_visits'][$checkDate];
+                        if (abs($visit['lat'] - $roundedLat) < 0.0005 && abs($visit['lng'] - $roundedLng) < 0.0005) {
+                            $consecutiveHomeDays++;
+                            if ($visit['wifi'] !== null && $wifiBssid !== null && $visit['wifi'] === $wifiBssid) {
+                                $matchingWifiName = true;
+                            }
+                        }
                     }
+                }
+                
+                if ($consecutiveHomeDays >= 3) {
+                    $user->location_name = "Home";
+                    $isHomeClassified = true;
+                    
+                    // 3. Sleep Detection (ZZZ): 
+                    // If at Home, at night (20:00 - 06:00), and stationary for more than 3 hours
+                    if ($hour >= 20 || $hour < 6) {
+                        $homeArrival = \Cache::get("user_{$user->id}_home_arrival_time");
+                        if ($homeArrival === null) {
+                            \Cache::put("user_{$user->id}_home_arrival_time", now()->timestamp, 86400);
+                        } else {
+                            $duration = now()->timestamp - $homeArrival;
+                            if ($duration >= 10800) { // 3 hours
+                                \Cache::put("user_{$user->id}_is_sleeping", true, 86400);
+                            }
+                        }
+                    } else {
+                        // Reset sleep state during daytime
+                        \Cache::forget("user_{$user->id}_home_arrival_time");
+                        \Cache::forget("user_{$user->id}_is_sleeping");
+                    }
+                } else {
+                    \Cache::forget("user_{$user->id}_home_arrival_time");
+                    \Cache::forget("user_{$user->id}_is_sleeping");
+                }
+                
+                // Check Work: 3 consecutive days during 9-17 Mon-Fri
+                if (!$isHomeClassified) {
+                    $consecutiveWorkDays = 0;
+                    for ($i = 0; $i < 3; $i++) {
+                        $checkDate = now()->subDays($i)->format('Y-m-d');
+                        if (isset($placeLog['work_visits'][$checkDate])) {
+                            $visit = $placeLog['work_visits'][$checkDate];
+                            if (abs($visit['lat'] - $roundedLat) < 0.0005 && abs($visit['lng'] - $roundedLng) < 0.0005) {
+                                $consecutiveWorkDays++;
+                            }
+                        }
+                    }
+                    
+                    if ($consecutiveWorkDays >= 3) {
+                        $user->location_name = "Work";
+                        $isWorkClassified = true;
+                    }
+                }
+                
+                // If not classified as Home or Work, keep the geocoded address or set to null
+                if (!$isHomeClassified && !$isWorkClassified) {
+                    if (in_array($user->location_name, ["Home", "Work", "School"])) {
+                        $user->location_name = null; // Remove standard labels if not qualified!
+                    }
+                }
+            } else {
+                // If moving, user is definitely not sleeping!
+                \Cache::forget("user_{$user->id}_home_arrival_time");
+                \Cache::forget("user_{$user->id}_is_sleeping");
+                if (in_array($user->location_name, ["Home", "Work", "School"])) {
+                    $user->location_name = null;
                 }
             }
         }

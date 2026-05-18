@@ -144,7 +144,7 @@ struct PartnerMapView: View {
                                             .frame(width: 60, height: 60)
                                             .blur(radius: 10)
                                         
-                                        PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name)
+                                        PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name, isSleeping: currentUser.is_sleeping)
                                     }
                                     .onTapGesture {
                                         withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
@@ -165,7 +165,7 @@ struct PartnerMapView: View {
                                             .frame(width: 80, height: 80)
                                             .blur(radius: 20)
                                         
-                                        PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline, batteryLevel: user.battery_level, isCharging: user.is_charging, locationName: user.location_name)
+                                        PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline, batteryLevel: user.battery_level, isCharging: user.is_charging, locationName: user.location_name, isSleeping: user.is_sleeping)
                                     }
                                     .onTapGesture {
                                         withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
@@ -378,12 +378,35 @@ struct PartnerMapView: View {
     }
 }
 
+struct SleepingZView: View {
+    let delay: Double
+    @State private var animate = false
+    
+    var body: some View {
+        Text("💤")
+            .font(.system(size: animate ? 14 : 8, weight: .bold))
+            .opacity(animate ? 0.0 : 0.9)
+            .offset(x: animate ? -12 : 0, y: animate ? -25 : 0)
+            .scaleEffect(animate ? 1.2 : 0.8)
+            .onAppear {
+                withAnimation(
+                    .easeInOut(duration: 1.8)
+                    .repeatForever(autoreverses: false)
+                    .delay(delay)
+                ) {
+                    animate = true
+                }
+            }
+    }
+}
+
 struct PartnerMarker: View {
     let photoUrl: String
     let isOffline: Bool
     var batteryLevel: Int? = nil
     var isCharging: Bool? = nil
     var locationName: String? = nil
+    var isSleeping: Bool? = false
     @State private var pulse = false
     
     var body: some View {
@@ -412,6 +435,16 @@ struct PartnerMarker: View {
                 .overlay(Circle().stroke(isOffline ? Color.gray : .white.opacity(0.8), lineWidth: 1.5))
                 .shadow(color: isOffline ? .clear : .electricPurple.opacity(0.4), radius: 8)
                 .saturation(isOffline ? 0.2 : 1.0)
+            
+            // 💤 Premium Zenly-Style Sleeping Animation (Triple Zs rising and fading)
+            if isSleeping == true {
+                ZStack {
+                    ForEach(0..<3) { index in
+                        SleepingZView(delay: Double(index) * 0.6)
+                    }
+                }
+                .offset(x: -22, y: -22) // Top-left corner of the avatar circle
+            }
             
             // 🏡/💼/🎓 Smart Cozy Anchor Icon Badge
             if let place = locationName, ["Home", "Work", "School"].contains(place) {

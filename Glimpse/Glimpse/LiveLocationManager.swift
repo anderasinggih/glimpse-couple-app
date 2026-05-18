@@ -20,7 +20,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     // Wi-Fi location anchoring
     private let pathMonitor = NWPathMonitor()
     private let pathQueue = DispatchQueue(label: "WiFiPathMonitorQueue")
-    private var currentWiFiBSSID: String? = nil
+    var currentWiFiBSSID: String? = nil
     private var cachedWiFiLocations: [String: CLLocationCoordinate2D] = [:] // [BSSID: Coordinate]
     private var isWiFiScanning = false
     private var wasUsingWiFi = false

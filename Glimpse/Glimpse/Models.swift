@@ -24,6 +24,7 @@ struct GlimpseUser: Codable, Identifiable {
     let status_note: String?
     let battery_level: Int?
     let is_charging: Bool?
+    let is_sleeping: Bool?
     let latest_photo_url: String?
     let last_updated: String?
     let invite_code: String?
