@@ -179,7 +179,7 @@ struct GlimpseChatRoom: Codable, Identifiable, Equatable {
     let couple_id: Int
     let name: String
     let is_main: Bool
-    let latest_message: RoomLatestMessage?
+    var latest_message: RoomLatestMessage?
     var unread_count: Int
     let created_at: String
     let updated_at: String
