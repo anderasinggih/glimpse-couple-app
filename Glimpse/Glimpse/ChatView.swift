@@ -354,7 +354,7 @@ struct ChatView: View {
                 List {
                     // Transparent Spacer to clear the blurred header (closer, snug fit)
                     Color.clear
-                        .frame(height: 100)
+                        .frame(height: 75)
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                     
@@ -371,7 +371,7 @@ struct ChatView: View {
                         .buttonStyle(FlatLinkButtonStyle())
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                     }
                     .onDelete { indexSet in
                         if let index = indexSet.first {
@@ -534,75 +534,73 @@ struct ChatView: View {
         .ignoresSafeArea(edges: .top)
     }
     
-    // --- 🏷️ ROOM ROW COMPONENT (WhatsApp style row) ---
     private func roomRow(_ room: GlimpseChatRoom) -> some View {
-        HStack(spacing: 14) {
-            // Room Icon Container
-            ZStack {
-                Circle()
-                    .fill(LinearGradient(colors: room.is_main ? [.activeCyan.opacity(0.2), .activeCyan.opacity(0.05)] : [.white.opacity(0.12), .white.opacity(0.03)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 46, height: 46)
-                
-                Image(systemName: room.is_main ? "star.bubble.fill" : "bubble.left.and.bubble.right.fill")
-                    .font(.system(size: 18))
-                    .foregroundColor(room.is_main ? .activeCyan : .white.opacity(0.8))
-            }
-            .overlay(
-                Circle()
-                    .stroke(room.is_main ? Color.activeCyan.opacity(0.2) : Color.white.opacity(0.08), lineWidth: 1)
-            )
-            
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(room.name)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                // Room Icon Container
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(colors: room.is_main ? [.activeCyan.opacity(0.2), .activeCyan.opacity(0.05)] : [.white.opacity(0.08), .white.opacity(0.02)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 48, height: 48)
                     
-                    Spacer()
-                    
-                    if let latest = room.latest_message, let rawTime = latest.created_at {
-                        Text(formatMessageTime(rawTime))
-                            .font(.system(size: 11))
-                            .foregroundColor(.white.opacity(0.4))
-                    }
+                    Image(systemName: room.is_main ? "star.bubble.fill" : "bubble.left.and.bubble.right.fill")
+                        .font(.system(size: 19))
+                        .foregroundColor(room.is_main ? .activeCyan : .white.opacity(0.8))
                 }
+                .overlay(
+                    Circle()
+                        .stroke(room.is_main ? Color.activeCyan.opacity(0.25) : Color.white.opacity(0.08), lineWidth: 1)
+                )
                 
-                HStack {
-                    if let latest = room.latest_message {
-                        let senderName = latest.sender_id == auth.currentUser?.id ? "You: " : ""
-                        Text("\(senderName)\(latest.message)")
-                            .font(.system(size: 12.5))
-                            .foregroundColor(.white.opacity(0.55))
-                            .lineLimit(1)
-                    } else {
-                        Text("No messages yet")
-                            .font(.system(size: 12))
-                            .foregroundColor(.white.opacity(0.35))
-                    }
-                    
-                    Spacer()
-                    
-                    if room.unread_count > 0 {
-                        Text("\(room.unread_count)")
-                            .font(.system(size: 10, weight: .bold))
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack {
+                        Text(room.name)
+                            .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(.white)
-                            .frame(width: 18, height: 18)
-                            .background(Circle().fill(Color.activeCyan))
+                            .lineLimit(1)
+                        
+                        Spacer()
+                        
+                        if let latest = room.latest_message, let rawTime = latest.created_at {
+                            Text(formatMessageTime(rawTime))
+                                .font(.system(size: 11))
+                                .foregroundColor(.white.opacity(0.4))
+                        }
+                    }
+                    
+                    HStack {
+                        if let latest = room.latest_message {
+                            let senderName = latest.sender_id == auth.currentUser?.id ? "You: " : ""
+                            Text("\(senderName)\(latest.message)")
+                                .font(.system(size: 13))
+                                .foregroundColor(.white.opacity(0.55))
+                                .lineLimit(1)
+                        } else {
+                            Text("No messages yet")
+                                .font(.system(size: 12.5))
+                                .foregroundColor(.white.opacity(0.35))
+                        }
+                        
+                        Spacer()
+                        
+                        if room.unread_count > 0 {
+                            Text("\(room.unread_count)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 18, height: 18)
+                                .background(Circle().fill(Color.activeCyan))
+                        }
                     }
                 }
             }
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+            
+            // Telegram/WhatsApp Style thin divider line below each row
+            Divider()
+                .background(Color.white.opacity(0.06))
+                .padding(.leading, 62)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(room.is_main ? 0.05 : 0.02))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(room.is_main ? Color.activeCyan.opacity(0.12) : Color.white.opacity(0.04), lineWidth: 1)
-        )
     }
     
     private func chatHeader(partner: GlimpseUser, room: GlimpseChatRoom) -> some View {

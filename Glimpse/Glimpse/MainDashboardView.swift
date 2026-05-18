@@ -177,8 +177,8 @@ struct MainDashboardView: View {
             .tint(.electricPurple)
             .simultaneousGesture(
                 DragGesture().onEnded { value in
-                    // Disable swipe-to-switch on Map tab (Tab 1) so user can pan the map freely
-                    guard auth.selectedTab != 1 else { return }
+                    // Disable swipe-to-switch on Map tab (Tab 1) and Chat tab (Tab 3) so user can swipe/pan freely
+                    guard auth.selectedTab != 1 && auth.selectedTab != 3 else { return }
                     
                     // SWIPE LOGIC
                     let threshold: CGFloat = 100
