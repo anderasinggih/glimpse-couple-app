@@ -303,22 +303,31 @@ struct ChatView: View {
                             bottomInputInsetView
                         }
                         .onChange(of: messages) { oldMessages, newMessages in
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                if oldMessages.isEmpty {
-                                    // Initial load: Scroll instantly to bottom to avoid sliding down from the top
+                            if oldMessages.isEmpty {
+                                // Initial load: Scroll instantly to bottom to avoid sliding down from the top
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                                     proxy.scrollTo("bottom_anchor", anchor: .bottom)
-                                } else {
-                                    // Subsequent updates / new messages: Scroll with a smooth spring animation
+                                }
+                                return
+                            }
+                            
+                            if let lastMsg = newMessages.last {
+                                let wasMyMessage = lastMsg.sender_id == auth.currentUser?.id
+                                
+                                // If my message transitioned from pending to sent, skip scrolling to avoid double-scroll jitter!
+                                if wasMyMessage {
+                                    return
+                                }
+                                
+                                // Scroll smoothly for incoming partner messages
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                         proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                     }
                                 }
-                            }
-                            if let lastMsg = newMessages.last {
-                                if !oldMessages.isEmpty && lastMsg.sender_id == auth.partner?.id {
-                                    AudioServicesPlaySystemSound(1103)
-                                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                                }
+                                
+                                AudioServicesPlaySystemSound(1103)
+                                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                             }
                         }
                         .onChange(of: pendingMessages) { _, _ in
@@ -1099,70 +1108,98 @@ struct ChatView: View {
                             }
                             .buttonStyle(PlainButtonStyle())
                         } else {
-                            VStack(alignment: .trailing, spacing: 4) {
-                                if let reply = msg.replyInfo {
-                                    Button {
-                                        if let proxy = scrollProxy {
-                                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                            withAnimation(.easeInOut(duration: 0.45)) {
-                                                proxy.scrollTo(reply.parentId, anchor: .center)
+                            let displayText = msg.replyInfo?.actualMessage ?? msg.message
+                            let isShort = displayText.count < 35 && !displayText.contains("\n") && msg.replyInfo == nil
+                            
+                            Group {
+                                if isShort {
+                                    HStack(alignment: .bottom, spacing: 8) {
+                                        Text(displayText)
+                                            .font(.system(size: 12.5))
+                                            .foregroundColor(.white)
+                                            .multilineTextAlignment(.leading)
+                                        
+                                        HStack(spacing: 3) {
+                                            if !timeStr.isEmpty {
+                                                Text(timeStr)
+                                                    .font(.system(size: 8.0, weight: .medium))
+                                                    .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                                            }
+                                            
+                                            if isPending {
+                                                Image(systemName: "clock")
+                                                    .font(.system(size: 8.0))
+                                                    .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
                                             }
                                         }
-                                    } label: {
-                                        // WhatsApp Style Reply Card within the Bubble
-                                        VStack(alignment: .leading, spacing: 3) {
-                                            Text(reply.senderName)
-                                                .font(.system(size: 11, weight: .bold))
-                                                .foregroundColor(.activeCyan)
-                                            Text(reply.parentMessage)
-                                                .font(.system(size: 11))
-                                                .foregroundColor(.white.opacity(0.65))
-                                                .lineLimit(2)
-                                                .multilineTextAlignment(.leading)
-                                        }
-                                        .padding(.vertical, 5)
-                                        .padding(.horizontal, 8)
-                                        .background(Color.white.opacity(0.06))
-                                        .cornerRadius(6)
-                                        .overlay(
-                                            HStack {
-                                                Rectangle()
-                                                    .fill(Color.activeCyan)
-                                                    .frame(width: 3)
-                                                Spacer()
+                                        .padding(.bottom, 0.5)
+                                    }
+                                } else {
+                                    VStack(alignment: .trailing, spacing: 4) {
+                                        if let reply = msg.replyInfo {
+                                            Button {
+                                                if let proxy = scrollProxy {
+                                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                                    withAnimation(.easeInOut(duration: 0.45)) {
+                                                        proxy.scrollTo(reply.parentId, anchor: .center)
+                                                    }
+                                                }
+                                            } label: {
+                                                // WhatsApp Style Reply Card within the Bubble
+                                                VStack(alignment: .leading, spacing: 3) {
+                                                    Text(reply.senderName)
+                                                        .font(.system(size: 11, weight: .bold))
+                                                        .foregroundColor(.activeCyan)
+                                                    Text(reply.parentMessage)
+                                                        .font(.system(size: 11))
+                                                        .foregroundColor(.white.opacity(0.65))
+                                                        .lineLimit(2)
+                                                        .multilineTextAlignment(.leading)
+                                                }
+                                                .padding(.vertical, 5)
+                                                .padding(.horizontal, 8)
+                                                .background(Color.white.opacity(0.06))
+                                                .cornerRadius(6)
+                                                .overlay(
+                                                    HStack {
+                                                        Rectangle()
+                                                            .fill(Color.activeCyan)
+                                                            .frame(width: 3)
+                                                        Spacer()
+                                                    }
+                                                )
+                                                .padding(.bottom, 2)
                                             }
-                                        )
-                                        .padding(.bottom, 2)
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                }
-                                
-                                let displayText = msg.replyInfo?.actualMessage ?? msg.message
-                                Text(displayText)
-                                    .font(.system(size: 12.5))
-                                    .foregroundColor(.white)
-                                    .multilineTextAlignment(.leading)
-                                
-                                HStack(spacing: 3) {
-                                    if !timeStr.isEmpty {
-                                        Text(timeStr)
-                                            .font(.system(size: 8.0, weight: .medium))
-                                            .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
-                                    }
-                                    
-                                    if isPending {
-                                        Image(systemName: "clock")
-                                            .font(.system(size: 8.0))
-                                            .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                                            .buttonStyle(PlainButtonStyle())
+                                        }
+                                        
+                                        Text(displayText)
+                                            .font(.system(size: 12.5))
+                                            .foregroundColor(.white)
+                                            .multilineTextAlignment(.leading)
+                                        
+                                        HStack(spacing: 3) {
+                                            if !timeStr.isEmpty {
+                                                Text(timeStr)
+                                                    .font(.system(size: 8.0, weight: .medium))
+                                                    .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                                            }
+                                            
+                                            if isPending {
+                                                Image(systemName: "clock")
+                                                    .font(.system(size: 8.0))
+                                                    .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                                            }
+                                        }
                                     }
                                 }
                             }
                             .padding(.horizontal, 9)
                             .padding(.vertical, 5.5)
                             .background(bubbleBackground(isMe: isMe))
-                            .clipShape(RoundedCorner(radius: 15, corners: corners))
+                            .clipShape(RoundedCorner(radius: 12, corners: corners))
                             .overlay(
-                                RoundedCorner(radius: 15, corners: corners)
+                                RoundedCorner(radius: 12, corners: corners)
                                     .stroke(isMe ? Color.activeCyan.opacity(0.35) : Color.white.opacity(0.05), lineWidth: 1)
                             )
                             .shadow(color: isMe ? Color.activeCyan.opacity(0.1) : Color.clear, radius: 4, y: 2)
