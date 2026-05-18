@@ -2,37 +2,39 @@
 
 namespace App\Events;
 
-use App\Models\Message;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class MessageSent implements ShouldBroadcast
+class ChatRoomUpdated implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    public $message;
+    public $coupleId;
+    public $roomId;
+    public $newName;
 
-    public function __construct(Message $message)
+    public function __construct($coupleId, $roomId, $newName)
     {
-        $this->message = $message;
+        $this->coupleId = $coupleId;
+        $this->roomId = $roomId;
+        $this->newName = $newName;
     }
 
     public function broadcastOn(): array
     {
         return [
-            new Channel('couple.' . $this->message->couple_id),
+            new Channel('couple.' . $this->coupleId),
         ];
     }
 
     public function broadcastWith(): array
     {
-        $protobufBinary = \App\Helpers\GlimpseProtobuf::encodeMessage($this->message);
         return [
-            'message' => $this->message,
-            'pb' => base64_encode($protobufBinary)
+            'room_id' => $this->roomId,
+            'name' => $this->newName
         ];
     }
 }

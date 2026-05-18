@@ -1255,31 +1255,50 @@ class AuthManager {
                 print("💬 New message broadcast received!")
                 if let eventDataString = pusherEvent.data,
                    let eventData = eventDataString.data(using: .utf8) {
-                    struct MessagePayload: Codable {
-                        let message: ChatMessage
+                    
+                    var decodedMessage: ChatMessage? = nil
+                    
+                    // 1. High-Performance Protocol Buffers decoding attempt
+                    struct ProtobufPayload: Codable {
+                        let pb: String?
                     }
-                    if let payload = try? JSONDecoder().decode(MessagePayload.self, from: eventData) {
+                    if let pbPayload = try? JSONDecoder().decode(ProtobufPayload.self, from: eventData),
+                       let pbString = pbPayload.pb,
+                       let pbMessage = ChatMessage.decodeProtobuf(from: pbString) {
+                        decodedMessage = pbMessage
+                        print("⚡️ Decoded message instantly using High-Speed Protobuf binary!")
+                    } else {
+                        // 2. Safe JSON Decoder fallback
+                        struct MessagePayload: Codable {
+                            let message: ChatMessage
+                        }
+                        if let jsonPayload = try? JSONDecoder().decode(MessagePayload.self, from: eventData) {
+                            decodedMessage = jsonPayload.message
+                        }
+                    }
+                    
+                    if let finalMsg = decodedMessage {
                         DispatchQueue.main.async {
-                            if !self.latestFetchedMessages.contains(where: { $0.id == payload.message.id }) {
-                                self.latestFetchedMessages.append(payload.message)
+                            if !self.latestFetchedMessages.contains(where: { $0.id == finalMsg.id }) {
+                                self.latestFetchedMessages.append(finalMsg)
                                 // Refresh the chat rooms list in the background to automatically sync unread counts
                                 Task {
                                     _ = try? await self.fetchChatRooms()
                                 }
                                 
                                 self.saveMessagesCache()
-                                NotificationCenter.default.post(name: Notification.Name("GlimpseChatMessageReceived"), object: payload.message)
+                                NotificationCenter.default.post(name: Notification.Name("GlimpseChatMessageReceived"), object: finalMsg)
                                 
-                                if self.selectedTab == 3 && self.activeRoomId == payload.message.room_id {
+                                if self.selectedTab == 3 && self.activeRoomId == finalMsg.room_id {
                                     Task {
-                                        await self.markMessagesAsRead(messageId: payload.message.id)
+                                        await self.markMessagesAsRead(messageId: finalMsg.id)
                                         // Refresh after marking read
                                         _ = try? await self.fetchChatRooms()
                                     }
                                 }
                                 
                                 // Global sound & haptic alert for incoming messages from partner!
-                                if payload.message.sender_id != self.currentUser?.id {
+                                if finalMsg.sender_id != self.currentUser?.id {
                                     AudioServicesPlaySystemSound(1103) // Soft ting
                                     UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                                 }
