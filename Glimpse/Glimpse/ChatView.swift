@@ -311,7 +311,7 @@ struct ChatView: View {
                                     )
                             }
                             .padding(.horizontal, 16)
-                            .frame(maxWidth: .infinity, minHeight: 600)
+                            .frame(maxWidth: .infinity)
                         }
                         .safeAreaInset(edge: .bottom) {
                             bottomInputInsetView
@@ -797,6 +797,7 @@ struct ChatView: View {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                         selectedRoom = nil
                     }
+                    self.messages = [] // Instantly clear messages on exit
                     loadChatRooms()
                 } label: {
                     Image(systemName: "chevron.left")
