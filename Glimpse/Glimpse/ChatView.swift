@@ -1314,12 +1314,23 @@ struct ChatView: View {
     
     private func loadMessages() {
         guard auth.partner != nil && auth.coupleActive else { return }
-        if !auth.latestFetchedMessages.isEmpty {
+        
+        let roomId = selectedRoom?.id
+        
+        // 1. Instant Stale-While-Revalidate from local cache
+        if let cached = messagesCache[roomId ?? 0] {
+            self.messages = cached
+        } else if roomId == nil && !auth.latestFetchedMessages.isEmpty {
             self.messages = auth.latestFetchedMessages
+        } else {
+            self.messages = []
         }
+        
+        // 2. Fetch fresh messages from server specifically for this room
         Task { @MainActor in
-            if let msgs = try? await auth.fetchMessages() {
+            if let msgs = try? await auth.fetchMessages(roomId: roomId) {
                 self.messages = msgs
+                self.messagesCache[roomId ?? 0] = msgs
             }
         }
     }
@@ -1728,9 +1739,8 @@ struct ChatView: View {
         let isCurrentRoom = isSameRoom || (isMainRoom && newMsg.room_id == nil)
         
         let currentUserId = auth.currentUser?.id ?? 0
-        let partnerId = auth.partner?.id ?? 0
         let isMyMessage = newMsg.sender_id == currentUserId
-        let isPartnerMessage = newMsg.sender_id == partnerId
+        let isPartnerMessage = !isMyMessage
         
         if isCurrentRoom {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
@@ -1743,21 +1753,42 @@ struct ChatView: View {
                             break
                         }
                     }
-                    if foundTemp {
-                        return
+                    if !foundTemp {
+                        var alreadyExists = false
+                        for m in self.messages {
+                            if m.id == newMsg.id {
+                                alreadyExists = true
+                                break
+                            }
+                        }
+                        if !alreadyExists {
+                            self.messages.append(newMsg)
+                        }
+                    }
+                } else {
+                    var alreadyExists = false
+                    for m in self.messages {
+                        if m.id == newMsg.id {
+                            alreadyExists = true
+                            break
+                        }
+                    }
+                    if !alreadyExists {
+                        self.messages.append(newMsg)
                     }
                 }
-                
-                var alreadyExists = false
-                for m in self.messages {
-                    if m.id == newMsg.id {
-                        alreadyExists = true
-                        break
-                    }
-                }
-                if !alreadyExists {
-                    self.messages.append(newMsg)
-                }
+            }
+            
+            // Sync local cache instantly for the active room
+            let activeRoomKey = selectedRoom?.id ?? 0
+            self.messagesCache[activeRoomKey] = self.messages
+        } else {
+            // Even if the room is NOT active, append the new message to its cached array so it's ready when the user opens it!
+            let targetRoomKey = newMsg.room_id ?? 0
+            var cachedArray = self.messagesCache[targetRoomKey] ?? []
+            if !cachedArray.contains(where: { $0.id == newMsg.id }) {
+                cachedArray.append(newMsg)
+                self.messagesCache[targetRoomKey] = cachedArray
             }
         }
         
