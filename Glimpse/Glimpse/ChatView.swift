@@ -342,6 +342,17 @@ struct ChatView: View {
             chatHeader(partner: partner, room: room)
                 .zIndex(10)
         }
+        .highPriorityGesture(
+            DragGesture(minimumDistance: 10, coordinateSpace: .local)
+                .onEnded { value in
+                    if value.startLocation.x < 45 && value.translation.width > 80 {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            selectedRoom = nil
+                        }
+                    }
+                }
+        )
     }
     
     @ViewBuilder
