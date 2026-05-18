@@ -202,217 +202,223 @@ struct ChatView: View {
     // --- 💬 ACTIVE CHAT ROOM SCREEN (Type-safety separated) ---
     @ViewBuilder
     private func activeChatRoomView(partner: GlimpseUser, room: GlimpseChatRoom) -> some View {
-        ZStack(alignment: .top) {
-            // Solid Velvet Background to cover the list behind it completely
-            ZStack {
-                Color.deepVelvet.ignoresSafeArea()
-                iOS26Background().opacity(0.4)
-            }
-            .ignoresSafeArea()
-            .ignoresSafeArea(.keyboard)
-            
-            ScrollViewReader { proxy in
-                ZStack(alignment: .bottomTrailing) {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            Spacer().frame(height: isSearchingChat ? 165 : 110)
-                            
-                            ForEach(Array(filteredMessages.enumerated()), id: \.element.id) { index, msg in
-                                VStack(spacing: 12) {
-                                    if shouldShowDateHeader(for: index) {
-                                        dateHeaderBadge(for: msg)
+        ZStack(alignment: .leading) {
+            // Main Chat Room Content
+            ZStack(alignment: .top) {
+                // Solid Velvet Background to cover the list behind it completely
+                ZStack {
+                    Color.deepVelvet.ignoresSafeArea()
+                    iOS26Background().opacity(0.4)
+                }
+                .ignoresSafeArea()
+                .ignoresSafeArea(.keyboard)
+                
+                ScrollViewReader { proxy in
+                    ZStack(alignment: .bottomTrailing) {
+                        ScrollView {
+                            LazyVStack(spacing: 12) {
+                                Spacer().frame(height: isSearchingChat ? 165 : 110)
+                                
+                                ForEach(Array(filteredMessages.enumerated()), id: \.element.id) { index, msg in
+                                    VStack(spacing: 12) {
+                                        if shouldShowDateHeader(for: index) {
+                                            dateHeaderBadge(for: msg)
+                                        }
+                                        
+                                        if msg.id == firstUnreadMessageId {
+                                            unreadMessagesDivider()
+                                        }
+                                        
+                                        chatBubble(msg: msg, scrollProxy: proxy)
+                                            .transition(.asymmetric(
+                                                insertion: .scale(scale: 0.8, anchor: msg.sender_id == auth.currentUser?.id ? .bottomTrailing : .bottomLeading)
+                                                    .combined(with: .opacity),
+                                                removal: .opacity
+                                            ))
                                     }
-                                    
-                                    if msg.id == firstUnreadMessageId {
-                                        unreadMessagesDivider()
+                                }
+                                
+                                if !searchQuery.isEmpty && filteredMessages.isEmpty {
+                                    VStack(spacing: 12) {
+                                        Image(systemName: "magnifyingglass.circle.fill")
+                                            .font(.system(size: 44))
+                                            .foregroundColor(.white.opacity(0.25))
+                                        Text("No results for \"\(searchQuery)\"")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(.white.opacity(0.5))
                                     }
-                                    
-                                    chatBubble(msg: msg, scrollProxy: proxy)
-                                        .transition(.asymmetric(
-                                            insertion: .scale(scale: 0.8, anchor: msg.sender_id == auth.currentUser?.id ? .bottomTrailing : .bottomLeading)
-                                                .combined(with: .opacity),
-                                            removal: .opacity
-                                        ))
+                                    .padding(.vertical, 40)
+                                    .frame(maxWidth: .infinity)
                                 }
-                            }
-                            
-                            if !searchQuery.isEmpty && filteredMessages.isEmpty {
-                                VStack(spacing: 12) {
-                                    Image(systemName: "magnifyingglass.circle.fill")
-                                        .font(.system(size: 44))
-                                        .foregroundColor(.white.opacity(0.25))
-                                    Text("No results for \"\(searchQuery)\"")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.5))
-                                }
-                                .padding(.vertical, 40)
-                                .frame(maxWidth: .infinity)
-                            }
-                            
-                            if auth.isPartnerTyping {
-                                HStack {
-                                    TypingIndicatorView()
-                                    Spacer()
-                                }
-                                .padding(.leading, 4)
-                                .padding(.top, 4)
-                            }
-                            
-                            if !pendingMessages.isEmpty {
-                                VStack(spacing: 12) {
+                                
+                                if auth.isPartnerTyping {
                                     HStack {
-                                        Rectangle()
-                                            .fill(LinearGradient(colors: [.clear, .electricPurple.opacity(0.3)], startPoint: .leading, endPoint: .trailing))
-                                            .frame(height: 1)
-                                        Text("Sending...")
-                                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                                            .foregroundColor(.electricPurple.opacity(0.8))
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 4)
-                                            .background(.ultraThinMaterial)
-                                            .cornerRadius(10)
-                                        Rectangle()
-                                            .fill(LinearGradient(colors: [.electricPurple.opacity(0.3), .clear], startPoint: .leading, endPoint: .trailing))
-                                            .frame(height: 1)
+                                        TypingIndicatorView()
+                                        Spacer()
                                     }
-                                    .padding(.vertical, 8)
-                                    
-                                    ForEach(pendingMessages) { msg in
-                                        chatBubble(msg: msg, isPending: true)
+                                    .padding(.leading, 4)
+                                    .padding(.top, 4)
+                                }
+                                
+                                if !pendingMessages.isEmpty {
+                                    VStack(spacing: 12) {
+                                        HStack {
+                                            Rectangle()
+                                                .fill(LinearGradient(colors: [.clear, .electricPurple.opacity(0.3)], startPoint: .leading, endPoint: .trailing))
+                                                .frame(height: 1)
+                                            Text("Sending...")
+                                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                                .foregroundColor(.electricPurple.opacity(0.8))
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 4)
+                                                .background(.ultraThinMaterial)
+                                                .cornerRadius(10)
+                                            Rectangle()
+                                                .fill(LinearGradient(colors: [.electricPurple.opacity(0.3), .clear], startPoint: .leading, endPoint: .trailing))
+                                                .frame(height: 1)
+                                        }
+                                        .padding(.vertical, 8)
+                                        
+                                        ForEach(pendingMessages) { msg in
+                                            chatBubble(msg: msg, isPending: true)
+                                        }
                                     }
                                 }
-                            }
-                            
-                            Spacer().frame(height: 15)
-                            
-                            Color.clear
-                                .frame(height: 1)
-                                .id("bottom_anchor")
-                                .background(
-                                    GeometryReader { geo in
-                                        let frame = geo.frame(in: .global)
-                                        Color.clear
-                                            .onChange(of: frame.minY) { _, newValue in
-                                                let screenHeight = UIScreen.main.bounds.height
-                                                let isOff = newValue > screenHeight + 120
-                                                if isShowingScrollToBottomButton != isOff {
-                                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                                                        isShowingScrollToBottomButton = isOff
+                                
+                                Spacer().frame(height: 15)
+                                
+                                Color.clear
+                                    .frame(height: 1)
+                                    .id("bottom_anchor")
+                                    .background(
+                                        GeometryReader { geo in
+                                            let frame = geo.frame(in: .global)
+                                            Color.clear
+                                                .onChange(of: frame.minY) { _, newValue in
+                                                    let screenHeight = UIScreen.main.bounds.height
+                                                    let isOff = newValue > screenHeight + 120
+                                                    if isShowingScrollToBottomButton != isOff {
+                                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                                            isShowingScrollToBottomButton = isOff
+                                                        }
                                                     }
                                                 }
-                                            }
-                                    }
-                                )
+                                        }
+                                    )
+                            }
+                            .padding(.horizontal, 16)
+                            .frame(maxWidth: .infinity, minHeight: 600)
                         }
-                        .padding(.horizontal, 16)
-                        .frame(maxWidth: .infinity, minHeight: 600)
-                    }
-                    .safeAreaInset(edge: .bottom) {
-                        bottomInputInsetView
-                    }
-                    .onChange(of: messages) { oldMessages, newMessages in
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
-                                proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                        .safeAreaInset(edge: .bottom) {
+                            bottomInputInsetView
+                        }
+                        .onChange(of: messages) { oldMessages, newMessages in
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                                    proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                }
+                            }
+                            if let lastMsg = newMessages.last {
+                                if !oldMessages.isEmpty && lastMsg.sender_id == auth.partner?.id {
+                                    AudioServicesPlaySystemSound(1103)
+                                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                                }
                             }
                         }
-                        if let lastMsg = newMessages.last {
-                            if !oldMessages.isEmpty && lastMsg.sender_id == auth.partner?.id {
-                                AudioServicesPlaySystemSound(1103)
-                                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                            }
-                        }
-                    }
-                    .onChange(of: pendingMessages) { _, _ in
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
-                                proxy.scrollTo("bottom_anchor", anchor: .bottom)
-                            }
-                        }
-                    }
-                    .onChange(of: auth.isPartnerTyping) { _, isTyping in
-                        if isTyping {
+                        .onChange(of: pendingMessages) { _, _ in
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                 withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
                                     proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                 }
                             }
                         }
-                    }
-                    .onChange(of: isInputFocused) { _, isFocused in
-                        if isFocused {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-                                withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
-                                    proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                        .onChange(of: auth.isPartnerTyping) { _, isTyping in
+                            if isTyping {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                                        proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                    }
                                 }
                             }
-                            // If keyboard becomes active and there is already text, broadcast typing status
-                            if !messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                auth.sendTypingStatus(isTyping: true)
-                            }
-                        } else {
-                            // If keyboard is dismissed, stop typing status immediately
-                            auth.sendTypingStatus(isTyping: false)
                         }
-                    }
-                    
-                    if isShowingScrollToBottomButton {
-                        Button {
-                            if let lastMsg = messages.last {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                    proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                        .onChange(of: isInputFocused) { _, isFocused in
+                            if isFocused {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                                        proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                    }
                                 }
+                                if !messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    auth.sendTypingStatus(isTyping: true)
+                                }
+                            } else {
+                                auth.sendTypingStatus(isTyping: false)
                             }
-                        } label: {
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.white)
-                                .padding(12)
-                                .background(
-                                    Circle()
-                                        .fill(Color.activeCyan)
-                                        .shadow(color: .activeCyan.opacity(0.6), radius: 8, x: 0, y: 4)
-                                )
                         }
-                        .padding(.trailing, 20)
-                        .padding(.bottom, 90)
+                        
+                        if isShowingScrollToBottomButton {
+                            Button {
+                                if let lastMsg = messages.last {
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                        proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(12)
+                                    .background(
+                                        Circle()
+                                            .fill(Color.activeCyan)
+                                            .shadow(color: .activeCyan.opacity(0.6), radius: 8, x: 0, y: 4)
+                                    )
+                            }
+                            .padding(.trailing, 20)
+                            .padding(.bottom, 90)
+                        }
                     }
                 }
+                chatHeader(partner: partner, room: room)
+                    .zIndex(10)
             }
-            chatHeader(partner: partner, room: room)
-                .zIndex(10)
+            
+            // Transparent Left-Edge Swipe Back Interception Zone (width: 42)
+            Color.clear
+                .frame(width: 42)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 8, coordinateSpace: .global)
+                        .onChanged { value in
+                            guard value.startLocation.x < 50 else { return }
+                            guard value.translation.width > 0 else { return }
+                            dragOffset = value.translation.width
+                        }
+                        .onEnded { value in
+                            guard value.startLocation.x < 50 else { return }
+                            let screenWidth = UIScreen.main.bounds.width
+                            if value.translation.width > 105 {
+                                // Dismiss smoothly
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                                    dragOffset = screenWidth
+                                }
+                                // Re-assign selectedRoom to nil after transition finishes
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+                                    selectedRoom = nil
+                                    dragOffset = 0
+                                    messages = [] // Clear messages completely
+                                }
+                            } else {
+                                // Snap back to zero
+                                withAnimation(.spring(response: 0.25, dampingFraction: 0.78)) {
+                                    dragOffset = 0
+                                }
+                            }
+                        }
+                )
         }
         .offset(x: dragOffset)
-        .highPriorityGesture(
-            DragGesture(minimumDistance: 5, coordinateSpace: .local)
-                .onChanged { value in
-                    if value.startLocation.x < 45 {
-                        dragOffset = max(0, value.translation.width)
-                    }
-                }
-                .onEnded { value in
-                    if value.startLocation.x < 45 {
-                        let screenWidth = UIScreen.main.bounds.width
-                        if value.translation.width > 110 {
-                            // Dismiss smoothly
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
-                                dragOffset = screenWidth
-                            }
-                            // Re-assign selectedRoom to nil after transition finishes
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
-                                selectedRoom = nil
-                                dragOffset = 0
-                            }
-                        } else {
-                            // Snap back to zero
-                            withAnimation(.spring(response: 0.25, dampingFraction: 0.78)) {
-                                dragOffset = 0
-                            }
-                        }
-                    }
-                }
-        )
     }
     
     @ViewBuilder
@@ -1262,6 +1268,9 @@ struct ChatView: View {
     
     private func loadMessagesForSelectedRoom() {
         guard let activeRoom = selectedRoom else { return }
+        // Instantly clear old messages to prevent bleed-through
+        self.messages = []
+        
         Task { @MainActor in
             do {
                 let msgs = try await auth.fetchMessages(roomId: activeRoom.id)
