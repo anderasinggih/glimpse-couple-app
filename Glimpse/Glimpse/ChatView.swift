@@ -457,6 +457,7 @@ struct ChatView: View {
                     ForEach(sortedChatRooms) { room in
                         Button {
                             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            self.messages = [] // Instantly clear messages on room change
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                 selectedRoom = room
                             }
@@ -1268,8 +1269,6 @@ struct ChatView: View {
     
     private func loadMessagesForSelectedRoom() {
         guard let activeRoom = selectedRoom else { return }
-        // Instantly clear old messages to prevent bleed-through
-        self.messages = []
         
         Task { @MainActor in
             do {
