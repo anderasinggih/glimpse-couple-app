@@ -287,6 +287,13 @@ struct ChatView: View {
                                     proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                 }
                             }
+                            // If keyboard becomes active and there is already text, broadcast typing status
+                            if !messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                auth.sendTypingStatus(isTyping: true)
+                            }
+                        } else {
+                            // If keyboard is dismissed, stop typing status immediately
+                            auth.sendTypingStatus(isTyping: false)
                         }
                     }
                     
@@ -1273,6 +1280,8 @@ struct ChatView: View {
     private func handleMessageInputChanged(oldValue: String, newValue: String) {
         let cleanNew = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanOld = oldValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        guard isInputFocused else { return }
         
         if !cleanNew.isEmpty && cleanOld.isEmpty {
             auth.sendTypingStatus(isTyping: true)
