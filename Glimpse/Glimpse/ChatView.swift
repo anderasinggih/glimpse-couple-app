@@ -179,6 +179,14 @@ struct ChatView: View {
     @ViewBuilder
     private func activeChatRoomView(partner: GlimpseUser, room: GlimpseChatRoom) -> some View {
         ZStack(alignment: .top) {
+            // Solid Velvet Background to cover the list behind it completely
+            ZStack {
+                Color.deepVelvet.ignoresSafeArea()
+                iOS26Background().opacity(0.4)
+            }
+            .ignoresSafeArea()
+            .ignoresSafeArea(.keyboard)
+            
             ScrollViewReader { proxy in
                 ZStack(alignment: .bottomTrailing) {
                     ScrollView {
