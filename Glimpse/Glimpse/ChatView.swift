@@ -228,6 +228,7 @@ struct ChatView: View {
                             
                             Color.clear
                                 .frame(height: 1)
+                                .id("bottom_anchor")
                                 .background(
                                     GeometryReader { geo in
                                         let frame = geo.frame(in: .global)
@@ -251,25 +252,39 @@ struct ChatView: View {
                         bottomInputInsetView
                     }
                     .onChange(of: messages) { oldMessages, newMessages in
-                        if let lastMsg = newMessages.last {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                    proxy.scrollTo(lastMsg.id, anchor: .bottom)
-                                }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                                proxy.scrollTo("bottom_anchor", anchor: .bottom)
                             }
+                        }
+                        if let lastMsg = newMessages.last {
                             if !oldMessages.isEmpty && lastMsg.sender_id == auth.partner?.id {
                                 AudioServicesPlaySystemSound(1103)
                                 UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                             }
                         }
                     }
+                    .onChange(of: pendingMessages) { _, _ in
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                                proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                            }
+                        }
+                    }
+                    .onChange(of: auth.isPartnerTyping) { _, isTyping in
+                        if isTyping {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                                    proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                }
+                            }
+                        }
+                    }
                     .onChange(of: isInputFocused) { _, isFocused in
                         if isFocused {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                                if let lastMsg = messages.last {
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                                        proxy.scrollTo(lastMsg.id, anchor: .bottom)
-                                    }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                                withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                                    proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                 }
                             }
                         }
