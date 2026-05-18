@@ -325,31 +325,37 @@ struct ChatView: View {
         }
     }
     
-    // --- 🗂️ CHAT ROOMS LIST SCREEN (Type-safety separated) ---
     @ViewBuilder
     private func chatRoomsListView(partner: GlimpseUser) -> some View {
-        VStack(spacing: 0) {
-            roomsListHeader(partner: partner)
-                .zIndex(10)
-            
+        ZStack(alignment: .top) {
             if isLoadingRooms {
-                Spacer()
-                ProgressView()
-                    .tint(.activeCyan)
-                Spacer()
-            } else if chatRooms.isEmpty {
-                Spacer()
-                VStack(spacing: 12) {
-                    Image(systemName: "bubble.left.and.bubble.right.fill")
-                        .font(.system(size: 48))
-                        .foregroundColor(.white.opacity(0.2))
-                    Text("No chat rooms yet")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.4))
+                VStack {
+                    Spacer()
+                    ProgressView()
+                        .tint(.activeCyan)
+                    Spacer()
                 }
-                Spacer()
+            } else if chatRooms.isEmpty {
+                VStack {
+                    Spacer()
+                    VStack(spacing: 12) {
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
+                            .font(.system(size: 48))
+                            .foregroundColor(.white.opacity(0.2))
+                        Text("No chat rooms yet")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+                    Spacer()
+                }
             } else {
                 List {
+                    // Transparent Spacer to clear the blurred header
+                    Color.clear
+                        .frame(height: 110)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    
                     ForEach(chatRooms) { room in
                         roomRow(room)
                             .listRowBackground(Color.clear)
@@ -379,8 +385,10 @@ struct ChatView: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .background(Color.clear)
-                .padding(.top, 8)
             }
+            
+            roomsListHeader(partner: partner)
+                .zIndex(10)
         }
     }
     
@@ -439,7 +447,6 @@ struct ChatView: View {
         )
     }
     
-    // --- 🗂️ ROOMS LIST HEADER ---
     private func roomsListHeader(partner: GlimpseUser) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 14) {
@@ -454,17 +461,45 @@ struct ChatView: View {
                 .overlay(Circle().stroke(Color.activeCyan.opacity(0.3), lineWidth: 1.5))
                 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Chat Rooms")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.white)
-                    
-                    HStack(spacing: 5) {
+                    HStack(spacing: 6) {
+                        Text(partner.name)
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                        
                         Circle()
                             .fill(partner.isOffline ? Color.gray : Color.green)
                             .frame(width: 6, height: 6)
+                    }
+                    
+                    HStack(spacing: 6) {
                         Text(partner.isOffline ? "Offline" : "Online")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(.white.opacity(0.55))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.white.opacity(0.5))
+                        
+                        Text("•")
+                            .font(.system(size: 10))
+                            .foregroundColor(.white.opacity(0.3))
+                        
+                        HStack(spacing: 2) {
+                            Image(systemName: "mappin.and.ellipse")
+                                .font(.system(size: 9))
+                            Text(partner.location_name ?? "Unknown")
+                                .font(.system(size: 10))
+                                .lineLimit(1)
+                        }
+                        .foregroundColor(.activeCyan.opacity(0.8))
+                        
+                        Text("•")
+                            .font(.system(size: 10))
+                            .foregroundColor(.white.opacity(0.3))
+                        
+                        HStack(spacing: 2) {
+                            Image(systemName: partner.is_charging == true ? "battery.100.bolt" : "battery.75")
+                                .font(.system(size: 10))
+                            Text("\(partner.battery_level ?? 100)%")
+                                .font(.system(size: 10))
+                        }
+                        .foregroundColor(.white.opacity(0.6))
                     }
                 }
                 
@@ -492,6 +527,12 @@ struct ChatView: View {
                 .background(.ultraThinMaterial)
         )
         .ignoresSafeArea(edges: .top)
+        .overlay(
+            VStack {
+                Spacer()
+                Divider().background(Color.white.opacity(0.08))
+            }
+        )
     }
     
     // --- 🏷️ ROOM ROW COMPONENT (WhatsApp style row) ---
@@ -565,7 +606,6 @@ struct ChatView: View {
         )
     }
     
-    // --- 💬 ACTIVE ROOM HEADER WITH BACK BUTTON ---
     private func chatHeader(partner: GlimpseUser, room: GlimpseChatRoom) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
@@ -595,18 +635,46 @@ struct ChatView: View {
                 .overlay(Circle().stroke(Color.activeCyan.opacity(0.3), lineWidth: 1))
                 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(room.name)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                    
-                    HStack(spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(room.is_main ? partner.name : "\(partner.name) (\(room.name))")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                        
                         Circle()
                             .fill(partner.isOffline ? Color.gray : Color.green)
                             .frame(width: 5, height: 5)
+                    }
+                    
+                    HStack(spacing: 6) {
                         Text(partner.isOffline ? "Offline" : "Online")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundColor(.white.opacity(0.5))
+                        
+                        Text("•")
+                            .font(.system(size: 10))
+                            .foregroundColor(.white.opacity(0.3))
+                        
+                        HStack(spacing: 2) {
+                            Image(systemName: "mappin.and.ellipse")
+                                .font(.system(size: 9))
+                            Text(partner.location_name ?? "Unknown")
+                                .font(.system(size: 10))
+                                .lineLimit(1)
+                        }
+                        .foregroundColor(.activeCyan.opacity(0.8))
+                        
+                        Text("•")
+                            .font(.system(size: 10))
+                            .foregroundColor(.white.opacity(0.3))
+                        
+                        HStack(spacing: 2) {
+                            Image(systemName: partner.is_charging == true ? "battery.100.bolt" : "battery.75")
+                                .font(.system(size: 10))
+                            Text("\(partner.battery_level ?? 100)%")
+                                .font(.system(size: 10))
+                        }
+                        .foregroundColor(.white.opacity(0.6))
                     }
                 }
                 
@@ -675,6 +743,12 @@ struct ChatView: View {
                 .background(.ultraThinMaterial)
         )
         .ignoresSafeArea(edges: .top)
+        .overlay(
+            VStack {
+                Spacer()
+                Divider().background(Color.white.opacity(0.08))
+            }
+        )
     }
     
     // FLOATING MESSAGE INPUT BAR (Fully floating, glassmorphic, separate rounded capsule and button)
