@@ -345,6 +345,7 @@ struct ChatView: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .background(Color.clear)
                 .padding(.top, 8)
             }
         }

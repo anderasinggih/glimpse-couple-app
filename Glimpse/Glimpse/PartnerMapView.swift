@@ -505,116 +505,94 @@ struct PartnerOverlayCard: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: isMinimal ? 4 : 12) {
-            if !isMinimal {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(user.name)
-                            .font(.system(size: 18, weight: .bold))
-                        
-                        HStack(spacing: 6) {
-                            if user.isOffline {
-                                Text("Offline")
-                                    .font(.caption)
-                                    .foregroundColor(.white.opacity(0.4))
-                                
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(user.name)
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    HStack(spacing: 6) {
+                        if user.isOffline {
+                            Text("Offline")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.4))
+                            
+                            Text("•")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.2))
+                            
+                            Text("Synced \(timeAgo(from: user.lastUpdatedDate))")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.5))
+                            
+                            if let dist = distanceText {
                                 Text("•")
                                     .font(.caption)
                                     .foregroundColor(.white.opacity(0.2))
                                 
-                                Text("Synced \(timeAgo(from: user.lastUpdatedDate))")
+                                Text(dist)
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.activeCyan.opacity(0.6))
+                            }
+                        } else {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 6, height: 6)
+                                Text("Live")
                                     .font(.caption)
-                                    .foregroundColor(.white.opacity(0.5))
+                                    .foregroundColor(.green)
+                            }
+                            
+                            if let dist = distanceText {
+                                Text("•")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.3))
                                 
-                                if let dist = distanceText {
-                                    Text("•")
-                                        .font(.caption)
-                                        .foregroundColor(.white.opacity(0.2))
-                                    
-                                    Text(dist)
-                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                        .foregroundColor(.activeCyan.opacity(0.6))
-                                }
-                            } else {
-                                HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(Color.green)
-                                        .frame(width: 6, height: 6)
-                                    Text("Live")
-                                        .font(.caption)
-                                        .foregroundColor(.green)
-                                }
-                                
-                                if let dist = distanceText {
-                                    Text("•")
-                                        .font(.caption)
-                                        .foregroundColor(.white.opacity(0.3))
-                                    
-                                    Text(dist)
-                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                        .foregroundColor(.activeCyan)
-                                }
+                                Text(dist)
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.activeCyan)
                             }
                         }
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
                     }
-                    
-                    Spacer()
-                    
-                    BatteryIndicator(level: user.battery_level ?? 0, isCharging: user.is_charging)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 }
                 
+                Spacer()
+                
+                BatteryIndicator(level: user.battery_level ?? 0, isCharging: user.is_charging)
+            }
+            
+            HStack(spacing: 8) {
+                Image(systemName: "mappin.and.ellipse")
+                    .foregroundColor(.activeCyan)
+                    .font(.system(size: 14))
+                
+                Text(user.location_name ?? (locationOverride ?? "Somewhere unknown..."))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white.opacity(0.85))
+                    .lineLimit(1)
+            }
+            .padding(.top, 2)
+            
+            if !isMe, let note = user.status_note, !note.isEmpty {
                 HStack(spacing: 8) {
-                    Image(systemName: "mappin.and.ellipse")
-                        .foregroundColor(.activeCyan)
+                    Image(systemName: "quote.bubble.fill")
+                        .foregroundColor(.electricPurple)
                         .font(.system(size: 14))
                     
-                    Text(user.location_name ?? (locationOverride ?? "Somewhere unknown..."))
-                        .font(.system(size: 14, weight: .medium))
+                    Text(note)
+                        .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.8))
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
-                .padding(.top, 4)
-                
-                if !isMe {
-                    HStack(spacing: 8) {
-                        Image(systemName: "quote.bubble.fill")
-                            .foregroundColor(.electricPurple)
-                            .font(.system(size: 14))
-                        
-                        Text(user.status_note ?? "No status yet")
-                            .font(.system(size: 14))
-                            .lineLimit(2)
-                    }
-                }
-            } else {
-                // MINIMAL MODE FOR PHOTO
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(timeAgo(from: user.lastUpdatedDate))
-                        .font(.system(size: 11, weight: .regular))
-                        .foregroundColor(.white.opacity(0.7))
-                    
-                    Text(user.location_name ?? (locationOverride ?? "Somewhere unknown..."))
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.white)
-                    
-                    if !isMe, let note = user.status_note, !note.isEmpty {
-                        Text(note)
-                            .font(.system(size: 13, weight: .regular))
-                            .foregroundColor(.white.opacity(0.9))
-                            .padding(.top, 2)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .shadow(color: .black.opacity(0.6), radius: 4, x: 0, y: 2)
             }
         }
-        .padding(isMinimal ? 0 : 16)
+        .padding(16)
         .background {
-            if !isMinimal {
-                Color.clear.liquidGlass()
-            }
+            Color.clear.liquidGlass()
         }
         .saturation(user.isOffline ? 0.5 : 1.0)
     }
