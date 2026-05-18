@@ -235,6 +235,20 @@
                                 <span id="ws-diag-latency" class="text-xs font-mono text-white/80">-</span>
                             </div>
                         </div>
+                        
+                        <!-- Live WebSocket Diagnostics Log Stream -->
+                        <div class="mt-2 border-t border-white/10 pt-4 flex flex-col space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-[10px] uppercase font-bold text-electricPurple tracking-wider flex items-center space-x-1">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-electricPurple animate-ping"></span>
+                                    <span>Live Broadcast Stream</span>
+                                </span>
+                                <button onclick="clearWSLogs()" class="text-[9px] text-white/40 hover:text-white transition-all underline">Clear Logs</button>
+                            </div>
+                            <div id="ws-log-stream" class="h-44 overflow-y-auto bg-slate-950/70 border border-white/5 rounded-xl p-2.5 font-mono text-[9px] space-y-1.5 scrollbar-thin">
+                                <div class="text-white/40 italic">Waiting for events...</div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Developer Logs -->
@@ -775,6 +789,17 @@
             // Render tables & grids
             renderUsersTable(data.users);
             renderCouplesGrid(data.couples);
+            
+            // Auto-subscribe to all active couples' channels on websocket to monitor broadcasts
+            if (data.couples && liveWS && liveWS.readyState === WebSocket.OPEN) {
+                data.couples.forEach(c => {
+                    liveWS.send(JSON.stringify({
+                        event: 'pusher:subscribe',
+                        data: { channel: `couple.${c.id}` }
+                    }));
+                });
+                document.getElementById('ws-diag-channels').innerText = `${data.couples.length} channels monitored`;
+            }
         }
 
         function populateSelects(data) {
@@ -1055,6 +1080,48 @@
         let liveWS = null;
         let wsPingInterval = null;
 
+        function logWSEvent(event, channel, data) {
+            const stream = document.getElementById('ws-log-stream');
+            if (!stream) return;
+            
+            if (stream.innerHTML.includes('Waiting for events...')) {
+                stream.innerHTML = '';
+            }
+            
+            const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const logItem = document.createElement('div');
+            logItem.className = 'border-b border-white/5 pb-1';
+            
+            let color = 'text-white/60';
+            if (event.includes('MessageSent')) color = 'text-activeCyan font-semibold';
+            else if (event.includes('PartnerStateUpdated')) color = 'text-emerald-400 font-semibold';
+            else if (event.includes('LoveBurstSent')) color = 'text-rose-400 font-semibold';
+            else if (event.includes('Typing')) color = 'text-amber-400 font-semibold';
+            else if (event.includes('established') || event.includes('subscription')) color = 'text-white/40';
+            
+            let dataStr = typeof data === 'object' ? JSON.stringify(data) : data;
+            if (dataStr.length > 120) {
+                dataStr = dataStr.substring(0, 120) + '...';
+            }
+            
+            logItem.innerHTML = `
+                <span class="text-white/30">[${time}]</span> 
+                <span class="${color}">${event}</span> 
+                <span class="text-electricPurple/70">(${channel || 'global'})</span>
+                <span class="block text-white/50 pl-4 break-all font-mono">${dataStr}</span>
+            `;
+            
+            stream.appendChild(logItem);
+            stream.scrollTop = stream.scrollHeight;
+        }
+
+        function clearWSLogs() {
+            const stream = document.getElementById('ws-log-stream');
+            if (stream) {
+                stream.innerHTML = '<div class="text-white/40 italic">Waiting for events...</div>';
+            }
+        }
+
         function startWebSocketDiagnostics() {
             if (liveWS) return;
 
@@ -1076,6 +1143,19 @@
                     document.getElementById('ws-diag-status').innerText = "Live Connected";
                     document.getElementById('ws-diag-status').className = "text-xs font-bold text-emerald-400";
                     
+                    logWSEvent('System: connection_established', '', { url: wsUrl });
+                    
+                    // Auto-subscribe to all loaded couples' channels
+                    if (appData.couples) {
+                        appData.couples.forEach(c => {
+                            liveWS.send(JSON.stringify({
+                                event: 'pusher:subscribe',
+                                data: { channel: `couple.${c.id}` }
+                            }));
+                        });
+                        document.getElementById('ws-diag-channels').innerText = `${appData.couples.length} channels monitored`;
+                    }
+                    
                     let pingStart = Date.now();
                     liveWS.send(JSON.stringify({ event: 'pusher:ping', data: {} }));
                     
@@ -1094,6 +1174,13 @@
                             document.getElementById('ws-diag-latency').innerText = `${latency} ms`;
                         } else if (payload.event === 'pusher:error') {
                             console.error("Pusher error details:", payload.data);
+                            logWSEvent('pusher:error', '', payload.data);
+                        } else {
+                            let eventData = payload.data;
+                            if (typeof eventData === 'string') {
+                                try { eventData = JSON.parse(eventData); } catch(e) {}
+                            }
+                            logWSEvent(payload.event, payload.channel, eventData);
                         }
                     };
                 };
