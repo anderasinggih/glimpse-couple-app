@@ -17,6 +17,7 @@ struct ChatView: View {
     @State private var roomToRename: GlimpseChatRoom? = nil
     @State private var renameRoomName = ""
     @State private var dragOffset: CGFloat = 0
+    @State private var pinnedRoomIds: Set<Int> = []
     
     @State private var messages: [ChatMessage] = []
     @State private var messageInput = ""
@@ -39,6 +40,25 @@ struct ChatView: View {
             return messages
         }
         return messages.filter { $0.message.localizedCaseInsensitiveContains(cleanQuery) }
+    }
+    
+    var sortedChatRooms: [GlimpseChatRoom] {
+        chatRooms.sorted { r1, r2 in
+            // 1. Main room is always first
+            if r1.is_main != r2.is_main {
+                return r1.is_main
+            }
+            // 2. Pinned rooms are next
+            let r1Pinned = pinnedRoomIds.contains(r1.id)
+            let r2Pinned = pinnedRoomIds.contains(r2.id)
+            if r1Pinned != r2Pinned {
+                return r1Pinned
+            }
+            // 3. Sort by latest message or creation time
+            let r1Time = r1.latest_message?.created_at ?? r1.created_at
+            let r2Time = r2.latest_message?.created_at ?? r2.created_at
+            return r1Time > r2Time
+        }
     }
     
     var body: some View {
@@ -87,6 +107,7 @@ struct ChatView: View {
             }
         }
         .onAppear {
+            pinnedRoomIds = Set(UserDefaults.standard.array(forKey: "glimpse_pinned_room_ids") as? [Int] ?? [])
             loadChatRooms()
             if selectedRoom != nil {
                 loadMessagesForSelectedRoom()
@@ -424,7 +445,7 @@ struct ChatView: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                     
-                    ForEach(chatRooms) { room in
+                    ForEach(sortedChatRooms) { room in
                         Button {
                             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -448,12 +469,20 @@ struct ChatView: View {
                                     Label("Rename", systemImage: "pencil")
                                 }
                                 .tint(.activeCyan)
+                                
+                                let isPinned = pinnedRoomIds.contains(room.id)
+                                Button {
+                                    togglePinRoom(room)
+                                } label: {
+                                    Label(isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash.fill" : "pin.fill")
+                                }
+                                .tint(.orange)
                             }
                         }
                     }
                     .onDelete { indexSet in
                         if let index = indexSet.first {
-                            let room = chatRooms[index]
+                            let room = sortedChatRooms[index]
                             if room.is_main {
                                 UINotificationFeedbackGenerator().notificationOccurred(.warning)
                                 return
@@ -660,6 +689,13 @@ struct ChatView: View {
                         }
                         
                         Spacer()
+                        
+                        if pinnedRoomIds.contains(room.id) {
+                            Image(systemName: "pin.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(.orange.opacity(0.85))
+                                .rotationEffect(.degrees(45))
+                        }
                         
                         if room.unread_count > 0 {
                             Text("\(room.unread_count)")
@@ -1169,6 +1205,18 @@ struct ChatView: View {
             } catch {
                 print("❌ Failed to rename room: \(error)")
             }
+        }
+    }
+    
+    private func togglePinRoom(_ room: GlimpseChatRoom) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            if pinnedRoomIds.contains(room.id) {
+                pinnedRoomIds.remove(room.id)
+            } else {
+                pinnedRoomIds.insert(room.id)
+            }
+            UserDefaults.standard.set(Array(pinnedRoomIds), forKey: "glimpse_pinned_room_ids")
         }
     }
     
