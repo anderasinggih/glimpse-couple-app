@@ -37,6 +37,7 @@ struct ChatView: View {
     @State private var showNoInternetAlert = false
     @State private var networkMonitor = NetworkMonitor.shared
     @State private var pendingMessages: [ChatMessage] = []
+    @State private var highlightedMessageId: Int? = nil
     
     var filteredMessages: [ChatMessage] {
         let cleanQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -293,10 +294,16 @@ struct ChatView: View {
                             .padding(.horizontal, 16)
                             .frame(maxWidth: .infinity)
                         }
+                        .onTapGesture {
+                            isInputFocused = false
+                        }
                         .defaultScrollAnchor(.bottom)
                         .onAppear {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                            // Multiple timed scroll anchors to guarantee bottom alignment during transition slides
+                            for delay in [0.05, 0.15, 0.30, 0.45] {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                                    proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                }
                             }
                         }
                         .safeAreaInset(edge: .bottom) {
@@ -330,10 +337,13 @@ struct ChatView: View {
                                 UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                             }
                         }
-                        .onChange(of: pendingMessages) { _, _ in
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
-                                    proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                        .onChange(of: pendingMessages) { oldPending, newPending in
+                            // Only scroll when a new pending message is added to avoid double scroll on removal
+                            if newPending.count > oldPending.count {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                                        proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                    }
                                 }
                             }
                         }
@@ -993,6 +1003,7 @@ struct ChatView: View {
     // WHATSAPP STYLE CHAT BUBBLES WITH INDIVIDUAL TIME STAMPS & SWIPE TO REPLY
     private func chatBubble(msg: ChatMessage, isPending: Bool = false, scrollProxy: ScrollViewProxy? = nil) -> some View {
         let isMe = msg.sender_id == auth.currentUser?.id
+        let isHighlighted = highlightedMessageId == msg.id
         let corners: UIRectCorner = isMe ? [.topLeft, .topRight, .bottomLeft] : [.topLeft, .topRight, .bottomRight]
         let timeStr = formatMessageTime(msg.created_at)
         let isSwiped = swipedMessageId == msg.id
@@ -1143,6 +1154,16 @@ struct ChatView: View {
                                                     withAnimation(.easeInOut(duration: 0.45)) {
                                                         proxy.scrollTo(reply.parentId, anchor: .center)
                                                     }
+                                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                        highlightedMessageId = reply.parentId
+                                                    }
+                                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                                                        withAnimation(.easeOut(duration: 0.5)) {
+                                                            if highlightedMessageId == reply.parentId {
+                                                                highlightedMessageId = nil
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             } label: {
                                                 // WhatsApp Style Reply Card within the Bubble
@@ -1196,13 +1217,14 @@ struct ChatView: View {
                             }
                             .padding(.horizontal, 9)
                             .padding(.vertical, 5.5)
-                            .background(bubbleBackground(isMe: isMe))
+                            .background(isHighlighted ? Color.activeCyan.opacity(0.35) : bubbleBackground(isMe: isMe))
                             .clipShape(RoundedCorner(radius: 12, corners: corners))
                             .overlay(
                                 RoundedCorner(radius: 12, corners: corners)
-                                    .stroke(isMe ? Color.activeCyan.opacity(0.35) : Color.white.opacity(0.05), lineWidth: 1)
+                                    .stroke(isHighlighted ? Color.activeCyan : (isMe ? Color.activeCyan.opacity(0.35) : Color.white.opacity(0.05)), lineWidth: isHighlighted ? 2.0 : 1.0)
                             )
-                            .shadow(color: isMe ? Color.activeCyan.opacity(0.1) : Color.clear, radius: 4, y: 2)
+                            .scaleEffect(isHighlighted ? 1.03 : 1.0)
+                            .shadow(color: isHighlighted ? Color.activeCyan.opacity(0.4) : (isMe ? Color.activeCyan.opacity(0.1) : Color.clear), radius: isHighlighted ? 8 : 4, y: 2)
                         }
                     }
                     .contentShape(Rectangle())
