@@ -1075,9 +1075,11 @@ struct ChatView: View {
         Task { @MainActor in
             if let newRoom = try? await auth.createChatRoom(name: name) {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    self.chatRooms.append(newRoom)
-                    auth.chatRooms = self.chatRooms
-                    auth.updateUnreadCount()
+                    if !self.chatRooms.contains(where: { $0.id == newRoom.id }) {
+                        self.chatRooms.append(newRoom)
+                        auth.chatRooms = self.chatRooms
+                        auth.updateUnreadCount()
+                    }
                 }
                 newRoomName = ""
             }
