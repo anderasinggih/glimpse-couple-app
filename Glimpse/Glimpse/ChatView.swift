@@ -1515,7 +1515,7 @@ struct ChatView: View {
         do {
             let sentMsg = try await auth.sendChatMessage(text: msg.message, roomId: selectedRoom?.id)
             
-            // Update the pending queue and messages list instantly without animation to avoid a flash
+            // Update the pending queue instantly
             var newPending: [ChatMessage] = []
             for p in self.pendingMessages {
                 if p.id != msg.id {
@@ -1524,15 +1524,19 @@ struct ChatView: View {
             }
             self.pendingMessages = newPending
             
-            var exists = false
-            for m in self.messages {
-                if m.id == sentMsg.id {
-                    exists = true
-                    break
-                }
+            // Sync local cache instantly to prevent sent messages from disappearing!
+            let roomIdKey = sentMsg.room_id ?? 0
+            var cachedArray = self.messagesCache[roomIdKey] ?? []
+            if !cachedArray.contains(where: { $0.id == sentMsg.id }) {
+                cachedArray.append(sentMsg)
+                self.messagesCache[roomIdKey] = cachedArray
             }
-            if !exists {
-                self.messages.append(sentMsg)
+            
+            // If the user is still viewing the room, update the active messages list
+            let isMainActive = selectedRoom?.is_main ?? false
+            let isSameRoomActive = selectedRoom?.id == roomIdKey
+            if isSameRoomActive || (isMainActive && roomIdKey == 0) {
+                self.messages = cachedArray
             }
         } catch {
             print("❌ Failed to send pending message: \(error)")
