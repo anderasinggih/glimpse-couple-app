@@ -132,22 +132,51 @@ struct ChatView: View {
                 let isSameRoom = selectedRoom?.id == newMsg.room_id
                 let isCurrentRoom = isSameRoom || (isMainRoom && newMsg.room_id == nil)
                 
+                let currentUserId = auth.currentUser?.id ?? 0
+                let partnerId = auth.partner?.id ?? 0
+                let isMyMessage = newMsg.sender_id == currentUserId
+                let isPartnerMessage = newMsg.sender_id == partnerId
+                
                 if isCurrentRoom {
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-                        if newMsg.sender_id == auth.currentUser?.id {
-                            if let tempIndex = self.messages.firstIndex(where: { $0.id < 0 }) {
-                                self.messages[tempIndex] = newMsg
+                        if isMyMessage {
+                            var foundTemp = false
+                            for i in 0..<self.messages.count {
+                                if self.messages[i].id < 0 {
+                                    self.messages[i] = newMsg
+                                    foundTemp = true
+                                    break
+                                }
+                            }
+                            if foundTemp {
                                 return
                             }
                         }
-                        if !self.messages.contains(where: { $0.id == newMsg.id }) {
-                             self.messages.append(newMsg)
+                        
+                        var alreadyExists = false
+                        for m in self.messages {
+                            if m.id == newMsg.id {
+                                alreadyExists = true
+                                break
+                            }
+                        }
+                        if !alreadyExists {
+                            self.messages.append(newMsg)
                         }
                     }
                 }
                 
                 // Update latest message in rooms list
-                if let index = chatRooms.firstIndex(where: { $0.id == newMsg.room_id || ($0.is_main && newMsg.room_id == nil) }) {
+                var targetIndex: Int? = nil
+                for i in 0..<chatRooms.count {
+                    let r = chatRooms[i]
+                    if r.id == newMsg.room_id || (r.is_main && newMsg.room_id == nil) {
+                        targetIndex = i
+                        break
+                    }
+                }
+                
+                if let index = targetIndex {
                     var updated = chatRooms[index]
                     updated.latest_message = RoomLatestMessage(
                         id: newMsg.id,
@@ -156,7 +185,8 @@ struct ChatView: View {
                         created_at: newMsg.created_at
                     )
                     
-                    if selectedRoom?.id != updated.id && newMsg.sender_id == auth.partner?.id {
+                    let isDifferentRoom = selectedRoom?.id != updated.id
+                    if isDifferentRoom && isPartnerMessage {
                         updated.unread_count += 1
                     }
                     
