@@ -137,7 +137,7 @@ class GlimpseController extends Controller
                 'highest_together_streak' => $couple ? (int)$couple->highest_together_streak : 0,
                 'total_meetings' => (int)$totalMeetings,
                 'love_burst_timestamp' => $loveBurstTimestamp,
-                'active_schedule' => $activeSchedule,
+                'active_schedule' => $this->formatSchedule($activeSchedule),
             ];
         });
 
@@ -751,7 +751,7 @@ class GlimpseController extends Controller
             broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
         } catch (\Exception $e) {}
 
-        return response()->json($schedule);
+        return response()->json($this->formatSchedule($schedule));
     }
 
     public function respondSchedule(Request $request, $id)
@@ -773,7 +773,7 @@ class GlimpseController extends Controller
         $schedule->save();
 
         // Send a custom chat notification about the response
-        $msgText = $request->response === 'accepted' ? "Accepted kencan: '{$schedule->title}'! ❤️" : "Declined kencan: '{$schedule->title}'";
+        $msgText = $request->response === 'accepted' ? "Accepted date invitation: '{$schedule->title}'! ❤️" : "Declined date invitation: '{$schedule->title}'";
         
         $msg = \App\Models\Message::create([
             'couple_id' => $user->couple_id,
@@ -794,7 +794,7 @@ class GlimpseController extends Controller
             broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
         } catch (\Exception $e) {}
 
-        return response()->json($schedule);
+        return response()->json($this->formatSchedule($schedule));
     }
 
     public function getSchedules(Request $request)
@@ -808,6 +808,28 @@ class GlimpseController extends Controller
             ->orderBy('scheduled_at', 'desc')
             ->get();
 
-        return response()->json($schedules);
+        $formatted = $schedules->map(function ($s) {
+            return $this->formatSchedule($s);
+        });
+
+        return response()->json($formatted);
+    }
+
+    private function formatSchedule($schedule)
+    {
+        if (!$schedule) {
+            return null;
+        }
+        return [
+            'id' => (int)$schedule->id,
+            'couple_id' => (int)$schedule->couple_id,
+            'creator_id' => (int)$schedule->creator_id,
+            'title' => (string)$schedule->title,
+            'scheduled_at' => $schedule->scheduled_at instanceof \Carbon\Carbon ? $schedule->scheduled_at->toIso8601String() : \Carbon\Carbon::parse($schedule->scheduled_at)->toIso8601String(),
+            'reminder_minutes' => (int)$schedule->reminder_minutes,
+            'status' => (string)$schedule->status,
+            'created_at' => $schedule->created_at ? ($schedule->created_at instanceof \Carbon\Carbon ? $schedule->created_at->toIso8601String() : \Carbon\Carbon::parse($schedule->created_at)->toIso8601String()) : null,
+            'updated_at' => $schedule->updated_at ? ($schedule->updated_at instanceof \Carbon\Carbon ? $schedule->updated_at->toIso8601String() : \Carbon\Carbon::parse($schedule->updated_at)->toIso8601String()) : null,
+        ];
     }
 }

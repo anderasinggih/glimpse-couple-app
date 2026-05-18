@@ -77,6 +77,9 @@ struct SchedulePlannerView: View {
     var body: some View {
         ZStack {
             Color.deepVelvet.ignoresSafeArea()
+                .onTapGesture {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
             
             VStack(spacing: 0) {
                 // Header Bar
@@ -211,11 +214,11 @@ struct SchedulePlannerView: View {
                     
                     // Title Input
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("WHAT ARE WE DOING?")
+                        Text("What are we doing?")
                             .font(.system(size: 11, weight: .bold, design: .rounded))
                             .foregroundColor(.white.opacity(0.4))
                         
-                        TextField("e.g. Main ke Mall Kelapa Gading", text: $title)
+                        TextField("e.g. Dinner date at a cozy restaurant", text: $title)
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
                             .foregroundColor(.white)
                             .padding(.horizontal, 14)
@@ -230,7 +233,7 @@ struct SchedulePlannerView: View {
                     
                     // Date & Time Picker
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("WHEN")
+                        Text("When")
                             .font(.system(size: 11, weight: .bold, design: .rounded))
                             .foregroundColor(.white.opacity(0.4))
                         
@@ -244,7 +247,7 @@ struct SchedulePlannerView: View {
                     
                     // Reminder Selection
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("ALARM REMINDER")
+                        Text("Alarm reminder")
                             .font(.system(size: 11, weight: .bold, design: .rounded))
                             .foregroundColor(.white.opacity(0.4))
                         
@@ -268,11 +271,11 @@ struct SchedulePlannerView: View {
                     
                     // Notes / Description
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("NOTES (OPTIONAL)")
+                        Text("Notes (optional)")
                             .font(.system(size: 11, weight: .bold, design: .rounded))
                             .foregroundColor(.white.opacity(0.4))
                         
-                        TextField("e.g. Jangan lupa bawa payung ya pacarku!", text: $note)
+                        TextField("e.g. Don't forget to wear your favorite jacket, love!", text: $note)
                             .font(.system(size: 14, weight: .medium, design: .rounded))
                             .foregroundColor(.white)
                             .padding(.horizontal, 14)
@@ -326,6 +329,13 @@ struct SchedulePlannerView: View {
             .padding(.horizontal, 20)
             .padding(.top, 16)
         }
+        .background(
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
+        )
     }
     
     // Tab 1: Upcoming ListView
