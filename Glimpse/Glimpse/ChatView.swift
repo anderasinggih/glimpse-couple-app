@@ -999,6 +999,212 @@ struct ChatView: View {
             Color.white.opacity(0.08)
         }
     }
+
+    @ViewBuilder
+    private func flashAttachmentBubble(msg: ChatMessage, isMe: Bool, timeStr: String, corners: UIRectCorner) -> some View {
+        Button {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                auth.selectedTab = 0
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Image(systemName: "camera.shutter.button.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.activeCyan)
+                    Text("Sent a Flash!")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                
+                HStack {
+                    Text("Tap to view on Dashboard")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                    Spacer(minLength: 8)
+                    if !timeStr.isEmpty {
+                        Text(timeStr)
+                            .font(.system(size: 7.5, weight: .medium))
+                            .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                    }
+                }
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .frame(width: 175)
+            .background(
+                isMe ? Color.activeCyan.opacity(0.18) : Color.white.opacity(0.12)
+            )
+            .clipShape(RoundedCorner(radius: 18, corners: corners))
+            .overlay(
+                RoundedCorner(radius: 18, corners: corners)
+                    .stroke(isMe ? Color.activeCyan.opacity(0.35) : Color.white.opacity(0.1), lineWidth: 1)
+            )
+            .shadow(color: isMe ? Color.activeCyan.opacity(0.1) : Color.black.opacity(0.15), radius: 6, y: 3)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+
+    @ViewBuilder
+    private func kencanInvitationBubble(msg: ChatMessage, isMe: Bool, timeStr: String, corners: UIRectCorner) -> some View {
+        Button {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                auth.showScheduleSheet = true
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "calendar.badge.plus")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.activeCyan)
+                    Text("New Kencan Invite!")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                
+                let cleanMsg = msg.message.replacingOccurrences(of: "[KENCAN_INVITATION] ", with: "")
+                Text(cleanMsg)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.85))
+                    .multilineTextAlignment(.leading)
+                
+                HStack {
+                    Text("Tap to respond & set Alarm")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.activeCyan)
+                    Spacer(minLength: 8)
+                    if !timeStr.isEmpty {
+                        Text(timeStr)
+                            .font(.system(size: 7.5, weight: .medium))
+                            .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                    }
+                }
+                .padding(.top, 2)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .frame(width: 220)
+            .background(
+                isMe ? Color.activeCyan.opacity(0.18) : Color.white.opacity(0.12)
+            )
+            .clipShape(RoundedCorner(radius: 18, corners: corners))
+            .overlay(
+                RoundedCorner(radius: 18, corners: corners)
+                    .stroke(isMe ? Color.activeCyan.opacity(0.45) : Color.white.opacity(0.12), lineWidth: 1.2)
+            )
+            .shadow(color: isMe ? Color.activeCyan.opacity(0.15) : Color.black.opacity(0.15), radius: 6, y: 3)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+
+    @ViewBuilder
+    private func standardTextChatBubble(msg: ChatMessage, isMe: Bool, isPending: Bool, timeStr: String, corners: UIRectCorner, scrollProxy: ScrollViewProxy?, isHighlighted: Bool) -> some View {
+        let displayText = msg.replyInfo?.actualMessage ?? msg.message
+        let isShort = displayText.count < 35 && !displayText.contains("\n") && msg.replyInfo == nil
+        
+        Group {
+            if isShort {
+                HStack(alignment: .bottom, spacing: 8) {
+                    Text(displayText)
+                        .font(.system(size: 12.5))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.leading)
+                    
+                    HStack(spacing: 3) {
+                        if !timeStr.isEmpty {
+                            Text(timeStr)
+                                .font(.system(size: 8.0, weight: .medium))
+                                .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                        }
+                        
+                        if isPending {
+                            Image(systemName: "clock")
+                                .font(.system(size: 8.0))
+                                .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                        }
+                    }
+                    .padding(.bottom, 0.5)
+                }
+            } else {
+                VStack(alignment: .trailing, spacing: 4) {
+                    if let reply = msg.replyInfo {
+                        Button {
+                            if let proxy = scrollProxy {
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                withAnimation(.easeInOut(duration: 0.45)) {
+                                    proxy.scrollTo(reply.parentId, anchor: .center)
+                                }
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    highlightedMessageId = reply.parentId
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                                    withAnimation(.easeOut(duration: 0.5)) {
+                                        if highlightedMessageId == reply.parentId {
+                                            highlightedMessageId = nil
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(reply.senderName)
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.activeCyan)
+                                Text(reply.parentMessage)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.white.opacity(0.65))
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            .padding(.vertical, 5)
+                            .padding(.horizontal, 8)
+                            .background(Color.white.opacity(0.06))
+                            .cornerRadius(6)
+                            .overlay(
+                                HStack {
+                                    Rectangle()
+                                        .fill(Color.activeCyan)
+                                        .frame(width: 3)
+                                    Spacer()
+                                }
+                            )
+                            .padding(.bottom, 2)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                    
+                    Text(displayText)
+                        .font(.system(size: 12.5))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.leading)
+                    
+                    HStack(spacing: 3) {
+                        if !timeStr.isEmpty {
+                            Text(timeStr)
+                                .font(.system(size: 8.0, weight: .medium))
+                                .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                        }
+                        
+                        if isPending {
+                            Image(systemName: "clock")
+                                .font(.system(size: 8.0))
+                                .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5.5)
+        .background(isHighlighted ? Color.activeCyan.opacity(0.35) : bubbleBackground(isMe: isMe))
+        .clipShape(RoundedCorner(radius: 12, corners: corners))
+        .overlay(
+            RoundedCorner(radius: 12, corners: corners)
+                .stroke(isHighlighted ? Color.activeCyan : (isMe ? Color.activeCyan.opacity(0.35) : Color.white.opacity(0.05)), lineWidth: isHighlighted ? 2.0 : 1.0)
+        )
+        .scaleEffect(isHighlighted ? 1.03 : 1.0)
+        .shadow(color: isHighlighted ? Color.activeCyan.opacity(0.4) : (isMe ? Color.activeCyan.opacity(0.1) : Color.clear), radius: isHighlighted ? 8 : 4, y: 2)
+    }
     
     // WHATSAPP STYLE CHAT BUBBLES WITH INDIVIDUAL TIME STAMPS & SWIPE TO REPLY
     private func chatBubble(msg: ChatMessage, isPending: Bool = false, scrollProxy: ScrollViewProxy? = nil) -> some View {
@@ -1028,203 +1234,11 @@ struct ChatView: View {
                     
                     Group {
                         if msg.message.contains("[FLASH_ATTACHMENT]") {
-                            Button {
-                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                    auth.selectedTab = 0
-                                }
-                            } label: {
-                                VStack(alignment: .leading, spacing: 5) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "camera.shutter.button.fill")
-                                            .font(.system(size: 13, weight: .bold))
-                                            .foregroundColor(.activeCyan)
-                                        Text("Sent a Flash!")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .foregroundColor(.white)
-                                    }
-                                    
-                                    HStack {
-                                        Text("Tap to view on Dashboard")
-                                            .font(.system(size: 9, weight: .medium))
-                                            .foregroundColor(.white.opacity(0.7))
-                                        Spacer(minLength: 8)
-                                        if !timeStr.isEmpty {
-                                            Text(timeStr)
-                                                .font(.system(size: 7.5, weight: .medium))
-                                                .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
-                                        }
-                                    }
-                                }
-                                .padding(.horizontal, 11)
-                                .padding(.vertical, 7)
-                                .frame(width: 175)
-                                .background(
-                                    isMe ? Color.activeCyan.opacity(0.18) : Color.white.opacity(0.12)
-                                )
-                                .clipShape(RoundedCorner(radius: 18, corners: corners))
-                                .overlay(
-                                    RoundedCorner(radius: 18, corners: corners)
-                                        .stroke(isMe ? Color.activeCyan.opacity(0.35) : Color.white.opacity(0.1), lineWidth: 1)
-                                )
-                                .shadow(color: isMe ? Color.activeCyan.opacity(0.1) : Color.black.opacity(0.15), radius: 6, y: 3)
-                            }
-                            .buttonStyle(PlainButtonStyle())
+                            flashAttachmentBubble(msg: msg, isMe: isMe, timeStr: timeStr, corners: corners)
                         } else if msg.message.contains("[KENCAN_INVITATION]") {
-                            Button {
-                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                    auth.showScheduleSheet = true
-                                }
-                            } label: {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "calendar.badge.plus")
-                                            .font(.system(size: 14, weight: .bold))
-                                            .foregroundColor(.activeCyan)
-                                        Text("New Kencan Invite!")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .foregroundColor(.white)
-                                    }
-                                    
-                                    let cleanMsg = msg.message.replacingOccurrences(of: "[KENCAN_INVITATION] ", with: "")
-                                    Text(cleanMsg)
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.85))
-                                        .multilineTextAlignment(.leading)
-                                    
-                                    HStack {
-                                        Text("Tap to respond & set Alarm")
-                                            .font(.system(size: 9, weight: .semibold))
-                                            .foregroundColor(.activeCyan)
-                                        Spacer(minLength: 8)
-                                        if !timeStr.isEmpty {
-                                            Text(timeStr)
-                                                .font(.system(size: 7.5, weight: .medium))
-                                                .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
-                                        }
-                                    }
-                                    .padding(.top, 2)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 9)
-                                .frame(width: 220)
-                                .background(
-                                    isMe ? Color.activeCyan.opacity(0.18) : Color.white.opacity(0.12)
-                                )
-                                .clipShape(RoundedCorner(radius: 18, corners: corners))
-                                .overlay(
-                                    RoundedCorner(radius: 18, corners: corners)
-                                        .stroke(isMe ? Color.activeCyan.opacity(0.45) : Color.white.opacity(0.12), lineWidth: 1.2)
-                                )
-                                .shadow(color: isMe ? Color.activeCyan.opacity(0.15) : Color.black.opacity(0.15), radius: 6, y: 3)
-                            }
-                            .buttonStyle(PlainButtonStyle())
+                            kencanInvitationBubble(msg: msg, isMe: isMe, timeStr: timeStr, corners: corners)
                         } else {
-                            let displayText = msg.replyInfo?.actualMessage ?? msg.message
-                            let isShort = displayText.count < 35 && !displayText.contains("\n") && msg.replyInfo == nil
-                            
-                            Group {
-                                if isShort {
-                                    HStack(alignment: .bottom, spacing: 8) {
-                                        Text(displayText)
-                                            .font(.system(size: 12.5))
-                                            .foregroundColor(.white)
-                                            .multilineTextAlignment(.leading)
-                                        
-                                        HStack(spacing: 3) {
-                                            if !timeStr.isEmpty {
-                                                Text(timeStr)
-                                                    .font(.system(size: 8.0, weight: .medium))
-                                                    .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
-                                            }
-                                            
-                                            if isPending {
-                                                Image(systemName: "clock")
-                                                    .font(.system(size: 8.0))
-                                                    .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
-                                            }
-                                        }
-                                        .padding(.bottom, 0.5)
-                                    }
-                                } else {
-                                    VStack(alignment: .trailing, spacing: 4) {
-                                        if let reply = msg.replyInfo {
-                                            Button {
-                                                if let proxy = scrollProxy {
-                                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                                    withAnimation(.easeInOut(duration: 0.45)) {
-                                                        proxy.scrollTo(reply.parentId, anchor: .center)
-                                                    }
-                                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                                        highlightedMessageId = reply.parentId
-                                                    }
-                                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                                                        withAnimation(.easeOut(duration: 0.5)) {
-                                                            if highlightedMessageId == reply.parentId {
-                                                                highlightedMessageId = nil
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            } label: {
-                                                // WhatsApp Style Reply Card within the Bubble
-                                                VStack(alignment: .leading, spacing: 3) {
-                                                    Text(reply.senderName)
-                                                        .font(.system(size: 11, weight: .bold))
-                                                        .foregroundColor(.activeCyan)
-                                                    Text(reply.parentMessage)
-                                                        .font(.system(size: 11))
-                                                        .foregroundColor(.white.opacity(0.65))
-                                                        .lineLimit(2)
-                                                        .multilineTextAlignment(.leading)
-                                                }
-                                                .padding(.vertical, 5)
-                                                .padding(.horizontal, 8)
-                                                .background(Color.white.opacity(0.06))
-                                                .cornerRadius(6)
-                                                .overlay(
-                                                    HStack {
-                                                        Rectangle()
-                                                            .fill(Color.activeCyan)
-                                                            .frame(width: 3)
-                                                        Spacer()
-                                                    }
-                                                )
-                                                .padding(.bottom, 2)
-                                            }
-                                            .buttonStyle(PlainButtonStyle())
-                                        }
-                                        
-                                        Text(displayText)
-                                            .font(.system(size: 12.5))
-                                            .foregroundColor(.white)
-                                            .multilineTextAlignment(.leading)
-                                        
-                                        HStack(spacing: 3) {
-                                            if !timeStr.isEmpty {
-                                                Text(timeStr)
-                                                    .font(.system(size: 8.0, weight: .medium))
-                                                    .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
-                                            }
-                                            
-                                            if isPending {
-                                                Image(systemName: "clock")
-                                                    .font(.system(size: 8.0))
-                                                    .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 5.5)
-                            .background(isHighlighted ? Color.activeCyan.opacity(0.35) : bubbleBackground(isMe: isMe))
-                            .clipShape(RoundedCorner(radius: 12, corners: corners))
-                            .overlay(
-                                RoundedCorner(radius: 12, corners: corners)
-                                    .stroke(isHighlighted ? Color.activeCyan : (isMe ? Color.activeCyan.opacity(0.35) : Color.white.opacity(0.05)), lineWidth: isHighlighted ? 2.0 : 1.0)
-                            )
-                            .scaleEffect(isHighlighted ? 1.03 : 1.0)
-                            .shadow(color: isHighlighted ? Color.activeCyan.opacity(0.4) : (isMe ? Color.activeCyan.opacity(0.1) : Color.clear), radius: isHighlighted ? 8 : 4, y: 2)
+                            standardTextChatBubble(msg: msg, isMe: isMe, isPending: isPending, timeStr: timeStr, corners: corners, scrollProxy: scrollProxy, isHighlighted: isHighlighted)
                         }
                     }
                     .contentShape(Rectangle())
