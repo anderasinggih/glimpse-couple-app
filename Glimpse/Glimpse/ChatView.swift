@@ -111,9 +111,16 @@ struct ChatView: View {
                 if let activeRoom = selectedRoom {
                     shouldResetSelected = activeRoom.id == deletedId
                 }
-                let filtered = chatRooms.filter { $0.id != deletedId }
+                
+                var filteredRooms: [GlimpseChatRoom] = []
+                for room in chatRooms {
+                    if room.id != deletedId {
+                        filteredRooms.append(room)
+                    }
+                }
+                
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    chatRooms = filtered
+                    chatRooms = filteredRooms
                     if shouldResetSelected {
                         selectedRoom = nil
                     }
