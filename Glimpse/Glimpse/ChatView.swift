@@ -617,6 +617,56 @@ struct ChatView: View {
                         .shadow(color: isMe ? Color.activeCyan.opacity(0.1) : Color.black.opacity(0.15), radius: 6, y: 3)
                     }
                     .buttonStyle(PlainButtonStyle())
+                } else if msg.message.contains("[KENCAN_INVITATION]") {
+                    // SPECIAL INTERACTIVE KENCAN INVITATION BUBBLE CARD
+                    Button {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            auth.showScheduleSheet = true // Present the schedule planner sheet directly!
+                        }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "calendar.badge.plus")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundColor(.activeCyan)
+                                Text("New Kencan Invite!")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                            
+                            let cleanMsg = msg.message.replacingOccurrences(of: "[KENCAN_INVITATION] ", with: "")
+                            Text(cleanMsg)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.white.opacity(0.85))
+                                .multilineTextAlignment(.leading)
+                            
+                            HStack {
+                                Text("Tap to respond & set Alarm")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundColor(.activeCyan)
+                                Spacer(minLength: 8)
+                                if !timeStr.isEmpty {
+                                    Text(timeStr)
+                                        .font(.system(size: 7.5, weight: .medium))
+                                        .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                                }
+                            }
+                            .padding(.top, 2)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 9)
+                        .frame(width: 220)
+                        .background(
+                            isMe ? Color.activeCyan.opacity(0.18) : Color.white.opacity(0.12)
+                        )
+                        .clipShape(RoundedCorner(radius: 18, corners: corners))
+                        .overlay(
+                            RoundedCorner(radius: 18, corners: corners)
+                                .stroke(isMe ? Color.activeCyan.opacity(0.45) : Color.white.opacity(0.12), lineWidth: 1.2)
+                        )
+                        .shadow(color: isMe ? Color.activeCyan.opacity(0.15) : Color.black.opacity(0.15), radius: 6, y: 3)
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 } else {
                     // STANDARD CHAT BUBBLE
                     VStack(alignment: .trailing, spacing: 4) {

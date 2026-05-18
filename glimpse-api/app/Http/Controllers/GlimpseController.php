@@ -80,6 +80,15 @@ class GlimpseController extends Controller
                 $loveBurstTimestamp = (double)$loveBurstInfo['timestamp'];
             }
 
+            $activeSchedule = null;
+            if ($user->couple_id) {
+                $activeSchedule = \App\Models\Schedule::where('couple_id', $user->couple_id)
+                    ->where('scheduled_at', '>=', now())
+                    ->whereIn('status', ['pending', 'accepted'])
+                    ->orderBy('scheduled_at', 'asc')
+                    ->first();
+            }
+
             return [
                 'user' => [
                     'id' => (int)$user->id,
@@ -87,6 +96,7 @@ class GlimpseController extends Controller
                     'email' => $user->email,
                     'invite_code' => $user->invite_code,
                     'profile_photo_url' => $photoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($user->name),
+                    'born_date' => $user->born_date,
                     'couple_id' => $user->couple_id !== null ? (int)$user->couple_id : null,
                     'latitude' => $user->latitude !== null ? (double)$user->latitude : null,
                     'longitude' => $user->longitude !== null ? (double)$user->longitude : null,
@@ -104,6 +114,7 @@ class GlimpseController extends Controller
                     'name' => $partner->name,
                     'email' => $partner->email,
                     'profile_photo_url' => $partnerPhotoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($partner->name),
+                    'born_date' => $partner->born_date,
                     'couple_id' => $partner->couple_id !== null ? (int)$partner->couple_id : null,
                     'latitude' => $partner->latitude !== null ? (double)$partner->latitude : null,
                     'longitude' => $partner->longitude !== null ? (double)$partner->longitude : null,
@@ -117,6 +128,7 @@ class GlimpseController extends Controller
                     'location_history' => $this->getFilteredHistory($partner->location_history),
                 ] : null,
                 'anniversary_start_date' => $couple ? $couple->anniversary_start_date : null,
+                'paired_at' => $couple && $couple->created_at ? $couple->created_at->toIso8601String() : null,
                 'disconnect_requested_by' => $couple && $couple->disconnect_requested_by !== null ? (int)$couple->disconnect_requested_by : null,
                 'couple_active' => $couple ? (bool) $couple->is_active : false,
                 'invited_by' => $couple && $couple->invited_by !== null ? (int)$couple->invited_by : null,
@@ -125,6 +137,7 @@ class GlimpseController extends Controller
                 'highest_together_streak' => $couple ? (int)$couple->highest_together_streak : 0,
                 'total_meetings' => (int)$totalMeetings,
                 'love_burst_timestamp' => $loveBurstTimestamp,
+                'active_schedule' => $activeSchedule,
             ];
         });
 
@@ -137,11 +150,13 @@ class GlimpseController extends Controller
         $request->validate([
             'name' => 'sometimes|string|max:30',
             'email' => 'sometimes|email|max:100|unique:users,email,' . $user->id,
+            'born_date' => 'sometimes|nullable|date',
             'profile_photo' => 'sometimes|image|max:5120'
         ]);
 
         if ($request->has('name')) $user->name = $request->name;
         if ($request->has('email')) $user->email = $request->email;
+        if ($request->has('born_date')) $user->born_date = $request->born_date;
         
         if ($request->hasFile('profile_photo')) {
             if ($user->profile_photo_url && !str_contains($user->profile_photo_url, 'ui-avatars')) {
@@ -165,6 +180,7 @@ class GlimpseController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
+                'born_date' => $user->born_date,
                 'profile_photo_url' => $photoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($user->name),
             ]
         ]);
@@ -682,5 +698,116 @@ class GlimpseController extends Controller
                 \Illuminate\Support\Facades\Cache::forget("glimpse_state_user_{$partner->id}");
             }
         }
+    }
+
+    public function createSchedule(Request $request)
+    {
+        $request->validate([
+            'title' => 'required|string|max:200',
+            'scheduled_at' => 'required|date',
+            'reminder_minutes' => 'required|integer|min:0|max:1440',
+        ]);
+
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active relationship'], 400);
+        }
+
+        $schedule = \App\Models\Schedule::create([
+            'couple_id' => $user->couple_id,
+            'creator_id' => $user->id,
+            'title' => $request->title,
+            'scheduled_at' => $request->scheduled_at,
+            'reminder_minutes' => $request->reminder_minutes,
+            'status' => 'pending'
+        ]);
+
+        // Send a custom schedule invite in chat
+        $payload = [
+            'id' => (int)$schedule->id,
+            'title' => $schedule->title,
+            'scheduled_at' => $schedule->scheduled_at->toIso8601String(),
+            'reminder_minutes' => (int)$schedule->reminder_minutes,
+            'status' => $schedule->status,
+            'creator_name' => $user->name,
+        ];
+        
+        $msg = \App\Models\Message::create([
+            'couple_id' => $user->couple_id,
+            'sender_id' => $user->id,
+            'message' => '[SCHEDULE_INVITE]:' . json_encode($payload)
+        ]);
+
+        // Broadcast MessageSent event to partner
+        try {
+            broadcast(new \App\Events\MessageSent($msg))->toOthers();
+        } catch (\Exception $e) {}
+
+        // Clear cache for both users
+        $this->clearGlimpseCache($user->id);
+
+        // Broadcast state update to both partners
+        try {
+            broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
+        } catch (\Exception $e) {}
+
+        return response()->json($schedule);
+    }
+
+    public function respondSchedule(Request $request, $id)
+    {
+        $request->validate([
+            'response' => 'required|string|in:accepted,declined'
+        ]);
+
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active relationship'], 400);
+        }
+
+        $schedule = \App\Models\Schedule::where('couple_id', $user->couple_id)
+            ->where('id', $id)
+            ->firstOrFail();
+
+        $schedule->status = $request->response;
+        $schedule->save();
+
+        // Send a custom chat notification about the response
+        $msgText = $request->response === 'accepted' ? "Accepted kencan: '{$schedule->title}'! ❤️" : "Declined kencan: '{$schedule->title}'";
+        
+        $msg = \App\Models\Message::create([
+            'couple_id' => $user->couple_id,
+            'sender_id' => $user->id,
+            'message' => "[SYSTEM]:{$msgText}"
+        ]);
+
+        // Broadcast MessageSent
+        try {
+            broadcast(new \App\Events\MessageSent($msg))->toOthers();
+        } catch (\Exception $e) {}
+
+        // Clear cache
+        $this->clearGlimpseCache($user->id);
+
+        // Broadcast state update
+        try {
+            broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
+        } catch (\Exception $e) {}
+
+        return response()->json($schedule);
+    }
+
+    public function getSchedules(Request $request)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json([]);
+        }
+
+        $schedules = \App\Models\Schedule::where('couple_id', $user->couple_id)
+            ->orderBy('scheduled_at', 'desc')
+            ->get();
+
+        return response()->json($schedules);
     }
 }

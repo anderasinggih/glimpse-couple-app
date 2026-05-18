@@ -25,4 +25,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/glimpse/chat/read', [GlimpseController::class, 'markAsRead']);
     Route::post('/glimpse/love-burst', [GlimpseController::class, 'sendLoveBurst']);
     Route::post('/glimpse/typing', [GlimpseController::class, 'broadcastTyping']);
+    
+    // Schedule Planner routes
+    Route::post('/glimpse/schedule', [GlimpseController::class, 'createSchedule']);
+    Route::post('/glimpse/schedule/{id}/respond', [GlimpseController::class, 'respondSchedule']);
+    Route::get('/glimpse/schedules', [GlimpseController::class, 'getSchedules']);
 });

@@ -176,9 +176,31 @@ struct BrandingHeader: View {
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
             }
+            
             Spacer()
+            
+            if AuthManager.shared.coupleActive && AuthManager.shared.selectedTab == 0 {
+                Button {
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
+                    AuthManager.shared.showScheduleSheet = true
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.12))
+                            .frame(width: 44, height: 44)
+                            .blur(radius: 0.5)
+                        
+                        Image(systemName: "calendar.badge.plus")
+                            .font(.system(size: 19, weight: .bold))
+                            .foregroundColor(.activeCyan)
+                            .shadow(color: .activeCyan.opacity(0.8), radius: 8)
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 20)
         .padding(.top, 10) // Locked Top Padding
     }
 }

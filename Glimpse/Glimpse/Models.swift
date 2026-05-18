@@ -72,6 +72,7 @@ struct CoupleResponse: Codable {
     let highest_together_streak: Int?
     let total_meetings: Int?
     let love_burst_timestamp: Double?
+    let active_schedule: GlimpseSchedule?
     
     var pairedDate: Date? {
         guard let paired = paired_at else { return nil }
@@ -191,5 +192,48 @@ struct GlimpseFlash: Codable, Identifiable {
     var createdDate: Date {
         let formatter = ISO8601DateFormatter()
         return formatter.date(from: created_at) ?? Date()
+    }
+}
+
+struct GlimpseSchedule: Codable, Identifiable, Equatable {
+    let id: Int
+    let couple_id: Int
+    let creator_id: Int
+    let title: String
+    let scheduled_at: String
+    let reminder_minutes: Int
+    let status: String // pending, accepted, declined
+    let created_at: String?
+    let updated_at: String?
+    
+    var scheduledDate: Date {
+        // We will parse standard ISO8601 date
+        let isoFormatter = ISO8601DateFormatter()
+        if let date = isoFormatter.date(from: scheduled_at) {
+            return date
+        }
+        
+        let dbFormatter = DateFormatter()
+        dbFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        dbFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dbFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        if let date = dbFormatter.date(from: scheduled_at) {
+            return date
+        }
+        
+        let simpleFormatter = DateFormatter()
+        simpleFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
+        if let date = simpleFormatter.date(from: scheduled_at) {
+            return date
+        }
+        
+        // Fallback for simple date formats
+        let simpleDateFormatter = DateFormatter()
+        simpleDateFormatter.dateFormat = "yyyy-MM-dd"
+        if let date = simpleDateFormatter.date(from: scheduled_at) {
+            return date
+        }
+        
+        return Date()
     }
 }

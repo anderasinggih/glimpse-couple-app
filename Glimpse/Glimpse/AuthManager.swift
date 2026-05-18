@@ -22,6 +22,8 @@ class AuthManager {
     var highestTogetherStreak = 0
     var totalMeetings = 0
     var lastLoveBurstTimestamp: Double = 0.0
+    var activeSchedule: GlimpseSchedule? = nil
+    var showScheduleSheet = false
     var showInviteDeclinedAlert = false
     var showSessionTerminatedAlert = false
     let chatTabDoubleTapPublisher = PassthroughSubject<Void, Never>()
@@ -128,6 +130,7 @@ class AuthManager {
             self.highestTogetherStreak = responseData.highest_together_streak ?? 0
             self.totalMeetings = responseData.total_meetings ?? 0
             self.lastLoveBurstTimestamp = responseData.love_burst_timestamp ?? 0.0
+            self.activeSchedule = responseData.active_schedule
             
             if wasPending && isNowDisconnected {
                 self.showInviteDeclinedAlert = true
@@ -568,6 +571,81 @@ class AuthManager {
         }
         
         try await fetchState()
+    }
+    
+    // MARK: - SCHEDULE PLANNER API Calls
+    func createSchedule(title: String, date: Date, reminderMinutes: Int) async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/schedule") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone.current
+        
+        let body: [String: Any] = [
+            "title": title,
+            "scheduled_at": formatter.string(from: date),
+            "reminder_minutes": reminderMinutes
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let bodyStr = String(data: data, encoding: .utf8) ?? ""
+            print("❌ createSchedule failed: \(bodyStr)")
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to create kencan: \(bodyStr)"])
+        }
+        
+        try await fetchState()
+    }
+    
+    func respondToSchedule(id: Int, accept: Bool) async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/schedule/\(id)/respond") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let body = ["response": accept ? "accepted" : "declined"]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let bodyStr = String(data: data, encoding: .utf8) ?? ""
+            print("❌ respondToSchedule failed: \(bodyStr)")
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to respond to kencan: \(bodyStr)"])
+        }
+        
+        try await fetchState()
+    }
+    
+    func fetchSchedules() async throws -> [GlimpseSchedule] {
+        guard let url = URL(string: "\(baseURL)/glimpse/schedules") else { return [] }
+        guard let token = userToken else { return [] }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let bodyStr = String(data: data, encoding: .utf8) ?? ""
+            print("❌ fetchSchedules failed: \(bodyStr)")
+            return []
+        }
+        
+        return try JSONDecoder().decode([GlimpseSchedule].self, from: data)
     }
     
     func login(email: String, password: String) async throws {
@@ -1197,6 +1275,7 @@ class AuthManager {
             self.highestTogetherStreak = responseData.highest_together_streak ?? 0
             self.totalMeetings = responseData.total_meetings ?? 0
             self.lastLoveBurstTimestamp = responseData.love_burst_timestamp ?? 0.0
+            self.activeSchedule = responseData.active_schedule
             
             // Mark loaded so that it doesn't show loading spinner if cached data is present!
             self.isInitialStateLoaded = true
