@@ -66,6 +66,7 @@ struct ChatView: View {
                 notConnectedView
             }
         }
+        .toolbar(selectedRoom != nil ? .hidden : .visible, for: .tabBar)
         .onChange(of: selectedRoom) { oldValue, newValue in
             auth.activeRoomId = newValue?.id
             if let activeRoom = newValue {
