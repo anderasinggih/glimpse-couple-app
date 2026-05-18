@@ -335,6 +335,7 @@ struct ChatView: View {
                         .tint(.activeCyan)
                     Spacer()
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if chatRooms.isEmpty {
                 VStack {
                     Spacer()
@@ -348,10 +349,12 @@ struct ChatView: View {
                     }
                     Spacer()
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
                 List {
                     // Transparent Spacer to clear the blurred header (closer, snug fit)
                     Color.clear
-                        .frame(height: 80)
+                        .frame(height: 100)
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                     
@@ -385,11 +388,13 @@ struct ChatView: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .background(Color.clear)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             
             roomsListHeader(partner: partner)
                 .zIndex(10)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
     // --- 🚫 NOT CONNECTED VIEW ---
