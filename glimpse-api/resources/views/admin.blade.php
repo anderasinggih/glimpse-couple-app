@@ -1080,6 +1080,62 @@
         let liveWS = null;
         let wsPingInterval = null;
 
+        function decodeProtobufJS(base64Str) {
+            try {
+                const binStr = atob(base64Str);
+                const len = binStr.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binStr.charCodeAt(i);
+                }
+                
+                let offset = 0;
+                const result = {};
+                
+                while (offset < bytes.length) {
+                    const tag = decodeVarint();
+                    const fieldNum = tag >> 3;
+                    const wireType = tag & 0x07;
+                    
+                    if (wireType === 0) { // Varint
+                        const val = decodeVarint();
+                        if (fieldNum === 1) result.id = val;
+                        else if (fieldNum === 2) result.room_id = val;
+                        else if (fieldNum === 3) result.sender_id = val;
+                        else result[`field_${fieldNum}`] = val;
+                    } else if (wireType === 2) { // Length-delimited
+                        const length = decodeVarint();
+                        const strBytes = bytes.slice(offset, offset + length);
+                        offset += length;
+                        const text = new TextDecoder().decode(strBytes);
+                        if (fieldNum === 4) result.message = text;
+                        else if (fieldNum === 5) result.created_at = text;
+                        else result[`field_${fieldNum}`] = text;
+                    } else {
+                        break;
+                    }
+                }
+                return result;
+
+                function decodeVarint() {
+                    let value = 0;
+                    let shift = 0;
+                    while (offset < bytes.length) {
+                        const byte = bytes[offset++];
+                        value |= (byte & 0x7F) << shift;
+                        if ((byte & 0x80) === 0) {
+                            break;
+                        }
+                        shift += 7;
+                    }
+                    return value;
+                }
+            } catch (e) {
+                console.error("Protobuf decoder failure:", e);
+                return null;
+            }
+        }
+
         function logWSEvent(event, channel, data) {
             const stream = document.getElementById('ws-log-stream');
             if (!stream) return;
@@ -1090,7 +1146,7 @@
             
             const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
             const logItem = document.createElement('div');
-            logItem.className = 'border-b border-white/5 pb-1';
+            logItem.className = 'border-b border-white/5 pb-2.5 pt-1';
             
             let color = 'text-white/60';
             if (event.includes('MessageSent')) color = 'text-activeCyan font-semibold';
@@ -1099,16 +1155,67 @@
             else if (event.includes('Typing')) color = 'text-amber-400 font-semibold';
             else if (event.includes('established') || event.includes('subscription')) color = 'text-white/40';
             
+            // Check if Protobuf payload is inside data
+            let pbDecoded = null;
+            if (data && typeof data === 'object' && data.pb) {
+                pbDecoded = decodeProtobufJS(data.pb);
+            }
+            
             let dataStr = typeof data === 'object' ? JSON.stringify(data) : data;
             if (dataStr.length > 120) {
                 dataStr = dataStr.substring(0, 120) + '...';
             }
             
+            let pbSection = '';
+            if (pbDecoded) {
+                const rawJsonBytes = new TextEncoder().encode(JSON.stringify(data.message || data)).length;
+                const pbBytes = Math.ceil((data.pb.length * 3) / 4) - (data.pb.indexOf('=') > 0 ? (data.pb.length - data.pb.indexOf('=')) : 0);
+                const saving = Math.round(((rawJsonBytes - pbBytes) / rawJsonBytes) * 100);
+                
+                pbSection = `
+                    <div class="mt-2 ml-4 p-3 rounded-xl bg-activeCyan/10 border border-activeCyan/20 text-[10px] space-y-1.5 shadow-lg shadow-activeCyan/5 relative overflow-hidden group">
+                        <div class="absolute -right-8 -bottom-8 w-16 h-16 rounded-full bg-activeCyan/5 blur-md group-hover:scale-150 transition-all"></div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-activeCyan font-extrabold flex items-center space-x-1.5">
+                                <span class="w-1.5 h-1.5 rounded-full bg-activeCyan animate-ping"></span>
+                                <span>⚡️ PROTOBUF BINARY DECODED</span>
+                            </span>
+                            <span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold text-[9px] border border-emerald-500/20">-${saving}% Size Saved</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 font-mono text-[9px]">
+                            <div class="p-1.5 bg-slate-950/60 rounded border border-white/5">
+                                <span class="block text-white/40 text-[8px] uppercase">Message ID</span>
+                                <span class="font-bold text-white">${pbDecoded.id || '-'}</span>
+                            </div>
+                            <div class="p-1.5 bg-slate-950/60 rounded border border-white/5">
+                                <span class="block text-white/40 text-[8px] uppercase">Sender ID</span>
+                                <span class="font-bold text-white">${pbDecoded.sender_id || '-'}</span>
+                            </div>
+                            <div class="p-1.5 bg-slate-950/60 rounded border border-white/5 col-span-2">
+                                <span class="block text-white/40 text-[8px] uppercase">Message Content</span>
+                                <span class="font-bold text-activeCyan break-words">${pbDecoded.message || '-'}</span>
+                            </div>
+                            <div class="p-1.5 bg-slate-950/60 rounded border border-white/5 col-span-2">
+                                <span class="block text-white/40 text-[8px] uppercase">Created At</span>
+                                <span class="text-white">${pbDecoded.created_at || '-'}</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center text-[8px] font-mono text-white/40 pt-1 border-t border-white/5">
+                            <span>Protobuf size: <b>${pbBytes} bytes</b></span>
+                            <span>Raw JSON size: <b>${rawJsonBytes} bytes</b></span>
+                        </div>
+                    </div>
+                `;
+            }
+            
             logItem.innerHTML = `
-                <span class="text-white/30">[${time}]</span> 
-                <span class="${color}">${event}</span> 
-                <span class="text-electricPurple/70">(${channel || 'global'})</span>
-                <span class="block text-white/50 pl-4 break-all font-mono">${dataStr}</span>
+                <div class="flex items-center space-x-1.5">
+                    <span class="text-white/30 font-mono">[${time}]</span> 
+                    <span class="${color}">${event}</span> 
+                    <span class="text-electricPurple/70 font-mono">(${channel || 'global'})</span>
+                </div>
+                <span class="block text-white/50 pl-4 break-all font-mono mt-0.5">${dataStr}</span>
+                ${pbSection}
             `;
             
             stream.appendChild(logItem);

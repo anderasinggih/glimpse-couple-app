@@ -1291,6 +1291,7 @@ struct ChatView: View {
     private func dateHeaderBadge(for msg: ChatMessage) -> some View {
         guard let raw = msg.created_at else { return AnyView(EmptyView()) }
         let dateStr = formatMessageDayString(raw)
+        guard !dateStr.isEmpty else { return AnyView(EmptyView()) }
         return AnyView(
             HStack {
                 Spacer()
@@ -1559,8 +1560,17 @@ struct ChatView: View {
     private func formatMessageTime(_ rawDate: String?) -> String {
         guard let rawDate = rawDate else { return "" }
         let formatter = ISO8601DateFormatter()
+        
+        // Try parsing with fractional seconds first
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         var date = formatter.date(from: rawDate)
+        
+        // Try parsing without fractional seconds as fallback
+        if date == nil {
+            formatter.formatOptions = [.withInternetDateTime]
+            date = formatter.date(from: rawDate)
+        }
+        
         if date == nil {
             let fallbackFormatter = DateFormatter()
             fallbackFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
@@ -1588,8 +1598,17 @@ struct ChatView: View {
     
     private func formatMessageDayString(_ rawDate: String) -> String {
         let formatter = ISO8601DateFormatter()
+        
+        // Try parsing with fractional seconds first
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         var date = formatter.date(from: rawDate)
+        
+        // Try parsing without fractional seconds as fallback
+        if date == nil {
+            formatter.formatOptions = [.withInternetDateTime]
+            date = formatter.date(from: rawDate)
+        }
+        
         if date == nil {
             let fallbackFormatter = DateFormatter()
             fallbackFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
