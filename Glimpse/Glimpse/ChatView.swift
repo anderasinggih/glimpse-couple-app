@@ -293,6 +293,12 @@ struct ChatView: View {
                             .padding(.horizontal, 16)
                             .frame(maxWidth: .infinity)
                         }
+                        .defaultScrollAnchor(.bottom)
+                        .onAppear {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                            }
+                        }
                         .safeAreaInset(edge: .bottom) {
                             bottomInputInsetView
                         }
