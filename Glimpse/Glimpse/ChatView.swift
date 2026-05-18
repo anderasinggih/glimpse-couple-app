@@ -118,7 +118,9 @@ struct ChatView: View {
         // Listen to live WebSocket message broadcasts from Partner
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatMessageReceived"))) { notification in
             if let newMsg = notification.object as? ChatMessage {
-                let isCurrentRoom = selectedRoom?.id == newMsg.room_id || (selectedRoom?.is_main == true && newMsg.room_id == nil)
+                let isMainRoom = selectedRoom?.is_main ?? false
+                let isSameRoom = selectedRoom?.id == newMsg.room_id
+                let isCurrentRoom = isSameRoom || (isMainRoom && newMsg.room_id == nil)
                 
                 if isCurrentRoom {
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
