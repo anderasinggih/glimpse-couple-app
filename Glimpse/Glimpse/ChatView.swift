@@ -13,6 +13,9 @@ struct ChatView: View {
     @State private var newRoomName = ""
     @State private var showDeleteConfirmAlert = false
     @State private var roomToDelete: GlimpseChatRoom? = nil
+    @State private var showRenameRoomAlert = false
+    @State private var roomToRename: GlimpseChatRoom? = nil
+    @State private var renameRoomName = ""
     
     @State private var messages: [ChatMessage] = []
     @State private var messageInput = ""
@@ -111,6 +114,9 @@ struct ChatView: View {
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomDeleted"))) { notification in
             self.handleChatRoomDeleted(notification)
         }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomUpdated"))) { notification in
+            self.handleChatRoomUpdated(notification)
+        }
         // Listen to live WebSocket message broadcasts from Partner
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatMessageReceived"))) { notification in
             self.handleChatMessageReceived(notification)
@@ -140,6 +146,18 @@ struct ChatView: View {
             }
         } message: { room in
             Text("Are you sure you want to delete '\(room.name)'? All messages in this room will be permanently lost.")
+        }
+        .alert("Rename Chat Room", isPresented: $showRenameRoomAlert, presenting: roomToRename) { room in
+            TextField("Room name", text: $renameRoomName)
+            Button("Cancel", role: .cancel) {
+                roomToRename = nil
+                renameRoomName = ""
+            }
+            Button("Rename") {
+                renameRoom(_: room)
+            }
+        } message: { room in
+            Text("Enter a new name for '\(room.name)'.")
         }
         .alert("No Internet Connection", isPresented: $showNoInternetAlert) {
             Button("OK", role: .cancel) {}
@@ -372,6 +390,18 @@ struct ChatView: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                            if !room.is_main {
+                                Button {
+                                    renameRoomName = room.name
+                                    roomToRename = room
+                                    showRenameRoomAlert = true
+                                } label: {
+                                    Label("Rename", systemImage: "pencil")
+                                }
+                                .tint(.activeCyan)
+                            }
+                        }
                     }
                     .onDelete { indexSet in
                         if let index = indexSet.first {
@@ -1064,6 +1094,33 @@ struct ChatView: View {
             }
         }
     }
+
+    private func renameRoom(_ room: GlimpseChatRoom) {
+        let name = renameRoomName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Task { @MainActor in
+            do {
+                try await auth.renameChatRoom(roomId: room.id, newName: name)
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    var updatedRooms: [GlimpseChatRoom] = []
+                    for var r in self.chatRooms {
+                        if r.id == room.id {
+                            r.name = name
+                        }
+                        updatedRooms.append(r)
+                    }
+                    self.chatRooms = updatedRooms
+                    auth.chatRooms = updatedRooms
+                }
+                roomToRename = nil
+                renameRoomName = ""
+            } catch {
+                print("❌ Failed to rename room: \(error)")
+            }
+        }
+    }
     
     private func sendMessage() {
         let cleanText = messageInput.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1273,6 +1330,30 @@ struct ChatView: View {
             chatRooms = filteredRooms
             if shouldResetSelected {
                 selectedRoom = nil
+            }
+        }
+    }
+
+    private func handleChatRoomUpdated(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let roomId = userInfo["room_id"] as? Int,
+              let newName = userInfo["name"] as? String else { return }
+        
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            var updatedRooms: [GlimpseChatRoom] = []
+            for var room in chatRooms {
+                if room.id == roomId {
+                    room.name = newName
+                }
+                updatedRooms.append(room)
+            }
+            chatRooms = updatedRooms
+            
+            // Also update selected room name instantly if it is actively open!
+            if let active = selectedRoom, active.id == roomId {
+                var updatedSelected = active
+                updatedSelected.name = newName
+                selectedRoom = updatedSelected
             }
         }
     }

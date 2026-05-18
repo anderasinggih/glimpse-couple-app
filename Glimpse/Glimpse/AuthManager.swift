@@ -541,6 +541,25 @@ class AuthManager {
         }
     }
 
+    func renameChatRoom(roomId: Int, newName: String) async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/chat-rooms/\(roomId)/rename") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let body = ["name": newName]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to rename room"])
+        }
+    }
+
     func updateProfile(name: String?, email: String?, bornDate: String?, photo: UIImage?) async throws {
         guard let url = URL(string: "\(baseURL)/user/update") else { return }
         guard let token = userToken else { return }
@@ -1206,6 +1225,25 @@ class AuthManager {
                     if let payload = try? JSONDecoder().decode(RoomIdPayload.self, from: eventData) {
                         DispatchQueue.main.async {
                             NotificationCenter.default.post(name: Notification.Name("GlimpseChatRoomDeleted"), object: payload.room_id)
+                        }
+                    }
+                }
+
+            case "App\\Events\\ChatRoomUpdated":
+                print("🔄 Chat room renamed broadcast received!")
+                if let eventDataString = pusherEvent.data,
+                   let eventData = eventDataString.data(using: .utf8) {
+                    struct RoomUpdatePayload: Codable {
+                        let room_id: Int
+                        let name: String
+                    }
+                    if let payload = try? JSONDecoder().decode(RoomUpdatePayload.self, from: eventData) {
+                        DispatchQueue.main.async {
+                            NotificationCenter.default.post(
+                                name: Notification.Name("GlimpseChatRoomUpdated"),
+                                object: nil,
+                                userInfo: ["room_id": payload.room_id, "name": payload.name]
+                            )
                         }
                     }
                 }

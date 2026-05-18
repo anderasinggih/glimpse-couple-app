@@ -1014,4 +1014,49 @@ class GlimpseController extends Controller
 
         return response()->json(['status' => 'ok']);
     }
+
+    public function renameChatRoom(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        $request->validate([
+            'name' => 'required|string|max:50'
+        ]);
+
+        $room = \DB::table('chat_rooms')
+            ->where('couple_id', $user->couple_id)
+            ->where('id', $id)
+            ->first();
+
+        if (!$room) {
+            return response()->json(['message' => 'Chat room not found'], 404);
+        }
+
+        if ($room->is_main) {
+            return response()->json(['message' => 'Cannot rename main chat room'], 400);
+        }
+
+        $newName = $request->input('name');
+        \DB::table('chat_rooms')->where('id', $id)->update([
+            'name' => $newName,
+            'updated_at' => now()
+        ]);
+
+        try {
+            broadcast(new \App\Events\ChatRoomUpdated($user->couple_id, (int)$id, $newName))->toOthers();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+        }
+
+        return response()->json([
+            'status' => 'ok',
+            'room' => [
+                'id' => (int)$id,
+                'name' => $newName
+            ]
+        ]);
+    }
 }
