@@ -384,7 +384,7 @@ struct ChatView: View {
                 List {
                     // Transparent Spacer to clear the blurred header (closer, snug fit)
                     Color.clear
-                        .frame(height: 50)
+                        .frame(height: 30)
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                     
@@ -401,7 +401,7 @@ struct ChatView: View {
                         .buttonStyle(FlatLinkButtonStyle())
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                        .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
                         .swipeActions(edge: .leading, allowsFullSwipe: false) {
                             if !room.is_main {
                                 Button {
@@ -636,7 +636,7 @@ struct ChatView: View {
                 }
             }
             .padding(.vertical, 12)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 4)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(room.unread_count > 0 ? Color.activeCyan.opacity(0.06) : Color.clear)
@@ -646,7 +646,7 @@ struct ChatView: View {
             // Telegram/WhatsApp Style thin divider line below each row
             Divider()
                 .background(Color.white.opacity(0.06))
-                .padding(.leading, 72)
+                .padding(.leading, 64)
         }
     }
     
