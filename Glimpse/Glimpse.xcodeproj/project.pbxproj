@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		8E5F7B8C9D0E1F2A3B4C5D6F /* GlimpseProtobuf.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5F7B8C9D0E1F2A3B4C5D6E /* GlimpseProtobuf.swift */; };
 		D73906442FB9132100118017 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D73906432FB9132000118017 /* WidgetKit.framework */; };
 		D73906462FB9132100118017 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D73906452FB9132100118017 /* SwiftUI.framework */; };
 		D73906552FB9132400118017 /* GlimpseWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D73906412FB9132000118017 /* GlimpseWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -38,7 +37,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		8E5F7B8C9D0E1F2A3B4C5D6E /* GlimpseProtobuf.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GlimpseProtobuf.swift; sourceTree = "<group>"; };
 		D73906412FB9132000118017 /* GlimpseWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GlimpseWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		D73906432FB9132000118017 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		D73906452FB9132100118017 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
@@ -114,8 +112,7 @@
 		D73906422FB9132000118017 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-								8E5F7B8C9D0E1F2A3B4C5D6E /* GlimpseProtobuf.swift */,
-D73906432FB9132000118017 /* WidgetKit.framework */,
+				D73906432FB9132000118017 /* WidgetKit.framework */,
 				D73906452FB9132100118017 /* SwiftUI.framework */,
 			);
 			name = Frameworks;
@@ -250,8 +247,7 @@ D73906432FB9132000118017 /* WidgetKit.framework */,
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-							8E5F7B8C9D0E1F2A3B4C5D6F /* GlimpseProtobuf.swift in Sources */,
-);
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		D7A508852FB880A10053CA3A /* Sources */ = {
