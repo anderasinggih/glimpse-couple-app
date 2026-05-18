@@ -258,37 +258,7 @@ struct MainDashboardView: View {
             .ignoresSafeArea()
             .allowsHitTesting(false)
             .zIndex(999)
-        }
-        .onAppear {
-            LiveLocationManager.shared.startTracking()
-            Task {
-                try? await auth.fetchState()
-                _ = try? await auth.fetchFlashes()
-            }
-        }
-        .onReceive(dashboardPollTimer) { _ in
-            currentTime = Date()
-            pollCounter += 1
             
-            // Backup fallback state sync every 30 seconds (WebSocket handles instant updates!)
-            if pollCounter % 30 == 0 {
-                Task {
-                    try? await auth.fetchState()
-                }
-            }
-        }
-        // React instantly to real-time Love Burst triggers via WebSocket
-        .onChange(of: auth.lastLoveBurstTimestamp) { oldValue, newValue in
-            if newValue > lastSeenLoveBurstTimestamp {
-                lastSeenLoveBurstTimestamp = newValue
-                triggerLoveBurst()
-            }
-        }
-        .alert("Request Declined", isPresented: $bindableAuth.showInviteDeclinedAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Your connection request was declined or cancelled.")
-        }
             // Custom Toast Notification overlay
             if showDashboardToast {
                 VStack {
@@ -320,6 +290,36 @@ struct MainDashboardView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .zIndex(9999)
             }
+        }
+        .onAppear {
+            LiveLocationManager.shared.startTracking()
+            Task {
+                try? await auth.fetchState()
+                _ = try? await auth.fetchFlashes()
+            }
+        }
+        .onReceive(dashboardPollTimer) { _ in
+            currentTime = Date()
+            pollCounter += 1
+            
+            // Backup fallback state sync every 30 seconds (WebSocket handles instant updates!)
+            if pollCounter % 30 == 0 {
+                Task {
+                    try? await auth.fetchState()
+                }
+            }
+        }
+        // React instantly to real-time Love Burst triggers via WebSocket
+        .onChange(of: auth.lastLoveBurstTimestamp) { oldValue, newValue in
+            if newValue > lastSeenLoveBurstTimestamp {
+                lastSeenLoveBurstTimestamp = newValue
+                triggerLoveBurst()
+            }
+        }
+        .alert("Request Declined", isPresented: $bindableAuth.showInviteDeclinedAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Your connection request was declined or cancelled.")
         }
         .sheet(isPresented: $bindableAuth.showScheduleSheet) {
             SchedulePlannerView()
