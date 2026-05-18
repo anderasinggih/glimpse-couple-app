@@ -14,6 +14,7 @@ struct MainDashboardView: View {
     @State private var streakCardBounce = false
     @State private var anniversaryCardBounce = false
     @State private var scheduleCardBounce = false
+    @State private var showScheduleDetailPopup = false
     @State private var showReactions = false
     @State private var reactionCardScale: CGFloat = 1.0
     @State private var reactionHoveredIndex: Int? = nil
@@ -290,6 +291,262 @@ struct MainDashboardView: View {
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .zIndex(9999)
+            }
+            
+            // Premium Detail Popup Modal for Active Schedule
+            if showScheduleDetailPopup, let schedule = auth.activeSchedule {
+                let isCreator = schedule.creator_id == (auth.currentUser?.id ?? 0)
+                let alarmTime = schedule.scheduledDate.addingTimeInterval(TimeInterval(-schedule.reminder_minutes * 60))
+                
+                ZStack {
+                    // Blurred Backdrop (tapping it dismisses the popup)
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            let generator = UIImpactFeedbackGenerator(style: .light)
+                            generator.impactOccurred()
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                showScheduleDetailPopup = false
+                            }
+                        }
+                    
+                    // Card Dialog Container
+                    VStack(alignment: .leading, spacing: 18) {
+                        // Close / Action Row
+                        HStack {
+                            HStack(spacing: 6) {
+                                Image(systemName: "calendar")
+                                    .foregroundColor(.activeCyan)
+                                    .font(.system(size: 15))
+                                Text(schedule.status == "pending" ? "Date Invitation" : "Upcoming Date")
+                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                    .foregroundColor(.activeCyan)
+                            }
+                            
+                            Spacer()
+                            
+                            Button {
+                                let generator = UIImpactFeedbackGenerator(style: .light)
+                                generator.impactOccurred()
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    showScheduleDetailPopup = false
+                                }
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(.white.opacity(0.4))
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                        
+                        // Event Details Block
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(schedule.title)
+                                .font(.system(size: 22, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                            
+                            HStack(spacing: 8) {
+                                Image(systemName: "clock.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.activeCyan)
+                                Text(schedule.scheduledDate.formatted(date: .long, time: .shortened))
+                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.white.opacity(0.8))
+                            }
+                        }
+                        .padding(.vertical, 4)
+                        
+                        Divider()
+                            .background(Color.white.opacity(0.12))
+                        
+                        // Alarm Metadata Block
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "bell.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.white.opacity(0.6))
+                                Text("Alarm Set For")
+                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white.opacity(0.4))
+                            }
+                            
+                            Text("\(schedule.reminder_minutes) minutes before (\(alarmTime.formatted(date: .omitted, time: .shortened)))")
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        
+                        // Status Block
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "info.circle.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.white.opacity(0.6))
+                                Text("RSVP Status")
+                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white.opacity(0.4))
+                            }
+                            
+                            HStack(spacing: 6) {
+                                Image(systemName: schedule.status == "accepted" ? "checkmark.circle.fill" : "hourglass")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(schedule.status == "accepted" ? .activeCyan : .orange)
+                                Text(schedule.status == "accepted" ? "Accepted by both partners" : "Waiting for partner response")
+                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                    .foregroundColor(schedule.status == "accepted" ? .activeCyan : .orange)
+                            }
+                        }
+                        
+                        // Interactive RSVP Actions inside the Detail Popup
+                        if schedule.status == "pending" {
+                            if !isCreator {
+                                HStack(spacing: 12) {
+                                    Button {
+                                        let generator = UIImpactFeedbackGenerator(style: .medium)
+                                        generator.impactOccurred()
+                                        Task {
+                                            do {
+                                                try await auth.respondToSchedule(id: schedule.id, accept: true)
+                                                isDashboardToastSuccess = true
+                                                dashboardToastMessage = "Accepted the date! Set your alarm now."
+                                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                                    showScheduleDetailPopup = false
+                                                    showDashboardToast = true
+                                                }
+                                                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                                    withAnimation { showDashboardToast = false }
+                                                }
+                                            } catch {
+                                                isDashboardToastSuccess = false
+                                                dashboardToastMessage = error.localizedDescription
+                                                withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                                                    showDashboardToast = true
+                                                }
+                                                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                                    withAnimation { showDashboardToast = false }
+                                                }
+                                            }
+                                        }
+                                    } label: {
+                                        Text("Accept Date")
+                                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                                            .foregroundColor(.deepVelvet)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 12)
+                                            .background(Color.activeCyan)
+                                            .cornerRadius(12)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    
+                                    Button {
+                                        let generator = UIImpactFeedbackGenerator(style: .light)
+                                        generator.impactOccurred()
+                                        Task {
+                                            do {
+                                                try await auth.respondToSchedule(id: schedule.id, accept: false)
+                                                isDashboardToastSuccess = true
+                                                dashboardToastMessage = "Date invitation declined."
+                                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                                    showScheduleDetailPopup = false
+                                                    showDashboardToast = true
+                                                }
+                                                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                                    withAnimation { showDashboardToast = false }
+                                                }
+                                            } catch {
+                                                isDashboardToastSuccess = false
+                                                dashboardToastMessage = error.localizedDescription
+                                                withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                                                    showDashboardToast = true
+                                                }
+                                                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                                    withAnimation { showDashboardToast = false }
+                                                }
+                                            }
+                                        }
+                                    } label: {
+                                        Text("Decline")
+                                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                                            .foregroundColor(.white)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 12)
+                                            .background(Color.white.opacity(0.12))
+                                            .cornerRadius(12)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                                .padding(.top, 6)
+                            } else {
+                                HStack {
+                                    Spacer()
+                                    ProgressView()
+                                        .tint(.activeCyan)
+                                        .scaleEffect(0.8)
+                                    Text("Waiting for partner to accept...")
+                                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                                        .foregroundColor(.white.opacity(0.6))
+                                    Spacer()
+                                }
+                                .padding(.vertical, 10)
+                                .background(Color.white.opacity(0.04))
+                                .cornerRadius(12)
+                                .padding(.top, 6)
+                            }
+                        } else if schedule.status == "accepted" {
+                            // Set alarm button
+                            Button {
+                                AlarmManager.shared.requestAccessAndAddEvent(
+                                    title: schedule.title,
+                                    date: schedule.scheduledDate,
+                                    reminderMinutes: schedule.reminder_minutes,
+                                    note: "Scheduled with Glimpse"
+                                ) { success, msg in
+                                    DispatchQueue.main.async {
+                                        isDashboardToastSuccess = success
+                                        dashboardToastMessage = msg
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                            showScheduleDetailPopup = false
+                                            showDashboardToast = true
+                                        }
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                            withAnimation { showDashboardToast = false }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "alarm.fill")
+                                        .font(.system(size: 14))
+                                    Text("Set iPhone Alarm & Calendar Alert")
+                                }
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.white.opacity(0.15))
+                                .cornerRadius(12)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .padding(.top, 6)
+                        }
+                    }
+                    .padding(24)
+                    .background(
+                        LinearGradient(colors: [Color.deepVelvet, Color.black.opacity(0.95)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+                    .cornerRadius(28)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 28)
+                            .stroke(Color.activeCyan.opacity(0.3), lineWidth: 1.5)
+                    )
+                    .shadow(color: Color.black.opacity(0.6), radius: 25, y: 15)
+                    .padding(.horizontal, 32)
+                }
+                .transition(.scale(scale: 0.95).combined(with: .opacity))
+                .zIndex(99999)
             }
         }
         .onAppear {
@@ -1060,7 +1317,7 @@ struct MainDashboardView: View {
                                         withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
                                             scheduleCardBounce = false
                                         }
-                                        auth.showScheduleSheet = true
+                                        showScheduleDetailPopup = true
                                     }
                                 }
                                 .padding(.top, 8)

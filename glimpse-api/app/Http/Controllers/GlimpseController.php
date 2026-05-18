@@ -722,27 +722,6 @@ class GlimpseController extends Controller
             'status' => 'pending'
         ]);
 
-        // Send a custom schedule invite in chat
-        $payload = [
-            'id' => (int)$schedule->id,
-            'title' => $schedule->title,
-            'scheduled_at' => $schedule->scheduled_at->toIso8601String(),
-            'reminder_minutes' => (int)$schedule->reminder_minutes,
-            'status' => $schedule->status,
-            'creator_name' => $user->name,
-        ];
-        
-        $msg = \App\Models\Message::create([
-            'couple_id' => $user->couple_id,
-            'sender_id' => $user->id,
-            'message' => '[SCHEDULE_INVITE]:' . json_encode($payload)
-        ]);
-
-        // Broadcast MessageSent event to partner
-        try {
-            broadcast(new \App\Events\MessageSent($msg))->toOthers();
-        } catch (\Exception $e) {}
-
         // Clear cache for both users
         $this->clearGlimpseCache($user->id);
 
@@ -771,20 +750,6 @@ class GlimpseController extends Controller
 
         $schedule->status = $request->response;
         $schedule->save();
-
-        // Send a custom chat notification about the response
-        $msgText = $request->response === 'accepted' ? "Accepted date invitation: '{$schedule->title}'! ❤️" : "Declined date invitation: '{$schedule->title}'";
-        
-        $msg = \App\Models\Message::create([
-            'couple_id' => $user->couple_id,
-            'sender_id' => $user->id,
-            'message' => "[SYSTEM]:{$msgText}"
-        ]);
-
-        // Broadcast MessageSent
-        try {
-            broadcast(new \App\Events\MessageSent($msg))->toOthers();
-        } catch (\Exception $e) {}
 
         // Clear cache
         $this->clearGlimpseCache($user->id);
