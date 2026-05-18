@@ -228,26 +228,26 @@ struct MainDashboardView: View {
             }
 
             
-            // GLOBAL POP HEARTS OVERLAY (IN CENTER OF SCREEN)
+            // GLOBAL POP HEARTS OVERLAY (BOTTOM TO TOP FLOATERS)
             ZStack {
                 ForEach(popHearts) { heart in
                     ZStack {
                         if let emoji = heart.emojiString {
                             Text(emoji)
-                                .font(.system(size: 55))
+                                .font(.system(size: 40))
                                 .scaleEffect(heart.scale)
-                                .shadow(color: .black.opacity(0.3), radius: 6)
+                                .shadow(color: .black.opacity(0.15), radius: 4)
                         } else if let sysName = heart.systemName {
                             Image(systemName: sysName)
-                                .font(.system(size: 44, weight: .bold))
-                                .foregroundColor(heart.color.opacity(0.2))
-                                .scaleEffect(heart.scale + 0.2)
-                                .blur(radius: 6)
+                                .font(.system(size: 32, weight: .bold))
+                                .foregroundColor(heart.color.opacity(0.15))
+                                .scaleEffect(heart.scale + 0.15)
+                                .blur(radius: 4)
                             
                             Image(systemName: sysName)
-                                .font(.system(size: 44, weight: .bold))
+                                .font(.system(size: 32, weight: .bold))
                                 .foregroundColor(heart.color)
-                                .shadow(color: heart.color.opacity(0.8), radius: 10)
+                                .shadow(color: heart.color.opacity(0.5), radius: 6)
                                 .scaleEffect(heart.scale)
                         }
                     }
@@ -256,7 +256,7 @@ struct MainDashboardView: View {
                     .offset(x: heart.x, y: heart.y)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             .ignoresSafeArea()
             .allowsHitTesting(false)
             .zIndex(999)
@@ -571,7 +571,11 @@ struct MainDashboardView: View {
         .onChange(of: auth.lastLoveBurstTimestamp) { oldValue, newValue in
             if newValue > lastSeenLoveBurstTimestamp {
                 lastSeenLoveBurstTimestamp = newValue
-                triggerLoveBurst()
+                if isSuppressingGlobalLoveBurst {
+                    isSuppressingGlobalLoveBurst = false
+                } else {
+                    triggerLoveBurst()
+                }
             }
         }
         .alert("Request Declined", isPresented: $bindableAuth.showInviteDeclinedAlert) {
@@ -675,6 +679,7 @@ struct MainDashboardView: View {
                             
                             if auth.isTogether {
                                 Button {
+                                    isSuppressingGlobalLoveBurst = true
                                     triggerLoveBurst()
                                     Task {
                                         try? await auth.triggerServerLoveBurst()
@@ -1777,47 +1782,57 @@ struct MainDashboardView: View {
         // System pop sound effect
         AudioServicesPlaySystemSound(1306)
         
-        let shapes = ["heart.fill", "sparkles", "star.fill", "flame.fill", "bolt.fill"]
-        
-        for _ in 0..<15 {
+        // 8 elegant floating hearts
+        for _ in 0..<8 {
             let heartId = UUID()
-            let angle = Double.random(in: 0...(2 * Double.pi))
-            let radius = CGFloat.random(in: 80...250)
-            let shape = shapes.randomElement() ?? "heart.fill"
-            let color = [
-                Color.activeCyan, 
-                Color.electricPurple, 
-                Color.pink, 
-                Color(hex: "FF4D94"), 
-                Color.orange
-            ].randomElement()!
+            
+            // Randomly scatter horizontal start positions across the screen
+            let startX = CGFloat.random(in: -140...140)
+            let endX = startX + CGFloat.random(in: -50...50)
+            
+            // Initial Y starting just below the bottom of the screen
+            let startY: CGFloat = 80
+            // Target Y floating all the way to the top of the screen
+            let screenHeight = UIScreen.main.bounds.height
+            let endY = -screenHeight - 100
+            
+            // Vibrant shades of love (red, pink, rose red, velvet)
+            let colors = [
+                Color.pink,
+                Color(hex: "FF3B30"), // iOS System Red
+                Color(hex: "FF2D55"), // iOS System Rose Pink
+                Color(hex: "FF4D94"), // Hot Pink
+                Color.electricPurple.opacity(0.8) // Sleek purple-pink
+            ]
+            let color = colors.randomElement()!
             
             let particle = PopHeart(
                 id: heartId,
-                x: 0,
-                y: 0,
-                scale: CGFloat.random(in: 0.5...1.2),
+                x: startX,
+                y: startY,
+                scale: CGFloat.random(in: 0.6...1.2),
                 color: color,
                 opacity: 1.0,
-                rotation: Double.random(in: -45...45),
-                systemName: shape,
+                rotation: Double.random(in: -30...30),
+                systemName: "heart.fill",
                 emojiString: nil
             )
             
             self.popHearts.append(particle)
             
-            // Animate outwards radially!
-            withAnimation(.spring(response: 0.8, dampingFraction: 0.6, blendDuration: 0)) {
+            // Animate floats upward beautifully
+            withAnimation(.easeOut(duration: CGFloat.random(in: 2.2...3.0))) {
                 if let idx = self.popHearts.firstIndex(where: { $0.id == heartId }) {
-                    self.popHearts[idx].x = cos(angle) * radius
-                    self.popHearts[idx].y = sin(angle) * radius
+                    self.popHearts[idx].x = endX
+                    self.popHearts[idx].y = endY
                     self.popHearts[idx].opacity = 0.0
-                    self.popHearts[idx].scale *= 1.4
-                    self.popHearts[idx].rotation += Double.random(in: -90...90)
+                    self.popHearts[idx].scale *= 1.3
+                    self.popHearts[idx].rotation += Double.random(in: -60...60)
                 }
             }
             
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            // Clean up when animation ends
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                 self.popHearts.removeAll(where: { $0.id == heartId })
             }
         }
@@ -1830,37 +1845,47 @@ struct MainDashboardView: View {
         // System pop sound effect
         AudioServicesPlaySystemSound(1306)
         
-        for _ in 0..<15 {
+        // 8 elegant floating emojis
+        for _ in 0..<8 {
             let heartId = UUID()
-            let angle = Double.random(in: 0...(2 * Double.pi))
-            let radius = CGFloat.random(in: 80...250)
+            
+            // Randomly scatter horizontal start positions across the screen
+            let startX = CGFloat.random(in: -140...140)
+            let endX = startX + CGFloat.random(in: -50...50)
+            
+            // Initial Y starting just below the bottom of the screen
+            let startY: CGFloat = 80
+            // Target Y floating all the way to the top of the screen
+            let screenHeight = UIScreen.main.bounds.height
+            let endY = -screenHeight - 100
             
             let particle = PopHeart(
                 id: heartId,
-                x: 0,
-                y: 0,
-                scale: CGFloat.random(in: 0.5...1.2),
+                x: startX,
+                y: startY,
+                scale: CGFloat.random(in: 0.6...1.2),
                 color: .clear,
                 opacity: 1.0,
-                rotation: Double.random(in: -45...45),
+                rotation: Double.random(in: -30...30),
                 systemName: nil,
                 emojiString: emoji
             )
             
             self.popHearts.append(particle)
             
-            // Animate outwards radially!
-            withAnimation(.spring(response: 0.8, dampingFraction: 0.6, blendDuration: 0)) {
+            // Animate floats upward beautifully
+            withAnimation(.easeOut(duration: CGFloat.random(in: 2.2...3.0))) {
                 if let idx = self.popHearts.firstIndex(where: { $0.id == heartId }) {
-                    self.popHearts[idx].x = cos(angle) * radius
-                    self.popHearts[idx].y = sin(angle) * radius
+                    self.popHearts[idx].x = endX
+                    self.popHearts[idx].y = endY
                     self.popHearts[idx].opacity = 0.0
-                    self.popHearts[idx].scale *= 1.4
-                    self.popHearts[idx].rotation += Double.random(in: -90...90)
+                    self.popHearts[idx].scale *= 1.3
+                    self.popHearts[idx].rotation += Double.random(in: -60...60)
                 }
             }
             
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            // Clean up when animation ends
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                 self.popHearts.removeAll(where: { $0.id == heartId })
             }
         }
