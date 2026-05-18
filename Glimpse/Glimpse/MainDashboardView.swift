@@ -1552,7 +1552,7 @@ struct MainDashboardView: View {
                                         Button {
                                             withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
                                                 if visibleFlashLimit < auth.flashes.count {
-                                                    visibleFlashLimit += 4
+                                                    visibleFlashLimit = auth.flashes.count
                                                 } else {
                                                     visibleFlashLimit = 4
                                                 }
