@@ -314,17 +314,23 @@ class AuthManager {
             guard let url = URL(string: "\(baseURL)/glimpse/status") else { return }
             guard let token = userToken else { return }
             
+            let status = GlimpseUserStatus(
+                latitude: nil,
+                longitude: nil,
+                batteryLevel: batteryLevel,
+                isCharging: isCharging,
+                statusNote: nil,
+                locationName: nil,
+                wifiBssid: nil
+            )
+            let protoData = status.encodeProtobuf()
+            
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.addValue("application/x-protobuf", forHTTPHeaderField: "Content-Type")
             request.addValue("application/json", forHTTPHeaderField: "Accept")
-            
-            let body: [String: Any] = [
-                "battery_level": batteryLevel,
-                "is_charging": isCharging
-            ]
-            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            request.httpBody = protoData
             
             _ = try? await URLSession.shared.data(for: request)
         }
@@ -336,38 +342,30 @@ class AuthManager {
         UIDevice.current.isBatteryMonitoringEnabled = true
         let batteryLevel = Int(UIDevice.current.batteryLevel * 100)
         let isCharging = UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full
+        let wifi = LiveLocationManager.shared.currentWiFiBSSID
         
         Task {
             guard let url = URL(string: "\(baseURL)/glimpse/status") else { return }
             guard let token = userToken else { return }
             
+            let status = GlimpseUserStatus(
+                latitude: latitude,
+                longitude: longitude,
+                batteryLevel: batteryLevel,
+                isCharging: isCharging,
+                statusNote: nil,
+                locationName: locationName,
+                wifiBssid: wifi
+            )
+            let protoData = status.encodeProtobuf()
+            
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.addValue("application/x-protobuf", forHTTPHeaderField: "Content-Type")
             request.addValue("application/json", forHTTPHeaderField: "Accept")
+            request.httpBody = protoData
             
-            var body: [String: Any] = [
-                "battery_level": batteryLevel,
-                "is_charging": isCharging
-            ]
-            
-            if let lat = latitude {
-                body["latitude"] = lat
-            }
-            if let lon = longitude {
-                body["longitude"] = lon
-            }
-            if let loc = locationName {
-                body["location_name"] = loc
-            }
-            if let wifi = LiveLocationManager.shared.currentWiFiBSSID {
-                body["wifi_bssid"] = wifi
-            }
-            
-            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-            
-            // Perform the silent background upload
             _ = try? await URLSession.shared.data(for: request)
         }
     }

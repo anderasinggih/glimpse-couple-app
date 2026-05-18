@@ -156,3 +156,39 @@ extension ChatMessage {
         return writer.data
     }
 }
+
+struct GlimpseUserStatus {
+    var latitude: Double?
+    var longitude: Double?
+    var batteryLevel: Int?
+    var isCharging: Bool?
+    var statusNote: String?
+    var locationName: String?
+    var wifiBssid: String?
+    
+    func encodeProtobuf() -> Data {
+        var writer = ProtobufWriter()
+        if let lat = latitude {
+            writer.writeStringField(fieldNumber: 1, value: String(lat))
+        }
+        if let lon = longitude {
+            writer.writeStringField(fieldNumber: 2, value: String(lon))
+        }
+        if let batt = batteryLevel {
+            writer.writeInt32Field(fieldNumber: 3, value: batt)
+        }
+        if let char = isCharging {
+            writer.writeInt32Field(fieldNumber: 4, value: char ? 1 : 0)
+        }
+        if let note = statusNote {
+            writer.writeStringField(fieldNumber: 5, value: note)
+        }
+        if let loc = locationName {
+            writer.writeStringField(fieldNumber: 6, value: loc)
+        }
+        if let wifi = wifiBssid {
+            writer.writeStringField(fieldNumber: 7, value: wifi)
+        }
+        return writer.data
+    }
+}
