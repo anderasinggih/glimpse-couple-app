@@ -108,8 +108,9 @@ struct ChatView: View {
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomDeleted"))) { notification in
             if let deletedId = notification.object as? Int {
                 let shouldResetSelected = selectedRoom?.id == deletedId
+                let filtered = chatRooms.filter { $0.id != deletedId }
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    chatRooms.removeAll(where: { $0.id == deletedId })
+                    chatRooms = filtered
                     if shouldResetSelected {
                         selectedRoom = nil
                     }
