@@ -13,6 +13,7 @@ struct MainDashboardView: View {
     @State private var visibleFlashLimit: Int = 4
     @State private var streakCardBounce = false
     @State private var anniversaryCardBounce = false
+    @State private var scheduleCardBounce = false
     @State private var showReactions = false
     @State private var reactionCardScale: CGFloat = 1.0
     @State private var reactionHoveredIndex: Int? = nil
@@ -854,7 +855,7 @@ struct MainDashboardView: View {
                                 .padding(.top, 8)
                             }
                             
-                            // Active Schedule / Date Invitation Card
+                            // Active Schedule / Date Invitation Card (Interactive & Haptic!)
                             if let schedule = auth.activeSchedule {
                                 let isCreator = schedule.creator_id == (auth.currentUser?.id ?? 0)
                                 let alarmTime = schedule.scheduledDate.addingTimeInterval(TimeInterval(-schedule.reminder_minutes * 60))
@@ -866,18 +867,18 @@ struct MainDashboardView: View {
                                                 Image(systemName: "calendar")
                                                     .foregroundColor(.activeCyan)
                                                     .font(.system(size: 14))
-                                                Text(schedule.status == "pending" ? "Date Invitation! 💌" : "Upcoming Date! 💖")
+                                                Text(schedule.status == "pending" ? "Date Invitation" : "Upcoming Date")
                                                     .font(.system(size: 12, weight: .bold, design: .rounded))
                                                     .foregroundColor(.activeCyan)
                                             }
                                             
                                             Text(schedule.title)
-                                                .font(.system(size: 18, weight: .black, design: .rounded))
+                                                .font(.system(size: 17, weight: .bold, design: .rounded))
                                                 .foregroundColor(.white)
                                                 .padding(.top, 2)
                                             
                                             Text(schedule.scheduledDate.formatted(date: .abbreviated, time: .shortened))
-                                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                                .font(.system(size: 13, weight: .medium, design: .rounded))
                                                 .foregroundColor(.white.opacity(0.8))
                                         }
                                         
@@ -886,10 +887,10 @@ struct MainDashboardView: View {
                                         // RSVP badge
                                         VStack(spacing: 2) {
                                             Text(schedule.scheduledDate.formatted(.dateTime.day()))
-                                                .font(.system(size: 20, weight: .black, design: .rounded))
+                                                .font(.system(size: 20, weight: .bold, design: .rounded))
                                                 .foregroundColor(.white)
                                             Text(schedule.scheduledDate.formatted(.dateTime.month(.abbreviated)))
-                                                .font(.system(size: 10, weight: .black, design: .rounded))
+                                                .font(.system(size: 10, weight: .bold, design: .rounded))
                                                 .foregroundColor(.white.opacity(0.4))
                                         }
                                         .frame(width: 44, height: 44)
@@ -902,7 +903,7 @@ struct MainDashboardView: View {
                                         Image(systemName: "bell.fill")
                                             .font(.system(size: 11))
                                         Text("Alarm set for: \(schedule.reminder_minutes)m before (\(alarmTime.formatted(date: .omitted, time: .shortened)))")
-                                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                                            .font(.system(size: 11, weight: .medium, design: .rounded))
                                     }
                                     .foregroundColor(.white.opacity(0.6))
                                     
@@ -917,7 +918,7 @@ struct MainDashboardView: View {
                                                         do {
                                                             try await auth.respondToSchedule(id: schedule.id, accept: true)
                                                             isDashboardToastSuccess = true
-                                                            dashboardToastMessage = "Accepted the date! ❤️ Set your alarm now."
+                                                            dashboardToastMessage = "Accepted the date! Set your alarm now."
                                                             withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
                                                                 showDashboardToast = true
                                                             }
@@ -936,7 +937,7 @@ struct MainDashboardView: View {
                                                         }
                                                     }
                                                 } label: {
-                                                    Text("Accept Date ❤️")
+                                                    Text("Accept Date")
                                                         .font(.system(size: 13, weight: .bold, design: .rounded))
                                                         .foregroundColor(.deepVelvet)
                                                         .frame(maxWidth: .infinity)
@@ -1005,7 +1006,7 @@ struct MainDashboardView: View {
                                                 title: schedule.title,
                                                 date: schedule.scheduledDate,
                                                 reminderMinutes: schedule.reminder_minutes,
-                                                note: "Scheduled with Glimpse ❤️"
+                                                note: "Scheduled with Glimpse"
                                             ) { success, msg in
                                                 DispatchQueue.main.async {
                                                     isDashboardToastSuccess = success
@@ -1048,6 +1049,20 @@ struct MainDashboardView: View {
                                         .stroke(Color.activeCyan.opacity(0.35), lineWidth: 1.2)
                                 )
                                 .shadow(color: Color.activeCyan.opacity(0.1), radius: 8, y: 3)
+                                .scaleEffect(scheduleCardBounce ? 0.96 : 1.0)
+                                .onTapGesture {
+                                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                                    generator.impactOccurred()
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
+                                        scheduleCardBounce = true
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
+                                            scheduleCardBounce = false
+                                        }
+                                        auth.showScheduleSheet = true
+                                    }
+                                }
                                 .padding(.top, 8)
                             }
                             

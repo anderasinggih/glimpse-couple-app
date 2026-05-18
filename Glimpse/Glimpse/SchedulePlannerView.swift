@@ -28,7 +28,7 @@ class AlarmManager {
     
     private func createCalendarEvent(title: String, date: Date, reminderMinutes: Int, note: String) throws -> Bool {
         let event = EKEvent(eventStore: eventStore)
-        event.title = "Glimpse Date: \(title) ❤️"
+        event.title = "Glimpse Date: \(title)"
         event.startDate = date
         event.endDate = date.addingTimeInterval(7200) // Default 2 hours kencan length
         event.notes = note
@@ -468,7 +468,7 @@ struct SchedulePlannerView: View {
                     Button {
                         Task { await respondToSchedule(id: schedule.id, accept: true) }
                     } label: {
-                        Text("Accept Date ❤️")
+                        Text("Accept Date")
                             .font(.system(size: 13, weight: .bold, design: .rounded))
                             .foregroundColor(.deepVelvet)
                             .frame(maxWidth: .infinity)
@@ -502,7 +502,7 @@ struct SchedulePlannerView: View {
                         title: schedule.title,
                         date: date,
                         reminderMinutes: schedule.reminder_minutes,
-                        note: "Scheduled with Glimpse ❤️"
+                        note: "Scheduled with Glimpse"
                     ) { success, msg in
                         DispatchQueue.main.async {
                             isSuccessAlert = success
@@ -603,7 +603,7 @@ struct SchedulePlannerView: View {
         do {
             try await auth.respondToSchedule(id: id, accept: accept)
             isSuccessAlert = true
-            statusMessage = accept ? "Date Accepted! ❤️ Set your alarm now." : "Date invitation declined."
+            statusMessage = accept ? "Date Accepted! Set your alarm now." : "Date invitation declined."
             
             withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
                 showStatusAlert = true
