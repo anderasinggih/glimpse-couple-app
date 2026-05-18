@@ -265,29 +265,8 @@ struct ChatView: View {
                                     .padding(.top, 4)
                                 }
                                 
-                                if !pendingMessages.isEmpty {
-                                    VStack(spacing: 12) {
-                                        HStack {
-                                            Rectangle()
-                                                .fill(LinearGradient(colors: [.clear, .electricPurple.opacity(0.3)], startPoint: .leading, endPoint: .trailing))
-                                                .frame(height: 1)
-                                            Text("Sending...")
-                                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                                                .foregroundColor(.electricPurple.opacity(0.8))
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 4)
-                                                .background(.ultraThinMaterial)
-                                                .cornerRadius(10)
-                                            Rectangle()
-                                                .fill(LinearGradient(colors: [.electricPurple.opacity(0.3), .clear], startPoint: .leading, endPoint: .trailing))
-                                                .frame(height: 1)
-                                        }
-                                        .padding(.vertical, 8)
-                                        
-                                        ForEach(pendingMessages) { msg in
-                                            chatBubble(msg: msg, isPending: true)
-                                        }
-                                    }
+                                ForEach(pendingMessages) { msg in
+                                    chatBubble(msg: msg, isPending: true)
                                 }
                                 
                                 Spacer().frame(height: 15)
