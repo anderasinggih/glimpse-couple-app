@@ -64,6 +64,8 @@ class AuthManager {
     var initialLastReadId = 0
     var latestFetchedMessages: [ChatMessage] = []
     var flashes: [GlimpseFlash] = []
+    var chatRooms: [GlimpseChatRoom] = []
+    var activeRoomId: Int? = nil
     
     // UPLOAD PROGRESS
     var isUploadingFlash: Bool = false
@@ -423,30 +425,8 @@ class AuthManager {
     }
     
     func updateUnreadCount() {
-        let currentUserId = currentUser?.id ?? 0
-        if currentUserId == 0 { return }
-        
-        let userDefaultsKey = "last_read_message_id_\(currentUserId)"
-        
-        if selectedTab == 3 {
-            if let lastMsg = latestFetchedMessages.last {
-                UserDefaults.standard.set(lastMsg.id, forKey: userDefaultsKey)
-            }
-            unreadMessagesCount = 0
-            return
-        }
-        
-        let localLastReadId = UserDefaults.standard.integer(forKey: userDefaultsKey)
-        let dbLastReadId = currentUser?.last_seen_message_id ?? 0
-        let lastReadId = max(localLastReadId, dbLastReadId)
-        
-        let partnerId = partner?.id ?? 0
-        
-        let unread = latestFetchedMessages.filter { msg in
-            msg.sender_id == partnerId && msg.id > lastReadId
-        }
-        
-        unreadMessagesCount = unread.count
+        let totalUnread = chatRooms.reduce(0) { $0 + $1.unread_count }
+        unreadMessagesCount = totalUnread
     }
     
     func clearUnreadMessages() {
@@ -1241,13 +1221,19 @@ class AuthManager {
                         DispatchQueue.main.async {
                             if !self.latestFetchedMessages.contains(where: { $0.id == payload.message.id }) {
                                 self.latestFetchedMessages.append(payload.message)
-                                self.updateUnreadCount()
+                                // Refresh the chat rooms list in the background to automatically sync unread counts
+                                Task {
+                                    _ = try? await self.fetchChatRooms()
+                                }
+                                
                                 self.saveMessagesCache()
                                 NotificationCenter.default.post(name: Notification.Name("GlimpseChatMessageReceived"), object: payload.message)
                                 
-                                if self.selectedTab == 3 {
+                                if self.selectedTab == 3 && self.activeRoomId == payload.message.room_id {
                                     Task {
                                         await self.markMessagesAsRead(messageId: payload.message.id)
+                                        // Refresh after marking read
+                                        _ = try? await self.fetchChatRooms()
                                     }
                                 }
                                 

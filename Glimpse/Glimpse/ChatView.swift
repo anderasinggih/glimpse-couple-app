@@ -63,6 +63,17 @@ struct ChatView: View {
                 notConnectedView
             }
         }
+        .onChange(of: selectedRoom) { oldValue, newValue in
+            auth.activeRoomId = newValue?.id
+            if let activeRoom = newValue {
+                // Reset unread counter locally upon entering the room
+                if let index = chatRooms.firstIndex(where: { $0.id == activeRoom.id }) {
+                    chatRooms[index].unread_count = 0
+                    auth.chatRooms = chatRooms
+                    auth.updateUnreadCount()
+                }
+            }
+        }
         .onAppear {
             loadChatRooms()
             if selectedRoom != nil {
@@ -913,6 +924,8 @@ struct ChatView: View {
                 // Reset unread counter locally upon entering the room
                 if let index = chatRooms.firstIndex(where: { $0.id == activeRoom.id }) {
                     chatRooms[index].unread_count = 0
+                    auth.chatRooms = chatRooms
+                    auth.updateUnreadCount()
                 }
             } catch {
                 print("❌ Failed to fetch messages for room \(activeRoom.name): \(error)")
@@ -929,6 +942,8 @@ struct ChatView: View {
             if let newRoom = try? await auth.createChatRoom(name: name) {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                     self.chatRooms.append(newRoom)
+                    auth.chatRooms = self.chatRooms
+                    auth.updateUnreadCount()
                 }
                 newRoomName = ""
             }
@@ -948,6 +963,8 @@ struct ChatView: View {
                         }
                     }
                     self.chatRooms = filtered
+                    auth.chatRooms = filtered
+                    auth.updateUnreadCount()
                 }
                 roomToDelete = nil
             } catch {
