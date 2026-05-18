@@ -467,17 +467,23 @@ class AuthManager {
             throw NSError(domain: "Auth", code: 401, userInfo: [NSLocalizedDescriptionKey: "Unauthorized"])
         }
         
+        let tempMessage = ChatMessage(
+            id: 0,
+            couple_id: 0,
+            sender_id: currentUser?.id ?? 0,
+            message: text,
+            room_id: roomId,
+            created_at: nil,
+            updated_at: nil
+        )
+        let protoData = tempMessage.encodeProtobuf()
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("application/json", forHTTPHeaderField: "Accept")
-        
-        var body: [String: Any] = ["message": text]
-        if let rId = roomId {
-            body["room_id"] = rId
-        }
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        request.addValue("application/x-protobuf", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/x-protobuf", forHTTPHeaderField: "Accept")
+        request.httpBody = protoData
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
@@ -485,7 +491,11 @@ class AuthManager {
             throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to send message"])
         }
         
-        return try JSONDecoder().decode(ChatMessage.self, from: data)
+        guard let sentMsg = ChatMessage.decodeProtobuf(from: data) else {
+            throw NSError(domain: "Auth", code: 500, userInfo: [NSLocalizedDescriptionKey: "Failed to decode response Protobuf"])
+        }
+        
+        return sentMsg
     }
 
     func fetchChatRooms() async throws -> [GlimpseChatRoom] {
@@ -1258,7 +1268,7 @@ class AuthManager {
                     
                     var decodedMessage: ChatMessage? = nil
                     
-                    // 1. High-Performance Protocol Buffers decoding attempt
+                    // High-Performance Pure Protocol Buffers decoding
                     struct ProtobufPayload: Codable {
                         let pb: String?
                     }
@@ -1268,13 +1278,7 @@ class AuthManager {
                         decodedMessage = pbMessage
                         print("⚡️ Decoded message instantly using High-Speed Protobuf binary!")
                     } else {
-                        // 2. Safe JSON Decoder fallback
-                        struct MessagePayload: Codable {
-                            let message: ChatMessage
-                        }
-                        if let jsonPayload = try? JSONDecoder().decode(MessagePayload.self, from: eventData) {
-                            decodedMessage = jsonPayload.message
-                        }
+                        print("⚠️ Received MessageSent broadcast, but it was missing or had invalid Protobuf data.")
                     }
                     
                     if let finalMsg = decodedMessage {
