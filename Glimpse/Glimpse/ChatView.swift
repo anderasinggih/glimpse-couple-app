@@ -1238,11 +1238,20 @@ struct ChatView: View {
     
     private func loadChatRooms() {
         guard auth.partner != nil && auth.coupleActive else { return }
-        isLoadingRooms = true
+        
+        // Stale-While-Revalidate: load memory cache instantly
+        if !auth.chatRooms.isEmpty {
+            self.chatRooms = auth.chatRooms
+            self.isLoadingRooms = false
+        } else {
+            self.isLoadingRooms = true
+        }
+        
         Task { @MainActor in
             do {
                 let rooms = try await auth.fetchChatRooms()
                 self.chatRooms = rooms
+                self.auth.chatRooms = rooms
                 self.isLoadingRooms = false
             } catch {
                 print("❌ Failed to load chat rooms: \(error)")
