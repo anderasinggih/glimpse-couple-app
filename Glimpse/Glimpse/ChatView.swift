@@ -16,6 +16,7 @@ struct ChatView: View {
     @State private var showRenameRoomAlert = false
     @State private var roomToRename: GlimpseChatRoom? = nil
     @State private var renameRoomName = ""
+    @State private var dragOffset: CGFloat = 0
     
     @State private var messages: [ChatMessage] = []
     @State private var messageInput = ""
@@ -55,12 +56,19 @@ struct ChatView: View {
             
             // LAYER 2: Main Content
             if let partner = auth.partner, auth.coupleActive {
-                if let activeRoom = selectedRoom {
-                    activeChatRoomView(partner: partner, room: activeRoom)
-                        .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
-                } else {
+                ZStack {
+                    let progress = min(1.0, max(0.0, dragOffset / UIScreen.main.bounds.width))
+                    let scale: CGFloat = selectedRoom == nil ? 1.0 : (0.96 + (0.04 * progress))
+                    let opacity: Double = selectedRoom == nil ? 1.0 : (0.8 + (0.2 * Double(progress)))
+                    
                     chatRoomsListView(partner: partner)
-                        .transition(.asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .trailing)))
+                        .scaleEffect(scale)
+                        .opacity(opacity)
+                    
+                    if let activeRoom = selectedRoom {
+                        activeChatRoomView(partner: partner, room: activeRoom)
+                            .transition(.move(edge: .trailing))
+                    }
                 }
             } else {
                 notConnectedView
@@ -342,13 +350,33 @@ struct ChatView: View {
             chatHeader(partner: partner, room: room)
                 .zIndex(10)
         }
+        .offset(x: dragOffset)
         .highPriorityGesture(
-            DragGesture(minimumDistance: 10, coordinateSpace: .local)
+            DragGesture(minimumDistance: 5, coordinateSpace: .local)
+                .onChanged { value in
+                    if value.startLocation.x < 45 {
+                        dragOffset = max(0, value.translation.width)
+                    }
+                }
                 .onEnded { value in
-                    if value.startLocation.x < 45 && value.translation.width > 80 {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                            selectedRoom = nil
+                    if value.startLocation.x < 45 {
+                        let screenWidth = UIScreen.main.bounds.width
+                        if value.translation.width > 110 {
+                            // Dismiss smoothly
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                                dragOffset = screenWidth
+                            }
+                            // Re-assign selectedRoom to nil after transition finishes
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+                                selectedRoom = nil
+                                dragOffset = 0
+                            }
+                        } else {
+                            // Snap back to zero
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.78)) {
+                                dragOffset = 0
+                            }
                         }
                     }
                 }
