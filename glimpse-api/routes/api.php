@@ -30,4 +30,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/glimpse/schedule', [GlimpseController::class, 'createSchedule']);
     Route::post('/glimpse/schedule/{id}/respond', [GlimpseController::class, 'respondSchedule']);
     Route::get('/glimpse/schedules', [GlimpseController::class, 'getSchedules']);
+
+    // Chat Rooms routes
+    Route::get('/glimpse/chat-rooms', [GlimpseController::class, 'getChatRooms']);
+    Route::post('/glimpse/chat-rooms', [GlimpseController::class, 'createChatRoom']);
+    Route::delete('/glimpse/chat-rooms/{id}', [GlimpseController::class, 'deleteChatRoom']);
 });

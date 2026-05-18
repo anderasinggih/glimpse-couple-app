@@ -169,8 +169,27 @@ struct ChatMessage: Codable, Identifiable, Equatable {
     let couple_id: Int
     let sender_id: Int
     let message: String
+    let room_id: Int?
     let created_at: String?
     let updated_at: String?
+}
+
+struct GlimpseChatRoom: Codable, Identifiable, Equatable {
+    let id: Int
+    let couple_id: Int
+    let name: String
+    let is_main: Bool
+    let latest_message: RoomLatestMessage?
+    var unread_count: Int
+    let created_at: String
+    let updated_at: String
+}
+
+struct RoomLatestMessage: Codable, Equatable {
+    let id: Int
+    let message: String
+    let sender_id: Int
+    let created_at: String?
 }
 
 struct GlimpseFlash: Codable, Identifiable {

@@ -6,12 +6,13 @@ use Illuminate\Database\Eloquent\Model;
 
 class Message extends Model
 {
-    protected $fillable = ['couple_id', 'sender_id', 'message'];
+    protected $fillable = ['couple_id', 'sender_id', 'message', 'room_id'];
 
     protected $casts = [
         'id' => 'integer',
         'couple_id' => 'integer',
         'sender_id' => 'integer',
+        'room_id' => 'integer',
     ];
 
     public function sender()

@@ -411,8 +411,39 @@ class GlimpseController extends Controller
             return response()->json(['message' => 'Relationship is not active'], 400);
         }
 
-        $messages = \App\Models\Message::where('couple_id', $user->couple_id)
-            ->orderBy('created_at', 'asc')
+        $roomId = $request->query('room_id');
+        
+        // Find or create Main Room if none exists for this couple
+        $mainRoom = \DB::table('chat_rooms')
+            ->where('couple_id', $user->couple_id)
+            ->where('is_main', true)
+            ->first();
+            
+        if (!$mainRoom) {
+            $mainRoomId = \DB::table('chat_rooms')->insertGetId([
+                'couple_id' => $user->couple_id,
+                'name' => 'General Chat',
+                'is_main' => true,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+        } else {
+            $mainRoomId = $mainRoom->id;
+        }
+
+        $query = \App\Models\Message::where('couple_id', $user->couple_id);
+        
+        if ($roomId) {
+            $query->where('room_id', $roomId);
+        } else {
+            // Default to General Chat messages (either room_id = mainRoomId or room_id is null for compatibility with old messages!)
+            $query->where(function($q) use ($mainRoomId) {
+                $q->where('room_id', $mainRoomId)
+                  ->orWhereNull('room_id');
+            });
+        }
+
+        $messages = $query->orderBy('created_at', 'asc')
             ->take(100)
             ->get();
 
@@ -421,7 +452,10 @@ class GlimpseController extends Controller
 
     public function sendMessage(Request $request)
     {
-        $request->validate(['message' => 'required|string|max:500']);
+        $request->validate([
+            'message' => 'required|string|max:500',
+            'room_id' => 'nullable|integer'
+        ]);
         $user = $request->user();
 
         if (!$user->couple_id) {
@@ -433,10 +467,32 @@ class GlimpseController extends Controller
             return response()->json(['message' => 'Relationship is not active'], 400);
         }
 
+        $roomId = $request->input('room_id');
+        if (!$roomId) {
+            // Find or create Main Room
+            $mainRoom = \DB::table('chat_rooms')
+                ->where('couple_id', $user->couple_id)
+                ->where('is_main', true)
+                ->first();
+                
+            if (!$mainRoom) {
+                $roomId = \DB::table('chat_rooms')->insertGetId([
+                    'couple_id' => $user->couple_id,
+                    'name' => 'General Chat',
+                    'is_main' => true,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            } else {
+                $roomId = $mainRoom->id;
+            }
+        }
+
         $msg = \App\Models\Message::create([
             'couple_id' => $user->couple_id,
             'sender_id' => $user->id,
-            'message' => $request->message
+            'message' => $request->message,
+            'room_id' => $roomId
         ]);
 
         // Broadcast MessageSent event to the partner over WebSockets
@@ -799,5 +855,163 @@ class GlimpseController extends Controller
             'created_at' => $schedule->created_at ? ($schedule->created_at instanceof \Carbon\Carbon ? $schedule->created_at->toIso8601String() : \Carbon\Carbon::parse($schedule->created_at)->toIso8601String()) : null,
             'updated_at' => $schedule->updated_at ? ($schedule->updated_at instanceof \Carbon\Carbon ? $schedule->updated_at->toIso8601String() : \Carbon\Carbon::parse($schedule->updated_at)->toIso8601String()) : null,
         ];
+    }
+
+    public function getChatRooms(Request $request)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        // 1. Ensure Main Room (General Chat) exists
+        $mainRoom = \DB::table('chat_rooms')
+            ->where('couple_id', $user->couple_id)
+            ->where('is_main', true)
+            ->first();
+
+        if (!$mainRoom) {
+            \DB::table('chat_rooms')->insert([
+                'couple_id' => $user->couple_id,
+                'name' => 'General Chat',
+                'is_main' => true,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+        }
+
+        // 2. Fetch all rooms
+        $rooms = \DB::table('chat_rooms')
+            ->where('couple_id', $user->couple_id)
+            ->orderBy('is_main', 'desc')
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        $formattedRooms = [];
+        foreach ($rooms as $room) {
+            // Find latest message in this room
+            // For Main Room, it can also include messages with room_id = null (backward compatibility)
+            $latestQuery = \App\Models\Message::where('couple_id', $user->couple_id);
+            if ($room->is_main) {
+                $latestQuery->where(function($q) use ($room) {
+                    $q->where('room_id', $room->id)
+                      ->orWhereNull('room_id');
+                });
+            } else {
+                $latestQuery->where('room_id', $room->id);
+            }
+            
+            $latestMessage = $latestQuery->orderBy('created_at', 'desc')->first();
+
+            // Calculate unread count
+            $unreadQuery = \App\Models\Message::where('couple_id', $user->couple_id)
+                ->where('sender_id', '!=', $user->id);
+                
+            if ($room->is_main) {
+                $unreadQuery->where(function($q) use ($room) {
+                    $q->where('room_id', $room->id)
+                      ->orWhereNull('room_id');
+                });
+            } else {
+                $unreadQuery->where('room_id', $room->id);
+            }
+
+            if ($user->last_seen_message_id !== null) {
+                $unreadQuery->where('id', '>', $user->last_seen_message_id);
+            }
+
+            $unreadCount = $unreadQuery->count();
+
+            $formattedRooms[] = [
+                'id' => (int)$room->id,
+                'couple_id' => (int)$room->couple_id,
+                'name' => (string)$room->name,
+                'is_main' => (bool)$room->is_main,
+                'latest_message' => $latestMessage ? [
+                    'id' => (int)$latestMessage->id,
+                    'message' => (string)$latestMessage->message,
+                    'sender_id' => (int)$latestMessage->sender_id,
+                    'created_at' => $latestMessage->created_at instanceof \Carbon\Carbon ? $latestMessage->created_at->toIso8601String() : \Carbon\Carbon::parse($latestMessage->created_at)->toIso8601String(),
+                ] : null,
+                'unread_count' => (int)$unreadCount,
+                'created_at' => \Carbon\Carbon::parse($room->created_at)->toIso8601String(),
+                'updated_at' => \Carbon\Carbon::parse($room->updated_at)->toIso8601String(),
+            ];
+        }
+
+        return response()->json($formattedRooms);
+    }
+
+    public function createChatRoom(Request $request)
+    {
+        $request->validate(['name' => 'required|string|max:100']);
+        $user = $request->user();
+
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        $id = \DB::table('chat_rooms')->insertGetId([
+            'couple_id' => $user->couple_id,
+            'name' => $request->name,
+            'is_main' => false,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        $room = \DB::table('chat_rooms')->find($id);
+
+        $formatted = [
+            'id' => (int)$room->id,
+            'couple_id' => (int)$room->couple_id,
+            'name' => (string)$room->name,
+            'is_main' => (bool)$room->is_main,
+            'latest_message' => null,
+            'unread_count' => 0,
+            'created_at' => \Carbon\Carbon::parse($room->created_at)->toIso8601String(),
+            'updated_at' => \Carbon\Carbon::parse($room->updated_at)->toIso8601String(),
+        ];
+
+        // Broadcast real-time Pusher event
+        try {
+            broadcast(new \App\Events\ChatRoomCreated($user->couple_id, $formatted))->toOthers();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+        }
+
+        return response()->json($formatted);
+    }
+
+    public function deleteChatRoom(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        $room = \DB::table('chat_rooms')
+            ->where('couple_id', $user->couple_id)
+            ->where('id', $id)
+            ->first();
+
+        if (!$room) {
+            return response()->json(['message' => 'Chat room not found'], 404);
+        }
+
+        if ($room->is_main) {
+            return response()->json(['message' => 'Cannot delete main chat room'], 400);
+        }
+
+        // Delete the room (cascade will automatically delete messages!)
+        \DB::table('chat_rooms')->where('id', $id)->delete();
+
+        // Broadcast real-time delete event
+        try {
+            broadcast(new \App\Events\ChatRoomDeleted($user->couple_id, (int)$id))->toOthers();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+        }
+
+        return response()->json(['status' => 'ok']);
     }
 }

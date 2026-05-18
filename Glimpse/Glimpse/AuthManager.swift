@@ -367,8 +367,12 @@ class AuthManager {
         }
     }
     
-    func fetchMessages() async throws -> [ChatMessage] {
-        guard let url = URL(string: "\(baseURL)/glimpse/chat") else { return [] }
+    func fetchMessages(roomId: Int? = nil) async throws -> [ChatMessage] {
+        var urlString = "\(baseURL)/glimpse/chat"
+        if let rId = roomId {
+            urlString += "?room_id=\(rId)"
+        }
+        guard let url = URL(string: urlString) else { return [] }
         guard let token = userToken else { return [] }
         
         var request = URLRequest(url: url)
@@ -383,9 +387,11 @@ class AuthManager {
         
         let decoded = try JSONDecoder().decode([ChatMessage].self, from: data)
         await MainActor.run {
-            self.latestFetchedMessages = decoded
-            self.updateUnreadCount()
-            self.saveMessagesCache()
+            if roomId == nil {
+                self.latestFetchedMessages = decoded
+                self.updateUnreadCount()
+                self.saveMessagesCache()
+            }
         }
         if let lastMsg = decoded.last {
             Task {
@@ -470,7 +476,7 @@ class AuthManager {
         _ = try? await URLSession.shared.data(for: request)
     }
     
-    func sendChatMessage(text: String) async throws -> ChatMessage {
+    func sendChatMessage(text: String, roomId: Int? = nil) async throws -> ChatMessage {
         guard let url = URL(string: "\(baseURL)/glimpse/chat") else {
             throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
         }
@@ -484,7 +490,10 @@ class AuthManager {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         
-        let body = ["message": text]
+        var body: [String: Any] = ["message": text]
+        if let rId = roomId {
+            body["room_id"] = rId
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -494,6 +503,62 @@ class AuthManager {
         }
         
         return try JSONDecoder().decode(ChatMessage.self, from: data)
+    }
+
+    func fetchChatRooms() async throws -> [GlimpseChatRoom] {
+        guard let url = URL(string: "\(baseURL)/glimpse/chat-rooms") else { return [] }
+        guard let token = userToken else { return [] }
+        
+        var request = URLRequest(url: url)
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            return []
+        }
+        
+        return try JSONDecoder().decode([GlimpseChatRoom].self, from: data)
+    }
+
+    func createChatRoom(name: String) async throws -> GlimpseChatRoom {
+        guard let url = URL(string: "\(baseURL)/glimpse/chat-rooms") else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
+        }
+        guard let token = userToken else {
+            throw NSError(domain: "Auth", code: 401, userInfo: [NSLocalizedDescriptionKey: "Unauthorized"])
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let body = ["name": name]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to create room"])
+        }
+        
+        return try JSONDecoder().decode(GlimpseChatRoom.self, from: data)
+    }
+
+    func deleteChatRoom(roomId: Int) async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/chat-rooms/\(roomId)") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to delete room"])
+        }
     }
 
     func updateProfile(name: String?, email: String?, bornDate: String?, photo: UIImage?) async throws {
@@ -1137,6 +1202,34 @@ class AuthManager {
                     }
                 }
                 
+            case "App\\Events\\ChatRoomCreated":
+                print("🆕 Chat room created broadcast received!")
+                if let eventDataString = pusherEvent.data,
+                   let eventData = eventDataString.data(using: .utf8) {
+                    struct RoomPayload: Codable {
+                        let room: GlimpseChatRoom
+                    }
+                    if let payload = try? JSONDecoder().decode(RoomPayload.self, from: eventData) {
+                        DispatchQueue.main.async {
+                            NotificationCenter.default.post(name: Notification.Name("GlimpseChatRoomCreated"), object: payload.room)
+                        }
+                    }
+                }
+                
+            case "App\\Events\\ChatRoomDeleted":
+                print("🗑️ Chat room deleted broadcast received!")
+                if let eventDataString = pusherEvent.data,
+                   let eventData = eventDataString.data(using: .utf8) {
+                    struct RoomIdPayload: Codable {
+                        let room_id: Int
+                    }
+                    if let payload = try? JSONDecoder().decode(RoomIdPayload.self, from: eventData) {
+                        DispatchQueue.main.async {
+                            NotificationCenter.default.post(name: Notification.Name("GlimpseChatRoomDeleted"), object: payload.room_id)
+                        }
+                    }
+                }
+
             case "App\\Events\\MessageSent":
                 print("💬 New message broadcast received!")
                 if let eventDataString = pusherEvent.data,

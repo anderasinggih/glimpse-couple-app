@@ -4,6 +4,16 @@ import AudioToolbox
 
 struct ChatView: View {
     @State private var auth = AuthManager.shared
+    
+    // Multi-room Chat state
+    @State private var chatRooms: [GlimpseChatRoom] = []
+    @State private var selectedRoom: GlimpseChatRoom? = nil
+    @State private var isLoadingRooms = false
+    @State private var showCreateRoomAlert = false
+    @State private var newRoomName = ""
+    @State private var showDeleteConfirmAlert = false
+    @State private var roomToDelete: GlimpseChatRoom? = nil
+    
     @State private var messages: [ChatMessage] = []
     @State private var messageInput = ""
     @State private var isSending = false
@@ -11,7 +21,6 @@ struct ChatView: View {
     @State private var cancellable: Cancellable?
     @FocusState private var isInputFocused: Bool
     
-    // To track when to push status (every 2 ticks of the 5.0s timer = 10s)
     @State private var tickCount = 0
     @State private var isSearchingChat = false
     @State private var searchQuery = ""
@@ -43,257 +52,254 @@ struct ChatView: View {
             
             // LAYER 2: Main Content
             if let partner = auth.partner, auth.coupleActive {
-                ZStack(alignment: .top) {
-                    
-                    // Messages ScrollView (occupies full height, goes UNDER header)
-                    ScrollViewReader { proxy in
-                        ZStack(alignment: .bottomTrailing) {
-                            ScrollView {
-                            LazyVStack(spacing: 12) {
-                                // Top space to offset first message below the frosted header (height matches whether search is expanded)
-                                Spacer().frame(height: isSearchingChat ? 165 : 110)
-                                
-                                ForEach(Array(filteredMessages.enumerated()), id: \.element.id) { index, msg in
-                                    VStack(spacing: 12) {
-                                        if shouldShowDateHeader(for: index) {
-                                            dateHeaderBadge(for: msg)
-                                        }
+                if let activeRoom = selectedRoom {
+                    // --- 💬 ACTIVE CHAT ROOM SCREEN ---
+                    ZStack(alignment: .top) {
+                        ScrollViewReader { proxy in
+                            ZStack(alignment: .bottomTrailing) {
+                                ScrollView {
+                                    LazyVStack(spacing: 12) {
+                                        Spacer().frame(height: isSearchingChat ? 165 : 110)
                                         
-                                        // 🌟 Premium Unread Messages Divider
-                                        if msg.id == firstUnreadMessageId {
-                                            unreadMessagesDivider()
-                                        }
-                                        
-                                        chatBubble(msg: msg)
-                                            .transition(.asymmetric(
-                                                insertion: .scale(scale: 0.8, anchor: msg.sender_id == auth.currentUser?.id ? .bottomTrailing : .bottomLeading)
-                                                    .combined(with: .opacity),
-                                                removal: .opacity
-                                            ))
-                                    }
-                                }
-                                
-                                // Beautiful Glassmorphic "No Results" state when query returns nothing
-                                if !searchQuery.isEmpty && filteredMessages.isEmpty {
-                                    VStack(spacing: 12) {
-                                        Image(systemName: "magnifyingglass.circle.fill")
-                                            .font(.system(size: 44))
-                                            .foregroundColor(.white.opacity(0.25))
-                                        Text("No results for \"\(searchQuery)\"")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(.white.opacity(0.5))
-                                    }
-                                    .padding(.vertical, 40)
-                                    .frame(maxWidth: .infinity)
-                                    .transition(.opacity.combined(with: .scale))
-                                }
-                                
-                                if auth.isPartnerTyping {
-                                    HStack {
-                                        TypingIndicatorView()
-                                            .transition(.asymmetric(
-                                                insertion: .scale(scale: 0.7, anchor: .bottomLeading)
-                                                    .combined(with: .opacity),
-                                                removal: .opacity
-                                            ))
-                                        Spacer()
-                                    }
-                                    .padding(.leading, 4)
-                                    .padding(.top, 4)
-                                }
-                                
-                                // 🌟 Offline / Unstable Network "Sending..." Section
-                                if !pendingMessages.isEmpty {
-                                    VStack(spacing: 12) {
-                                        // "Sending..." / "Sedang Mengirim..." Separator
-                                        HStack {
-                                            Rectangle()
-                                                .fill(LinearGradient(colors: [.clear, .electricPurple.opacity(0.3)], startPoint: .leading, endPoint: .trailing))
-                                                .frame(height: 1)
-                                            
-                                            Text("Sending...")
-                                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                                                .foregroundColor(.electricPurple.opacity(0.8))
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 4)
-                                                .background(.ultraThinMaterial)
-                                                .cornerRadius(10)
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 10)
-                                                        .stroke(Color.electricPurple.opacity(0.3), lineWidth: 0.5)
-                                                )
-                                            
-                                            Rectangle()
-                                                .fill(LinearGradient(colors: [.electricPurple.opacity(0.3), .clear], startPoint: .leading, endPoint: .trailing))
-                                                .frame(height: 1)
-                                        }
-                                        .padding(.vertical, 8)
-                                        .transition(.opacity.combined(with: .scale))
-                                        
-                                        ForEach(pendingMessages) { msg in
-                                            chatBubble(msg: msg, isPending: true)
-                                                .transition(.scale(scale: 0.85, anchor: .bottomTrailing).combined(with: .opacity))
-                                        }
-                                    }
-                                }
-                                
-                                // Tiny bottom padding to prevent drop shadow clipping of the last bubble
-                                Spacer().frame(height: 15)
-                                
-                                // Bottom Scroll Detection Marker
-                                Color.clear
-                                    .frame(height: 1)
-                                    .background(
-                                        GeometryReader { geo in
-                                            let frame = geo.frame(in: .global)
-                                            Color.clear
-                                                .onChange(of: frame.minY) { _, newValue in
-                                                    let screenHeight = UIScreen.main.bounds.height
-                                                    let isOff = newValue > screenHeight + 120
-                                                    if isShowingScrollToBottomButton != isOff {
-                                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                                                            isShowingScrollToBottomButton = isOff
-                                                        }
-                                                    }
+                                        ForEach(Array(filteredMessages.enumerated()), id: \.element.id) { index, msg in
+                                            VStack(spacing: 12) {
+                                                if shouldShowDateHeader(for: index) {
+                                                    dateHeaderBadge(for: msg)
                                                 }
+                                                
+                                                if msg.id == firstUnreadMessageId {
+                                                    unreadMessagesDivider()
+                                                }
+                                                
+                                                chatBubble(msg: msg)
+                                                    .transition(.asymmetric(
+                                                        insertion: .scale(scale: 0.8, anchor: msg.sender_id == auth.currentUser?.id ? .bottomTrailing : .bottomLeading)
+                                                            .combined(with: .opacity),
+                                                        removal: .opacity
+                                                    ))
+                                            }
                                         }
-                                    )
-                            }
-                            .padding(.horizontal, 16)
-                            .frame(maxWidth: .infinity, minHeight: 600)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                isInputFocused = false
-                            }
-                        }
-                        .safeAreaInset(edge: .bottom) {
-                            VStack(spacing: 0) {
-                                Rectangle()
-                                    .fill(Color.white.opacity(0.08))
-                                    .frame(height: 0.8)
-                                
-                                if !NetworkMonitor.shared.isConnected {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "wifi.slash")
-                                            .foregroundColor(.red)
-                                            .font(.system(size: 13, weight: .bold))
-                                        Text("No Internet Connection")
-                                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                            .foregroundColor(.white.opacity(0.85))
+                                        
+                                        if !searchQuery.isEmpty && filteredMessages.isEmpty {
+                                            VStack(spacing: 12) {
+                                                Image(systemName: "magnifyingglass.circle.fill")
+                                                    .font(.system(size: 44))
+                                                    .foregroundColor(.white.opacity(0.25))
+                                                Text("No results for \"\(searchQuery)\"")
+                                                    .font(.system(size: 14, weight: .medium))
+                                                    .foregroundColor(.white.opacity(0.5))
+                                            }
+                                            .padding(.vertical, 40)
+                                            .frame(maxWidth: .infinity)
+                                        }
+                                        
+                                        if auth.isPartnerTyping {
+                                            HStack {
+                                                TypingIndicatorView()
+                                                Spacer()
+                                            }
+                                            .padding(.leading, 4)
+                                            .padding(.top, 4)
+                                        }
+                                        
+                                        if !pendingMessages.isEmpty {
+                                            VStack(spacing: 12) {
+                                                HStack {
+                                                    Rectangle()
+                                                        .fill(LinearGradient(colors: [.clear, .electricPurple.opacity(0.3)], startPoint: .leading, endPoint: .trailing))
+                                                        .frame(height: 1)
+                                                    Text("Sending...")
+                                                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                                                        .foregroundColor(.electricPurple.opacity(0.8))
+                                                        .padding(.horizontal, 12)
+                                                        .padding(.vertical, 4)
+                                                        .background(.ultraThinMaterial)
+                                                        .cornerRadius(10)
+                                                    Rectangle()
+                                                        .fill(LinearGradient(colors: [.electricPurple.opacity(0.3), .clear], startPoint: .leading, endPoint: .trailing))
+                                                        .frame(height: 1)
+                                                }
+                                                .padding(.vertical, 8)
+                                                
+                                                ForEach(pendingMessages) { msg in
+                                                    chatBubble(msg: msg, isPending: true)
+                                                }
+                                            }
+                                        }
+                                        
+                                        Spacer().frame(height: 15)
+                                        
+                                        Color.clear
+                                            .frame(height: 1)
+                                            .background(
+                                                GeometryReader { geo in
+                                                    let frame = geo.frame(in: .global)
+                                                    Color.clear
+                                                        .onChange(of: frame.minY) { _, newValue in
+                                                            let screenHeight = UIScreen.main.bounds.height
+                                                            let isOff = newValue > screenHeight + 120
+                                                            if isShowingScrollToBottomButton != isOff {
+                                                                withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                                                    isShowingScrollToBottomButton = isOff
+                                                                }
+                                                            }
+                                                        }
+                                                }
+                                            )
                                     }
                                     .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .background(Color.red.opacity(0.15))
-                                    .cornerRadius(10)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .stroke(Color.red.opacity(0.3), lineWidth: 1)
-                                    )
-                                    .padding(.top, 8)
-                                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                                    .frame(maxWidth: .infinity, minHeight: 600)
                                 }
-                                
-                                floatingInputBar
-                                    .padding(.horizontal, 16)
-                                    .padding(.top, 12)
-                                    .padding(.bottom, 12)
-                            }
-                            .background(
-                                Color.white.opacity(0.01) // Super transparent base for see-through feel
-                                    .background(.ultraThinMaterial) // Clean glassmorphic transparent blur
-                                    .ignoresSafeArea(edges: .bottom)
-                            )
-                        }
-                        .onChange(of: messages) { oldMessages, newMessages in
-                            if let lastMsg = newMessages.last {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                        proxy.scrollTo(lastMsg.id, anchor: .bottom)
-                                    }
-                                }
-                                
-                                // Play soft "ting" sound (1103) and tactile "klek" haptic (.rigid) when partner message is received
-                                if !oldMessages.isEmpty && lastMsg.sender_id == auth.partner?.id {
-                                    AudioServicesPlaySystemSound(1103) // Soft ting/chime
-                                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                                }
-                            }
-                        }
-                        .onChange(of: isInputFocused) { _, isFocused in
-                            if isFocused {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                                    if let lastMsg = messages.last {
-                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                                            proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                                .safeAreaInset(edge: .bottom) {
+                                    VStack(spacing: 0) {
+                                        Rectangle()
+                                            .fill(Color.white.opacity(0.08))
+                                            .frame(height: 0.8)
+                                        
+                                        if !NetworkMonitor.shared.isConnected {
+                                            HStack(spacing: 8) {
+                                                Image(systemName: "wifi.slash")
+                                                    .foregroundColor(.red)
+                                                    .font(.system(size: 13, weight: .bold))
+                                                Text("No Internet Connection")
+                                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                                    .foregroundColor(.white.opacity(0.85))
+                                            }
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 8)
+                                            .background(Color.red.opacity(0.15))
+                                            .cornerRadius(10)
+                                            .padding(.top, 8)
                                         }
+                                        
+                                        floatingInputBar
+                                            .padding(.horizontal, 16)
+                                            .padding(.top, 12)
+                                            .padding(.bottom, 12)
                                     }
-                                }
-                            }
-                        }
-                        .onAppear {
-                            if let lastMsg = messages.last {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                                        proxy.scrollTo(lastMsg.id, anchor: .bottom)
-                                    }
-                                }
-                            }
-                        }
-                        .onReceive(auth.chatTabDoubleTapPublisher) { _ in
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                                if let lastMsg = messages.last {
-                                    withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
-                                        proxy.scrollTo(lastMsg.id, anchor: .bottom)
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Floating Scroll To Bottom Button
-                        if isShowingScrollToBottomButton {
-                            Button {
-                                if let lastMsg = messages.last {
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                        proxy.scrollTo(lastMsg.id, anchor: .bottom)
-                                    }
-                                }
-                            } label: {
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .padding(12)
                                     .background(
-                                        Circle()
-                                            .fill(Color.activeCyan)
-                                            .shadow(color: .activeCyan.opacity(0.6), radius: 8, x: 0, y: 4)
+                                        Color.white.opacity(0.01)
+                                            .background(.ultraThinMaterial)
+                                            .ignoresSafeArea(edges: .bottom)
                                     )
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                                    )
+                                }
+                                .onChange(of: messages) { oldMessages, newMessages in
+                                    if let lastMsg = newMessages.last {
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                                proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                                            }
+                                        }
+                                        if !oldMessages.isEmpty && lastMsg.sender_id == auth.partner?.id {
+                                            AudioServicesPlaySystemSound(1103)
+                                            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                                        }
+                                    }
+                                }
+                                .onChange(of: isInputFocused) { _, isFocused in
+                                    if isFocused {
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                                            if let lastMsg = messages.last {
+                                                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                                                    proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                if isShowingScrollToBottomButton {
+                                    Button {
+                                        if let lastMsg = messages.last {
+                                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                                proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                                            }
+                                        }
+                                    } label: {
+                                        Image(systemName: "chevron.down")
+                                            .font(.system(size: 16, weight: .bold))
+                                            .foregroundColor(.white)
+                                            .padding(12)
+                                            .background(
+                                                Circle()
+                                                    .fill(Color.activeCyan)
+                                                    .shadow(color: .activeCyan.opacity(0.6), radius: 8, x: 0, y: 4)
+                                            )
+                                    }
+                                    .padding(.trailing, 20)
+                                    .padding(.bottom, 90)
+                                }
+                             }
+                        }
+                        chatHeader(partner: partner, room: activeRoom)
+                            .zIndex(10)
+                    }
+                    .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading)))
+                } else {
+                    // --- 🗂️ CHAT ROOMS LIST SCREEN ---
+                    VStack(spacing: 0) {
+                        roomsListHeader(partner: partner)
+                            .zIndex(10)
+                        
+                        if isLoadingRooms {
+                            Spacer()
+                            ProgressView()
+                                .tint(.activeCyan)
+                            Spacer()
+                        } else if chatRooms.isEmpty {
+                            Spacer()
+                            VStack(spacing: 12) {
+                                Image(systemName: "bubble.left.and.bubble.right.fill")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(.white.opacity(0.2))
+                                Text("No chat rooms yet")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundColor(.white.opacity(0.4))
                             }
-                            .padding(.trailing, 20)
-                            .padding(.bottom, 90) // Positions nicely above glass input bar
-                            .transition(.scale.combined(with: .opacity))
+                            Spacer()
+                        } else {
+                            List {
+                                ForEach(chatRooms) { room in
+                                    roomRow(room)
+                                        .listRowBackground(Color.clear)
+                                        .listRowSeparator(.hidden)
+                                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                        .contentShape(Rectangle())
+                                        .onTapGesture {
+                                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                                selectedRoom = room
+                                            }
+                                            loadMessagesForSelectedRoom()
+                                        }
+                                }
+                                .onDelete { indexSet in
+                                    if let index = indexSet.first {
+                                        let room = chatRooms[index]
+                                        if room.is_main {
+                                            UIImpactFeedbackGenerator(style: .warning).impactOccurred()
+                                            return
+                                        }
+                                        roomToDelete = room
+                                        showDeleteConfirmAlert = true
+                                    }
+                                }
+                            }
+                            .listStyle(.plain)
+                            .scrollContentBackground(.hidden)
+                            .padding(.top, 8)
                         }
                     }
-                }
-                    
-                    // Premium Small Header - aligned top overlaying ScrollView!
-                    chatHeader(partner: partner)
-                        .zIndex(10)
+                    .transition(.asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .trailing)))
                 }
             } else {
-                // Not Connected Placeholder
                 VStack(spacing: 20) {
                     Image(systemName: "bubble.left.and.bubble.right.fill")
                         .font(.system(size: 65))
                         .foregroundColor(.white.opacity(0.3))
-                    
                     Text("Chat is empty")
                         .font(.title2.bold())
                         .foregroundColor(.white)
-                    
                     Text("Connect with your partner first to start chatting in real-time.")
                         .font(.subheadline)
                         .foregroundColor(.white.opacity(0.6))
@@ -304,60 +310,127 @@ struct ChatView: View {
             }
         }
         .onAppear {
-            loadMessages()
+            loadChatRooms()
+            if selectedRoom != nil {
+                loadMessagesForSelectedRoom()
+            }
             startPolling()
-            auth.pushCurrentStatus() // Immediate status update on load
+            auth.pushCurrentStatus()
         }
         .onDisappear {
             stopPolling()
         }
-        // Push our current battery/charging status to partner periodically in background
         .onReceive(timer) { _ in
             if auth.partner != nil, auth.coupleActive {
                 tickCount += 1
-                
-                // Every 2 ticks (10s): Push our current battery/charging status to partner
                 if tickCount >= 2 {
                     tickCount = 0
                     auth.pushCurrentStatus()
+                }
+                // Refresh rooms list in background periodically
+                if selectedRoom == nil {
+                    Task {
+                        if let rooms = try? await auth.fetchChatRooms() {
+                            await MainActor.run {
+                                self.chatRooms = rooms
+                            }
+                        }
+                    }
+                } else {
+                    loadMessagesForSelectedRoom()
+                }
+            }
+        }
+        // WebSocket synchronization for chat rooms
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomCreated"))) { notification in
+            if let newRoom = notification.object as? GlimpseChatRoom {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    if !chatRooms.contains(where: { $0.id == newRoom.id }) {
+                        chatRooms.append(newRoom)
+                    }
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomDeleted"))) { notification in
+            if let deletedId = notification.object as? Int {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    chatRooms.removeAll(where: { $0.id == deletedId })
+                    if selectedRoom?.id == deletedId {
+                        selectedRoom = nil
+                    }
                 }
             }
         }
         // Listen to live WebSocket message broadcasts from Partner
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatMessageReceived"))) { notification in
             if let newMsg = notification.object as? ChatMessage {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-                    // 1. If we sent this message, check if we have an optimistic temp bubble (ID < 0) and reconcile it instantly
-                    if newMsg.sender_id == auth.currentUser?.id {
-                        if let tempIndex = self.messages.firstIndex(where: { $0.id < 0 }) {
-                            self.messages[tempIndex] = newMsg
-                            return
+                let isCurrentRoom = selectedRoom?.id == newMsg.room_id || (selectedRoom?.is_main == true && newMsg.room_id == nil)
+                
+                if isCurrentRoom {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                        if newMsg.sender_id == auth.currentUser?.id {
+                            if let tempIndex = self.messages.firstIndex(where: { $0.id < 0 }) {
+                                self.messages[tempIndex] = newMsg
+                                return
+                            }
+                        }
+                        if !self.messages.contains(where: { $0.id == newMsg.id }) {
+                             self.messages.append(newMsg)
                         }
                     }
+                }
+                
+                // Update latest message in rooms list
+                if let index = chatRooms.firstIndex(where: { $0.id == newMsg.room_id || ($0.is_main && newMsg.room_id == nil) }) {
+                    var updated = chatRooms[index]
+                    updated.latest_message = RoomLatestMessage(
+                        id: newMsg.id,
+                        message: newMsg.message,
+                        sender_id: newMsg.sender_id,
+                        created_at: newMsg.created_at
+                    )
                     
-                    // 2. Otherwise, append only if not already present
-                    if !self.messages.contains(where: { $0.id == newMsg.id }) {
-                         self.messages.append(newMsg)
+                    if selectedRoom?.id != updated.id && newMsg.sender_id == auth.partner?.id {
+                        updated.unread_count += 1
+                    }
+                    
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        chatRooms[index] = updated
                     }
                 }
             }
         }
-        // Auto-retry sending pending messages when network comes online
         .onChange(of: networkMonitor.isConnected) { _, isConnected in
             if isConnected {
                 processPendingQueue()
             }
         }
-        // Real-time typing notification triggers
         .onChange(of: messageInput) { oldValue, newValue in
             let cleanNew = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
             let cleanOld = oldValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            
             if !cleanNew.isEmpty && cleanOld.isEmpty {
                 auth.sendTypingStatus(isTyping: true)
             } else if cleanNew.isEmpty && !cleanOld.isEmpty {
                 auth.sendTypingStatus(isTyping: false)
             }
+        }
+        // Custom creation and deletion alerts
+        .alert("New Chat Room", isPresented: $showCreateRoomAlert) {
+            TextField("Room name", text: $newRoomName)
+            Button("Cancel", role: .cancel) { newRoomName = "" }
+            Button("Create") {
+                createRoom()
+            }
+        } message: {
+            Text("Create a new chat room to discuss a different topic with your partner.")
+        }
+        .alert("Delete Room?", isPresented: $showDeleteConfirmAlert, presenting: roomToDelete) { room in
+            Button("Cancel", role: .cancel) { roomToDelete = nil }
+            Button("Delete", role: .destructive) {
+                deleteRoom(room)
+            }
+        } message: { room in
+            Text("Are you sure you want to delete '\(room.name)'? All messages in this room will be permanently lost.")
         }
         .alert("No Internet Connection", isPresented: $showNoInternetAlert) {
             Button("OK", role: .cancel) {}
@@ -366,81 +439,179 @@ struct ChatView: View {
         }
     }
     
-    // PREMIUM TINY HEADER WITH INTEGRATED BLUR EFFECT (Bleeds to top edge)
-    private func chatHeader(partner: GlimpseUser) -> some View {
+    // --- 🗂️ ROOMS LIST HEADER ---
+    private func roomsListHeader(partner: GlimpseUser) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 14) {
-                // Profile Photo (Small circle)
                 AsyncImage(url: URL(string: formattedUrl(partner.profile_photo_url))) { image in
                     image.resizable()
                         .aspectRatio(contentMode: .fill)
                 } placeholder: {
                     Color.white.opacity(0.1)
                 }
-                .frame(width: 44, height: 44)
+                .frame(width: 40, height: 40)
                 .clipShape(Circle())
                 .overlay(Circle().stroke(Color.activeCyan.opacity(0.3), lineWidth: 1.5))
                 
-                // Partner Details (Tiny & Compact)
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 7) {
-                        Text(partner.name)
-                            .font(.system(size: 16.5, weight: .bold))
-                            .foregroundColor(.white)
-                        
-                        // Online Indicator Dot
+                    Text("Chat Rooms")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    HStack(spacing: 5) {
                         Circle()
                             .fill(partner.isOffline ? Color.gray : Color.green)
-                            .frame(width: 7, height: 7)
-                    }
-                    
-                    // Status, Location, and Battery
-                    HStack(spacing: 10) {
-                        // 1. Online / Offline Status
+                            .frame(width: 6, height: 6)
                         Text(partner.isOffline ? "Offline" : "Online")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(.white.opacity(0.55))
-                        
-                        Text("•")
-                            .font(.system(size: 11))
-                            .foregroundColor(.white.opacity(0.3))
-                        
-                         // 2. Location (Tap to redirect to Map screen)
-                        HStack(spacing: 3) {
-                            Image(systemName: "location.fill")
-                                .font(.system(size: 9.5))
-                            Text(partner.location_name ?? "Unknown")
-                                .font(.system(size: 11, weight: .medium))
-                                .lineLimit(1)
-                        }
-                        .foregroundColor(.activeCyan.opacity(0.95))
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                auth.selectedTab = 1 // Switch to map tab
-                            }
-                        }
-                        
-                        Text("•")
-                            .font(.system(size: 11))
-                            .foregroundColor(.white.opacity(0.3))
-                        
-                        // 3. Battery with Charging Support
-                        HStack(spacing: 3) {
-                            Image(systemName: partner.is_charging == true ? "battery.100.bolt" : "battery.75")
-                                .font(.system(size: 11))
-                                .foregroundColor(partner.is_charging == true ? .green : (partner.battery_level ?? 100 > 20 ? .white.opacity(0.7) : .red))
-                            Text("\(partner.battery_level ?? 100)%")
-                                .font(.system(size: 11, weight: .semibold))
-                        }
-                        .foregroundColor(.white.opacity(0.7))
                     }
                 }
                 
                 Spacer()
                 
-                // PREMIUM FIND CHAT BUTTON (WhatsApp style)
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    newRoomName = ""
+                    showCreateRoomAlert = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 36, height: 36)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Circle())
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 50)
+            .padding(.bottom, 12)
+        }
+        .background(
+            Color.white.opacity(0.01)
+                .background(.ultraThinMaterial)
+        )
+        .ignoresSafeArea(edges: .top)
+    }
+    
+    // --- 🏷️ ROOM ROW COMPONENT (WhatsApp style row) ---
+    private func roomRow(_ room: GlimpseChatRoom) -> some View {
+        HStack(spacing: 14) {
+            // Room Icon Container
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(colors: room.is_main ? [.activeCyan.opacity(0.2), .activeCyan.opacity(0.05)] : [.white.opacity(0.12), .white.opacity(0.03)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 46, height: 46)
+                
+                Image(systemName: room.is_main ? "star.bubble.fill" : "bubble.left.and.bubble.right.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(room.is_main ? .activeCyan : .white.opacity(0.8))
+            }
+            .overlay(
+                Circle()
+                    .stroke(room.is_main ? Color.activeCyan.opacity(0.2) : Color.white.opacity(0.08), lineWidth: 1)
+            )
+            
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(room.name)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    Spacer()
+                    
+                    if let latest = room.latest_message, let rawTime = latest.created_at {
+                        Text(formatMessageTime(rawTime))
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+                }
+                
+                HStack {
+                    if let latest = room.latest_message {
+                        let senderName = latest.sender_id == auth.currentUser?.id ? "You: " : ""
+                        Text("\(senderName)\(latest.message)")
+                            .font(.system(size: 12.5))
+                            .foregroundColor(.white.opacity(0.55))
+                            .lineLimit(1)
+                    } else {
+                        Text("No messages yet")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.35))
+                    }
+                    
+                    Spacer()
+                    
+                    if room.unread_count > 0 {
+                        Text("\(room.unread_count)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 18, height: 18)
+                            .background(Circle().fill(Color.activeCyan))
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(room.is_main ? 0.05 : 0.02))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(room.is_main ? Color.activeCyan.opacity(0.12) : Color.white.opacity(0.04), lineWidth: 1)
+        )
+    }
+    
+    // --- 💬 ACTIVE ROOM HEADER WITH BACK BUTTON ---
+    private func chatHeader(partner: GlimpseUser, room: GlimpseChatRoom) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        selectedRoom = nil
+                    }
+                    loadChatRooms()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 32, height: 32)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Circle())
+                }
+                
+                AsyncImage(url: URL(string: formattedUrl(partner.profile_photo_url))) { image in
+                    image.resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Color.white.opacity(0.1)
+                }
+                .frame(width: 36, height: 36)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.activeCyan.opacity(0.3), lineWidth: 1))
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(room.name)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(partner.isOffline ? Color.gray : Color.green)
+                            .frame(width: 5, height: 5)
+                        Text(partner.isOffline ? "Offline" : "Online")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.white.opacity(0.5))
+                    }
+                }
+                
+                Spacer()
+                
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -451,18 +622,17 @@ struct ChatView: View {
                     }
                 } label: {
                     Image(systemName: isSearchingChat ? "xmark.circle.fill" : "magnifyingglass")
-                        .font(.system(size: 18, weight: .bold))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundColor(isSearchingChat ? .activeCyan : .white.opacity(0.8))
-                        .padding(8)
+                        .padding(6)
                         .background(Color.white.opacity(isSearchingChat ? 0.15 : 0.05))
                         .clipShape(Circle())
                 }
             }
             .padding(.horizontal, 16)
             .padding(.top, 50)
-            .padding(.bottom, 12)
+            .padding(.bottom, 10)
             
-            // EXPANDABLE SEARCH BAR PANEL
             if isSearchingChat {
                 HStack(spacing: 10) {
                     HStack {
@@ -487,22 +657,22 @@ struct ChatView: View {
                         }
                     }
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 6)
                     .background(Color.black.opacity(0.2))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: 10)
                             .stroke(Color.white.opacity(0.08), lineWidth: 1)
                     )
                 }
                 .padding(.horizontal, 16)
-                .padding(.bottom, 12)
+                .padding(.bottom, 10)
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .background(
-            Color.white.opacity(0.01) // Super transparent base for see-through feel
-                .background(.ultraThinMaterial) // Clean glassmorphic transparent blur
+            Color.white.opacity(0.01)
+                .background(.ultraThinMaterial)
         )
         .ignoresSafeArea(edges: .top)
     }
@@ -513,7 +683,6 @@ struct ChatView: View {
         let currentRadius: CGFloat = isMultiLine ? 16 : 22
         
         return HStack(spacing: 10) {
-            // Dynamically rounded input capsule matching send button height (44)
             HStack {
                 TextField("Type a message...", text: $messageInput, axis: .vertical)
                     .font(.system(size: 15))
@@ -537,7 +706,6 @@ struct ChatView: View {
             )
             .shadow(color: Color.black.opacity(0.15), radius: 8, y: 4)
             
-            // Separate Send Button (Outside, Floating on the right)
             Button {
                 sendMessage()
             } label: {
@@ -556,9 +724,9 @@ struct ChatView: View {
     @ViewBuilder
     private func bubbleBackground(isMe: Bool) -> some View {
         if isMe {
-            return AnyView(Color.activeCyan.opacity(0.18))
+            Color.activeCyan.opacity(0.18)
         } else {
-            return AnyView(Color.white.opacity(0.08))
+            Color.white.opacity(0.08)
         }
     }
     
@@ -575,10 +743,9 @@ struct ChatView: View {
                 }
                 
                 if msg.message.contains("[FLASH_ATTACHMENT]") {
-                    // SPECIAL INTERACTIVE FLASH ATTACHMENT CARD
                     Button {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                            auth.selectedTab = 0 // Switch to Dashboard Tab
+                            auth.selectedTab = 0
                         }
                     } label: {
                         VStack(alignment: .leading, spacing: 5) {
@@ -618,10 +785,9 @@ struct ChatView: View {
                     }
                     .buttonStyle(PlainButtonStyle())
                 } else if msg.message.contains("[KENCAN_INVITATION]") {
-                    // SPECIAL INTERACTIVE KENCAN INVITATION BUBBLE CARD
                     Button {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                            auth.showScheduleSheet = true // Present the schedule planner sheet directly!
+                            auth.showScheduleSheet = true
                         }
                     } label: {
                         VStack(alignment: .leading, spacing: 6) {
@@ -668,7 +834,6 @@ struct ChatView: View {
                     }
                     .buttonStyle(PlainButtonStyle())
                 } else {
-                    // STANDARD CHAT BUBBLE
                     VStack(alignment: .trailing, spacing: 4) {
                         Text(msg.message)
                             .font(.system(size: 12.5))
@@ -705,7 +870,6 @@ struct ChatView: View {
                 }
             }
             
-            // INTINATE REAL-TIME READ RECEIPT (SEEN STATUS BELOW MY CHAT LAST READ BY PARTNER)
             if isMe && msg.id == auth.partner?.last_seen_message_id {
                 HStack(spacing: 3.5) {
                     Image(systemName: "checkmark.seal.fill")
@@ -748,12 +912,9 @@ struct ChatView: View {
     
     private func loadMessages() {
         guard auth.partner != nil && auth.coupleActive else { return }
-        
-        // 1. Load instantly from cache for 0ms startup & offline resilience
         if !auth.latestFetchedMessages.isEmpty {
             self.messages = auth.latestFetchedMessages
         }
-        
         Task {
             if let msgs = try? await auth.fetchMessages() {
                 await MainActor.run {
@@ -763,18 +924,48 @@ struct ChatView: View {
         }
     }
     
+    private func createRoom() {
+        let name = newRoomName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Task {
+            if let newRoom = try? await auth.createChatRoom(name: name) {
+                await MainActor.run {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        self.chatRooms.append(newRoom)
+                    }
+                    newRoomName = ""
+                }
+            }
+        }
+    }
+    
+    private func deleteRoom(_ room: GlimpseChatRoom) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Task {
+            do {
+                try await auth.deleteChatRoom(roomId: room.id)
+                await MainActor.run {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        self.chatRooms.removeAll(where: { $0.id == room.id })
+                    }
+                    roomToDelete = nil
+                }
+            } catch {
+                print("❌ Failed to delete room: \(error)")
+            }
+        }
+    }
+    
     private func sendMessage() {
         let cleanText = messageInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanText.isEmpty else { return }
         
-        // 1. Clear input instantly
         messageInput = ""
-        
-        // 2. Play soft tap sound and haptic vibration instantly
-        AudioServicesPlaySystemSound(1104) // Soft WA-like tek click
+        AudioServicesPlaySystemSound(1104)
         UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
         
-        // 3. Generate optimistic local ChatMessage
         let tempId = Int.random(in: -100000...(-1))
         let formatter = ISO8601DateFormatter()
         let createdAtStr = formatter.string(from: Date())
@@ -784,16 +975,15 @@ struct ChatView: View {
             couple_id: auth.currentUser?.couple_id ?? 0,
             sender_id: auth.currentUser?.id ?? 0,
             message: cleanText,
+            room_id: selectedRoom?.id,
             created_at: createdAtStr,
             updated_at: createdAtStr
         )
         
-        // 4. Instantly append to pending messages queue!
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
             self.pendingMessages.append(tempMsg)
         }
         
-        // 5. Attempt background send
         Task {
             await attemptSendPendingMessage(tempMsg)
         }
@@ -801,14 +991,11 @@ struct ChatView: View {
     
     private func attemptSendPendingMessage(_ msg: ChatMessage) async {
         guard NetworkMonitor.shared.isConnected else { return }
-        
         do {
-            let sentMsg = try await auth.sendChatMessage(text: msg.message)
-            
+            let sentMsg = try await auth.sendChatMessage(text: msg.message, roomId: selectedRoom?.id)
             await MainActor.run {
                 withAnimation(.easeOut(duration: 0.2)) {
                     self.pendingMessages.removeAll(where: { $0.id == msg.id })
-                    // Append only if not already present in confirmed messages list
                     if !self.messages.contains(where: { $0.id == sentMsg.id }) {
                         self.messages.append(sentMsg)
                     }
@@ -821,7 +1008,6 @@ struct ChatView: View {
     
     private func processPendingQueue() {
         guard NetworkMonitor.shared.isConnected, !pendingMessages.isEmpty else { return }
-        
         Task {
             let currentPending = pendingMessages
             for msg in currentPending {
@@ -849,62 +1035,47 @@ struct ChatView: View {
         }
     }
     
-    // FORMAT RAW TIME STRING TO LOCAL HOUR/MINUTE (HH:MM)
     private func formatMessageTime(_ rawDate: String?) -> String {
         guard let rawDate = rawDate else { return "" }
-        
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        
         var date = formatter.date(from: rawDate)
-        
         if date == nil {
             let fallbackFormatter = DateFormatter()
             fallbackFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
             fallbackFormatter.timeZone = TimeZone(secondsFromGMT: 0)
             date = fallbackFormatter.date(from: rawDate)
         }
-        
         guard let validDate = date else { return "" }
-        
         let outputFormatter = DateFormatter()
         outputFormatter.dateFormat = "HH:mm"
         outputFormatter.timeZone = TimeZone.current
         return outputFormatter.string(from: validDate)
     }
     
-    // FORMAT DATE TO WHATSAPP STYLE LABELS ("Today", "Yesterday", or "16 May 2026")
     private func shouldShowDateHeader(for index: Int) -> Bool {
         let msgList = filteredMessages
         guard index < msgList.count else { return false }
         if index == 0 { return true }
-        
         let currentMsg = msgList[index]
         let prevMsg = msgList[index - 1]
-        
         guard let currentRaw = currentMsg.created_at, let prevRaw = prevMsg.created_at else { return false }
-        
         let currentDay = formatMessageDayString(currentRaw)
         let prevDay = formatMessageDayString(prevRaw)
-        
         return currentDay != prevDay
     }
     
     private func formatMessageDayString(_ rawDate: String) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        
         var date = formatter.date(from: rawDate)
-        
         if date == nil {
             let fallbackFormatter = DateFormatter()
             fallbackFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
             fallbackFormatter.timeZone = TimeZone(secondsFromGMT: 0)
             date = fallbackFormatter.date(from: rawDate)
         }
-        
         guard let validDate = date else { return "" }
-        
         let calendar = Calendar.current
         if calendar.isDateInToday(validDate) {
             return "Today"
@@ -917,12 +1088,9 @@ struct ChatView: View {
         }
     }
     
-    // --- UNREAD MESSAGES SEPARATOR UTILITIES ---
     private var firstUnreadMessageId: Int? {
         let partnerId = auth.partner?.id ?? 0
         let initialReadId = auth.initialLastReadId
-        
-        // Find the oldest message sent by the partner that has an ID greater than our initial last read ID
         return messages.first(where: { msg in
             msg.sender_id == partnerId && msg.id > initialReadId
         })?.id
@@ -931,8 +1099,7 @@ struct ChatView: View {
     private func unreadMessagesDivider() -> some View {
         HStack {
             VStack { Divider().background(Color(hex: "FF4D6D").opacity(0.3)) }
-            
-            Text("NEW MESSAGES")
+            Text("New Messages")
                 .font(.system(size: 10, weight: .bold, design: .rounded))
                 .foregroundColor(Color(hex: "FF4D6D"))
                 .padding(.horizontal, 10)
@@ -963,7 +1130,6 @@ struct RoundedCorner: Shape {
     }
 }
 
-// PREMIUM BOUNCING DOTS TYPING INDICATOR
 struct TypingIndicatorView: View {
     @State private var animateDot1 = false
     @State private var animateDot2 = false
@@ -972,21 +1138,26 @@ struct TypingIndicatorView: View {
     var body: some View {
         HStack(spacing: 4) {
             Circle()
-                .fill(Color.white.opacity(0.65))
-                .frame(width: 6, height: 6)
-                .offset(y: animateDot1 ? -4 : 4)
+                .fill(Color.white.opacity(0.7))
+                .frame(width: 5, height: 5)
+                .scaleEffect(animateDot1 ? 1.4 : 0.8)
+                .offset(y: animateDot1 ? -3 : 0)
+            
             Circle()
-                .fill(Color.white.opacity(0.65))
-                .frame(width: 6, height: 6)
-                .offset(y: animateDot2 ? -4 : 4)
+                .fill(Color.white.opacity(0.7))
+                .frame(width: 5, height: 5)
+                .scaleEffect(animateDot2 ? 1.4 : 0.8)
+                .offset(y: animateDot2 ? -3 : 0)
+            
             Circle()
-                .fill(Color.white.opacity(0.65))
-                .frame(width: 6, height: 6)
-                .offset(y: animateDot3 ? -4 : 4)
+                .fill(Color.white.opacity(0.7))
+                .frame(width: 5, height: 5)
+                .scaleEffect(animateDot3 ? 1.4 : 0.8)
+                .offset(y: animateDot3 ? -3 : 0)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(LinearGradient(colors: [Color.white.opacity(0.12), Color.white.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.white.opacity(0.08))
         .clipShape(RoundedCorner(radius: 14, corners: [.topLeft, .topRight, .bottomRight]))
         .overlay(
             RoundedCorner(radius: 14, corners: [.topLeft, .topRight, .bottomRight])
