@@ -991,12 +991,11 @@ struct ChatView: View {
         }
     }
     
-    @ViewBuilder
-    private func bubbleBackground(isMe: Bool) -> some View {
+    private func bubbleBackground(isMe: Bool) -> Color {
         if isMe {
-            Color.activeCyan.opacity(0.18)
+            return Color.activeCyan.opacity(0.18)
         } else {
-            Color.white.opacity(0.08)
+            return Color.white.opacity(0.08)
         }
     }
 
