@@ -391,7 +391,7 @@ struct ChatView: View {
                         if let index = indexSet.first {
                             let room = chatRooms[index]
                             if room.is_main {
-                                UIImpactFeedbackGenerator(style: .warning).impactOccurred()
+                                UINotificationFeedbackGenerator().notificationOccurred(.warning)
                                 return
                             }
                             roomToDelete = room
@@ -1222,5 +1222,16 @@ struct TypingIndicatorView: View {
                 animateDot3 = true
             }
         }
+    }
+}
+
+// SwiftUI helper to support customizable individual rounded corners
+struct RoundedCorner: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
+        return Path(path.cgPath)
     }
 }
