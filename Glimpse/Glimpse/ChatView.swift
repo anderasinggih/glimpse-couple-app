@@ -64,6 +64,10 @@ struct ChatView: View {
         }
     }
     
+    private var swipeProgress: CGFloat {
+        min(1.0, max(0.0, dragOffset / UIScreen.main.bounds.width))
+    }
+    
     var body: some View {
         ZStack {
             // LAYER 1: Background
@@ -380,6 +384,7 @@ struct ChatView: View {
                     }
                 }
                 chatHeader(partner: partner, room: room)
+                    .opacity(max(0.0, 1.0 - Double(swipeProgress) * 1.3))
                     .zIndex(10)
             }
             
@@ -405,7 +410,9 @@ struct ChatView: View {
                                 }
                                 // Re-assign selectedRoom to nil after transition finishes
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
-                                    selectedRoom = nil
+                                    withAnimation(.spring(response: 0.22, dampingFraction: 0.8)) {
+                                        selectedRoom = nil
+                                    }
                                     dragOffset = 0
                                     messages = [] // Clear messages completely
                                 }
@@ -509,6 +516,7 @@ struct ChatView: View {
             }
             
             roomsListHeader(partner: partner)
+                .opacity(selectedRoom == nil ? 1.0 : Double(swipeProgress))
                 .zIndex(10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
