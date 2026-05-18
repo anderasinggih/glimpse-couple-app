@@ -83,11 +83,9 @@ struct ChatView: View {
                 }
                 // Refresh rooms list in background periodically
                 if selectedRoom == nil {
-                    Task {
+                    Task { @MainActor in
                         if let rooms = try? await auth.fetchChatRooms() {
-                            await MainActor.run {
-                                self.chatRooms = rooms
-                            }
+                            self.chatRooms = rooms
                         }
                     }
                 } else {
@@ -951,11 +949,9 @@ struct ChatView: View {
         if !auth.latestFetchedMessages.isEmpty {
             self.messages = auth.latestFetchedMessages
         }
-        Task {
+        Task { @MainActor in
             if let msgs = try? await auth.fetchMessages() {
-                await MainActor.run {
-                    self.messages = msgs
-                }
+                self.messages = msgs
             }
         }
     }
@@ -963,33 +959,27 @@ struct ChatView: View {
     private func loadChatRooms() {
         guard auth.partner != nil && auth.coupleActive else { return }
         isLoadingRooms = true
-        Task {
+        Task { @MainActor in
             do {
                 let rooms = try await auth.fetchChatRooms()
-                await MainActor.run {
-                    self.chatRooms = rooms
-                    self.isLoadingRooms = false
-                }
+                self.chatRooms = rooms
+                self.isLoadingRooms = false
             } catch {
                 print("❌ Failed to load chat rooms: \(error)")
-                await MainActor.run {
-                    self.isLoadingRooms = false
-                }
+                self.isLoadingRooms = false
             }
         }
     }
     
     private func loadMessagesForSelectedRoom() {
         guard let activeRoom = selectedRoom else { return }
-        Task {
+        Task { @MainActor in
             do {
                 let msgs = try await auth.fetchMessages(roomId: activeRoom.id)
-                await MainActor.run {
-                    self.messages = msgs
-                    // Reset unread counter locally upon entering the room
-                    if let index = chatRooms.firstIndex(where: { $0.id == activeRoom.id }) {
-                        chatRooms[index].unread_count = 0
-                    }
+                self.messages = msgs
+                // Reset unread counter locally upon entering the room
+                if let index = chatRooms.firstIndex(where: { $0.id == activeRoom.id }) {
+                    chatRooms[index].unread_count = 0
                 }
             } catch {
                 print("❌ Failed to fetch messages for room \(activeRoom.name): \(error)")
@@ -1002,29 +992,31 @@ struct ChatView: View {
         guard !name.isEmpty else { return }
         
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        Task {
+        Task { @MainActor in
             if let newRoom = try? await auth.createChatRoom(name: name) {
-                await MainActor.run {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        self.chatRooms.append(newRoom)
-                    }
-                    newRoomName = ""
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    self.chatRooms.append(newRoom)
                 }
+                newRoomName = ""
             }
         }
     }
     
     private func deleteRoom(_ room: GlimpseChatRoom) {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        Task {
+        Task { @MainActor in
             do {
                 try await auth.deleteChatRoom(roomId: room.id)
-                await MainActor.run {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        self.chatRooms.removeAll(where: { $0.id == room.id })
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    var filtered: [GlimpseChatRoom] = []
+                    for r in self.chatRooms {
+                        if r.id != room.id {
+                            filtered.append(r)
+                        }
                     }
-                    roomToDelete = nil
+                    self.chatRooms = filtered
                 }
+                roomToDelete = nil
             } catch {
                 print("❌ Failed to delete room: \(error)")
             }
@@ -1062,16 +1054,29 @@ struct ChatView: View {
         }
     }
     
+    @MainActor
     private func attemptSendPendingMessage(_ msg: ChatMessage) async {
         guard NetworkMonitor.shared.isConnected else { return }
         do {
             let sentMsg = try await auth.sendChatMessage(text: msg.message, roomId: selectedRoom?.id)
-            await MainActor.run {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    self.pendingMessages.removeAll(where: { $0.id == msg.id })
-                    if !self.messages.contains(where: { $0.id == sentMsg.id }) {
-                        self.messages.append(sentMsg)
+            withAnimation(.easeOut(duration: 0.2)) {
+                var newPending: [ChatMessage] = []
+                for p in self.pendingMessages {
+                    if p.id != msg.id {
+                        newPending.append(p)
                     }
+                }
+                self.pendingMessages = newPending
+                
+                var exists = false
+                for m in self.messages {
+                    if m.id == sentMsg.id {
+                        exists = true
+                        break
+                    }
+                }
+                if !exists {
+                    self.messages.append(sentMsg)
                 }
             }
         } catch {
