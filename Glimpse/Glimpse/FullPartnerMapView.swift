@@ -73,23 +73,13 @@ struct FullPartnerMapView: View {
                         let count = coords.count
                         
                         ForEach(0..<count - 1, id: \.self) { i in
-                            let progress = Double(i) / Double(count - 1)
-                            let opacity = 0.35 + (progress * 0.45) // Opacity ranges from 0.35 (oldest) to 0.8 (newest)
-                            let width = 4.0 + (progress * 4.0)     // Width ranges from 4.0 to 8.0
-                            
-                            // 1. Neon Glow Layer (subtle shadow effect)
-                            MapPolyline(coordinates: [coords[i], coords[i+1]])
-                                .stroke(
-                                    Color.activeCyan.opacity(opacity * 0.4),
-                                    style: StrokeStyle(lineWidth: width + 6.0, lineCap: .round, lineJoin: .round)
-                                )
-                            
-                            // 2. Core Saturated Neon Layer
-                            MapPolyline(coordinates: [coords[i], coords[i+1]])
-                                .stroke(
-                                    Color.activeCyan.opacity(opacity),
-                                    style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
-                                )
+                            FootprintSegmentView(
+                                coordinate1: coords[i],
+                                coordinate2: coords[i+1],
+                                index: i,
+                                totalCount: count,
+                                color: Color.activeCyan
+                            )
                         }
                     }
                     
@@ -100,23 +90,13 @@ struct FullPartnerMapView: View {
                         let count = coords.count
                         
                         ForEach(0..<count - 1, id: \.self) { i in
-                            let progress = Double(i) / Double(count - 1)
-                            let opacity = 0.35 + (progress * 0.45) // Opacity ranges from 0.35 (oldest) to 0.8 (newest)
-                            let width = 4.0 + (progress * 4.0)     // Width ranges from 4.0 to 8.0
-                            
-                            // 1. Neon Glow Layer (subtle shadow effect)
-                            MapPolyline(coordinates: [coords[i], coords[i+1]])
-                                .stroke(
-                                    Color.electricPurple.opacity(opacity * 0.4),
-                                    style: StrokeStyle(lineWidth: width + 6.0, lineCap: .round, lineJoin: .round)
-                                )
-                            
-                            // 2. Core Saturated Neon Layer
-                            MapPolyline(coordinates: [coords[i], coords[i+1]])
-                                .stroke(
-                                    Color.electricPurple.opacity(opacity),
-                                    style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
-                                )
+                            FootprintSegmentView(
+                                coordinate1: coords[i],
+                                coordinate2: coords[i+1],
+                                index: i,
+                                totalCount: count,
+                                color: Color.electricPurple
+                            )
                         }
                     }
 
@@ -617,6 +597,34 @@ struct FullPartnerMapView: View {
         }
         
         return coordinates
+    }
+}
+
+struct FootprintSegmentView: View {
+    let coordinate1: CLLocationCoordinate2D
+    let coordinate2: CLLocationCoordinate2D
+    let index: Int
+    let totalCount: Int
+    let color: Color
+    
+    var body: some View {
+        let progress = totalCount > 1 ? Double(index) / Double(totalCount - 1) : 1.0
+        let opacity = 0.35 + (progress * 0.45)
+        let width = 4.0 + (progress * 4.0)
+        
+        // 1. Neon Glow Layer
+        MapPolyline(coordinates: [coordinate1, coordinate2])
+            .stroke(
+                color.opacity(opacity * 0.4),
+                style: StrokeStyle(lineWidth: width + 6.0, lineCap: .round, lineJoin: .round)
+            )
+        
+        // 2. Core Saturated Neon Layer
+        MapPolyline(coordinates: [coordinate1, coordinate2])
+            .stroke(
+                color.opacity(opacity),
+                style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
+            )
     }
 }
 
