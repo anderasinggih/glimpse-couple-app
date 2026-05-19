@@ -99,24 +99,12 @@ struct FullPartnerMapView: View {
                 Map(position: $position) {
                     // 👣 Neon Footprints Trail for Partner (Zenly-Style) - Tapered Fading Shadow
                     ForEach(partnerSegments) { segment in
-                        footprintSegment(
-                            coordinate1: segment.coordinate1,
-                            coordinate2: segment.coordinate2,
-                            index: segment.index,
-                            totalCount: segment.totalCount,
-                            color: Color.activeCyan
-                        )
+                        FootprintSegmentView(segment: segment, color: .activeCyan)
                     }
                     
                     // 👣 Neon Footprints Trail for Me (Zenly-Style) - Tapered Fading Shadow
                     ForEach(mySegments) { segment in
-                        footprintSegment(
-                            coordinate1: segment.coordinate1,
-                            coordinate2: segment.coordinate2,
-                            index: segment.index,
-                            totalCount: segment.totalCount,
-                            color: Color.electricPurple
-                        )
+                        FootprintSegmentView(segment: segment, color: .electricPurple)
                     }
 
                     if auth.isTogether, let currentUser = auth.currentUser {
@@ -395,27 +383,6 @@ struct FullPartnerMapView: View {
         timerCancellable?.cancel()
     }
     
-    @MapContentBuilder
-    private func footprintSegment(coordinate1: CLLocationCoordinate2D, coordinate2: CLLocationCoordinate2D, index: Int, totalCount: Int, color: Color) -> some MapContent {
-        let progress = totalCount > 1 ? Double(index) / Double(totalCount - 1) : 1.0
-        let opacity = 0.35 + (progress * 0.45)
-        let width = CGFloat(4.0 + (progress * 4.0))
-        
-        // 1. Neon Glow Layer (subtle shadow effect)
-        MapPolyline(coordinates: [coordinate1, coordinate2])
-            .stroke(
-                color.opacity(opacity * 0.4),
-                style: StrokeStyle(lineWidth: width + 6.0, lineCap: .round, lineJoin: .round)
-            )
-        
-        // 2. Core Saturated Neon Layer
-        MapPolyline(coordinates: [coordinate1, coordinate2])
-            .stroke(
-                color.opacity(opacity),
-                style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
-            )
-    }
-    
     @ViewBuilder
     private func togetherMarker(currentUser: GlimpseUser, partner: GlimpseUser) -> some View {
         ZStack {
@@ -652,6 +619,40 @@ struct FootprintSegment: Identifiable {
     let coordinate2: CLLocationCoordinate2D
     let index: Int
     let totalCount: Int
+}
+
+struct FootprintSegmentView: MapContent {
+    let segment: FootprintSegment
+    let color: Color
+    
+    private var progress: Double {
+        segment.totalCount > 1 ? Double(segment.index) / Double(segment.totalCount - 1) : 1.0
+    }
+    
+    private var opacity: Double {
+        0.35 + (progress * 0.45)
+    }
+    
+    private var width: CGFloat {
+        CGFloat(4.0 + (progress * 4.0))
+    }
+    
+    @MapContentBuilder
+    var body: some MapContent {
+        // 1. Neon Glow Layer
+        MapPolyline(coordinates: [segment.coordinate1, segment.coordinate2])
+            .stroke(
+                color.opacity(opacity * 0.4),
+                style: StrokeStyle(lineWidth: width + 6.0, lineCap: .round, lineJoin: .round)
+            )
+        
+        // 2. Core Saturated Neon Layer
+        MapPolyline(coordinates: [segment.coordinate1, segment.coordinate2])
+            .stroke(
+                color.opacity(opacity),
+                style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
+            )
+    }
 }
 
 extension GlimpseUser: Equatable {
