@@ -84,8 +84,6 @@ struct ChatView: View {
         let cleanQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanQuery.isEmpty else { return [] }
         
-        var results: [GlobalSearchResult] = []
-        
         // Collect all unique messages across caches
         var allCached: [Int: [ChatMessage]] = messagesCache
         for (roomId, msgs) in auth.roomMessagesCache {
@@ -102,21 +100,32 @@ struct ChatView: View {
             }
         }
         
+        var uniqueResults: [String: GlobalSearchResult] = [:]
+        
         // Filter messages containing query
         for room in chatRooms {
-            if let msgs = allCached[room.id] {
-                for msg in msgs {
-                    if msg.message.contains("[FLASH_ATTACHMENT]") || msg.message.contains("[KENCAN_INVITATION]") {
-                        continue
+            var msgsToSearch = allCached[room.id] ?? []
+            // If main room, also include messages cached under room_id 0
+            if room.is_main, let mainMsgs = allCached[0] {
+                for m in mainMsgs {
+                    if !msgsToSearch.contains(where: { $0.id == m.id }) {
+                        msgsToSearch.append(m)
                     }
-                    if msg.message.localizedCaseInsensitiveContains(cleanQuery) {
-                        results.append(GlobalSearchResult(room: room, message: msg))
-                    }
+                }
+            }
+            
+            for msg in msgsToSearch {
+                if msg.message.contains("[FLASH_ATTACHMENT]") || msg.message.contains("[KENCAN_INVITATION]") {
+                    continue
+                }
+                if msg.message.localizedCaseInsensitiveContains(cleanQuery) {
+                    let result = GlobalSearchResult(room: room, message: msg)
+                    uniqueResults[result.id] = result
                 }
             }
         }
         
-        return results.sorted { $0.message.id > $1.message.id }
+        return uniqueResults.values.sorted { $0.message.id > $1.message.id }
     }
     
     private var swipeProgress: CGFloat {
