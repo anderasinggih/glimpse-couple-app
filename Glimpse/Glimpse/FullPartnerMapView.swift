@@ -23,12 +23,24 @@ struct FullPartnerMapView: View {
     
     @State private var animatedPartnerLatitude: Double = 0.0
     @State private var animatedPartnerLongitude: Double = 0.0
+    @State private var animatedMyLatitude: Double = 0.0
+    @State private var animatedMyLongitude: Double = 0.0
     
     private var animatedPartnerCoordinate: CLLocationCoordinate2D {
         if let partner = auth.partner {
             return CLLocationCoordinate2D(
                 latitude: animatedPartnerLatitude != 0.0 ? animatedPartnerLatitude : (partner.latitude ?? 0.0),
                 longitude: animatedPartnerLongitude != 0.0 ? animatedPartnerLongitude : (partner.longitude ?? 0.0)
+            )
+        }
+        return CLLocationCoordinate2D(latitude: 0.0, longitude: 0.0)
+    }
+    
+    private var animatedMyCoordinate: CLLocationCoordinate2D {
+        if let currentUser = auth.currentUser {
+            return CLLocationCoordinate2D(
+                latitude: animatedMyLatitude != 0.0 ? animatedMyLatitude : (currentUser.latitude ?? 0.0),
+                longitude: animatedMyLongitude != 0.0 ? animatedMyLongitude : (currentUser.longitude ?? 0.0)
             )
         }
         return CLLocationCoordinate2D(latitude: 0.0, longitude: 0.0)
@@ -175,14 +187,27 @@ struct FullPartnerMapView: View {
                         }
                     }
                 }
-                .onChange(of: auth.currentUser?.latitude) { _, _ in
-                    guard isTrackingEnabled && currentlyFocusedTarget == .me else { return }
-                    if let myCoord = auth.currentUser?.coordinate {
-                        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                .onChange(of: auth.currentUser?.last_updated) { _, _ in
+                    guard let currentUser = auth.currentUser else { return }
+                    
+                    if isTrackingEnabled && currentlyFocusedTarget == .me {
+                        withAnimation(.easeInOut(duration: 3.5)) {
                             position = .region(MKCoordinateRegion(
-                                center: myCoord,
+                                center: currentUser.coordinate,
                                 span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
                             ))
+                        }
+                    }
+                    
+                    if let lat = currentUser.latitude, let lon = currentUser.longitude, lat != 0.0, lon != 0.0 {
+                        if animatedMyLatitude == 0.0 {
+                            animatedMyLatitude = lat
+                            animatedMyLongitude = lon
+                        } else {
+                            withAnimation(.easeInOut(duration: 3.5)) {
+                                animatedMyLatitude = lat
+                                animatedMyLongitude = lon
+                            }
                         }
                     }
                 }
@@ -382,12 +407,12 @@ struct FullPartnerMapView: View {
     
     @MapContentBuilder
     private func wavyConnectingLine(currentUser: GlimpseUser, partner: GlimpseUser) -> some MapContent {
-        let startLoc = CLLocation(latitude: currentUser.coordinate.latitude, longitude: currentUser.coordinate.longitude)
+        let startLoc = CLLocation(latitude: animatedMyCoordinate.latitude, longitude: animatedMyCoordinate.longitude)
         let endLoc = CLLocation(latitude: animatedPartnerCoordinate.latitude, longitude: animatedPartnerCoordinate.longitude)
         let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
         
         let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
-        let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: animatedPartnerCoordinate, distanceInKm: distanceInKm, phase: wavePhase)
+        let wavyCoords = generateWavyCoordinates(from: animatedMyCoordinate, to: animatedPartnerCoordinate, distanceInKm: distanceInKm, phase: wavePhase)
         
         // 1. Bottom Layer: Outer Neon Glow
         MapPolyline(coordinates: wavyCoords)
@@ -406,7 +431,7 @@ struct FullPartnerMapView: View {
     
     @MapContentBuilder
     private func meAnnotation(currentUser: GlimpseUser) -> some MapContent {
-        Annotation("Me", coordinate: currentUser.coordinate) {
+        Annotation("Me", coordinate: animatedMyCoordinate) {
             ZStack {
                 Circle()
                     .fill(Color.electricPurple.opacity(0.2))
@@ -420,7 +445,7 @@ struct FullPartnerMapView: View {
                 isTrackingEnabled = true
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                     position = .region(MKCoordinateRegion(
-                        center: currentUser.coordinate,
+                        center: animatedMyCoordinate,
                         span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
                     ))
                 }
