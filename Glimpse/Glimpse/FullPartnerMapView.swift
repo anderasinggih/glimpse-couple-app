@@ -49,7 +49,13 @@ struct FullPartnerMapView: View {
     private var partnerSegments: [FootprintSegment] {
         guard let partner = auth.partner,
               let history = partner.location_history, history.count >= 2 else { return [] }
-        let coords = history.map { $0.coordinate }
+        var coords = history.map { $0.coordinate }
+        
+        // Sync the tail of the footprint exactly to the moving avatar
+        if coords.count > 0 && animatedPartnerLatitude != 0.0 {
+            coords[coords.count - 1] = animatedPartnerCoordinate
+        }
+        
         let count = coords.count
         return (0..<count - 1).map { i in
             FootprintSegment(
@@ -64,7 +70,13 @@ struct FullPartnerMapView: View {
     private var mySegments: [FootprintSegment] {
         guard let myUser = auth.currentUser,
               let history = myUser.location_history, history.count >= 2 else { return [] }
-        let coords = history.map { $0.coordinate }
+        var coords = history.map { $0.coordinate }
+        
+        // Sync the tail of the footprint exactly to the moving avatar
+        if coords.count > 0 && animatedMyLatitude != 0.0 {
+            coords[coords.count - 1] = animatedMyCoordinate
+        }
+        
         let count = coords.count
         return (0..<count - 1).map { i in
             FootprintSegment(
@@ -166,15 +178,6 @@ struct FullPartnerMapView: View {
                 }
                 // Automatically move map camera smoothly when partner's live coordinates change
                 .onChange(of: partner.last_updated) { _, _ in
-                    if isTrackingEnabled && currentlyFocusedTarget == .partner {
-                        withAnimation(.easeInOut(duration: 3.5)) {
-                            position = .region(MKCoordinateRegion(
-                                center: partner.coordinate,
-                                span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
-                            ))
-                        }
-                    }
-                    
                     if let lat = partner.latitude, let lon = partner.longitude, lat != 0.0, lon != 0.0 {
                         if animatedPartnerLatitude == 0.0 {
                             animatedPartnerLatitude = lat
@@ -190,15 +193,6 @@ struct FullPartnerMapView: View {
                 .onChange(of: auth.currentUser?.last_updated) { _, _ in
                     guard let currentUser = auth.currentUser else { return }
                     
-                    if isTrackingEnabled && currentlyFocusedTarget == .me {
-                        withAnimation(.easeInOut(duration: 3.5)) {
-                            position = .region(MKCoordinateRegion(
-                                center: currentUser.coordinate,
-                                span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
-                            ))
-                        }
-                    }
-                    
                     if let lat = currentUser.latitude, let lon = currentUser.longitude, lat != 0.0, lon != 0.0 {
                         if animatedMyLatitude == 0.0 {
                             animatedMyLatitude = lat
@@ -209,6 +203,22 @@ struct FullPartnerMapView: View {
                                 animatedMyLongitude = lon
                             }
                         }
+                    }
+                }
+                .onChange(of: animatedPartnerLatitude) { _, _ in
+                    if isTrackingEnabled && currentlyFocusedTarget == .partner {
+                        position = .region(MKCoordinateRegion(
+                            center: animatedPartnerCoordinate,
+                            span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
+                        ))
+                    }
+                }
+                .onChange(of: animatedMyLatitude) { _, _ in
+                    if isTrackingEnabled && currentlyFocusedTarget == .me {
+                        position = .region(MKCoordinateRegion(
+                            center: animatedMyCoordinate,
+                            span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
+                        ))
                     }
                 }
                 
