@@ -116,72 +116,14 @@ struct FullPartnerMapView: View {
                         if let currentUser = auth.currentUser,
                            let partnerLat = partner.latitude, partnerLat != 0.0,
                            let myLat = currentUser.latitude, myLat != 0.0 {
-                            
-                            let startLoc = CLLocation(latitude: currentUser.coordinate.latitude, longitude: currentUser.coordinate.longitude)
-                            let endLoc = CLLocation(latitude: animatedPartnerCoordinate.latitude, longitude: animatedPartnerCoordinate.longitude)
-                            let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
-                            
-                            let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
-                            let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: animatedPartnerCoordinate, distanceInKm: distanceInKm, phase: wavePhase)
-                            
-                            // 1. Bottom Layer: Outer Neon Glow
-                            MapPolyline(coordinates: wavyCoords)
-                                .stroke(
-                                    LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
-                                    style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
-                                )
-                            
-                            // 2. Top Layer: Core Saturated Line
-                            MapPolyline(coordinates: wavyCoords)
-                                .stroke(
-                                    LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
-                                    style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
-                                )
+                            wavyConnectingLine(currentUser: currentUser, partner: partner)
                         }
                         
                         if let currentUser = auth.currentUser {
-                            Annotation("Me", coordinate: currentUser.coordinate) {
-                                ZStack {
-                                    Circle()
-                                        .fill(Color.electricPurple.opacity(0.2))
-                                        .frame(width: 60, height: 60)
-                                        .blur(radius: 10)
-                                    
-                                    PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name, isSleeping: currentUser.is_sleeping)
-                                }
-                                .onTapGesture {
-                                    currentlyFocusedTarget = .me
-                                    isTrackingEnabled = true
-                                    withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
-                                        position = .region(MKCoordinateRegion(
-                                            center: currentUser.coordinate,
-                                            span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
-                                        ))
-                                    }
-                                }
-                            }
+                            meAnnotation(currentUser: currentUser)
                         }
                         
-                        Annotation(partner.name, coordinate: animatedPartnerCoordinate) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.activeCyan.opacity(0.2))
-                                    .frame(width: 60, height: 60)
-                                    .blur(radius: 10)
-                                
-                                PartnerMarker(photoUrl: partner.profile_photo_url, isOffline: partner.isOffline, batteryLevel: partner.battery_level, isCharging: partner.is_charging, locationName: partner.location_name, isSleeping: partner.is_sleeping)
-                            }
-                            .onTapGesture {
-                                currentlyFocusedTarget = .partner
-                                isTrackingEnabled = true
-                                withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
-                                    position = .region(MKCoordinateRegion(
-                                        center: animatedPartnerCoordinate,
-                                        span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
-                                    ))
-                                }
-                            }
-                        }
+                        partnerAnnotation(partner: partner)
                     }
                 }
                 .mapStyle(isSatellite ? .hybrid(elevation: .realistic) : .standard(emphasis: .muted))
@@ -434,6 +376,78 @@ struct FullPartnerMapView: View {
                     center: animatedPartnerCoordinate,
                     span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
                 ))
+            }
+        }
+    }
+    
+    @MapContentBuilder
+    private func wavyConnectingLine(currentUser: GlimpseUser, partner: GlimpseUser) -> some MapContent {
+        let startLoc = CLLocation(latitude: currentUser.coordinate.latitude, longitude: currentUser.coordinate.longitude)
+        let endLoc = CLLocation(latitude: animatedPartnerCoordinate.latitude, longitude: animatedPartnerCoordinate.longitude)
+        let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
+        
+        let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
+        let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: animatedPartnerCoordinate, distanceInKm: distanceInKm, phase: wavePhase)
+        
+        // 1. Bottom Layer: Outer Neon Glow
+        MapPolyline(coordinates: wavyCoords)
+            .stroke(
+                LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
+                style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
+            )
+        
+        // 2. Top Layer: Core Saturated Line
+        MapPolyline(coordinates: wavyCoords)
+            .stroke(
+                LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
+                style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+            )
+    }
+    
+    @MapContentBuilder
+    private func meAnnotation(currentUser: GlimpseUser) -> some MapContent {
+        Annotation("Me", coordinate: currentUser.coordinate) {
+            ZStack {
+                Circle()
+                    .fill(Color.electricPurple.opacity(0.2))
+                    .frame(width: 60, height: 60)
+                    .blur(radius: 10)
+                
+                PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name, isSleeping: currentUser.is_sleeping)
+            }
+            .onTapGesture {
+                currentlyFocusedTarget = .me
+                isTrackingEnabled = true
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                    position = .region(MKCoordinateRegion(
+                        center: currentUser.coordinate,
+                        span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                    ))
+                }
+            }
+        }
+    }
+    
+    @MapContentBuilder
+    private func partnerAnnotation(partner: GlimpseUser) -> some MapContent {
+        Annotation(partner.name, coordinate: animatedPartnerCoordinate) {
+            ZStack {
+                Circle()
+                    .fill(Color.activeCyan.opacity(0.2))
+                    .frame(width: 60, height: 60)
+                    .blur(radius: 10)
+                
+                PartnerMarker(photoUrl: partner.profile_photo_url, isOffline: partner.isOffline, batteryLevel: partner.battery_level, isCharging: partner.is_charging, locationName: partner.location_name, isSleeping: partner.is_sleeping)
+            }
+            .onTapGesture {
+                currentlyFocusedTarget = .partner
+                isTrackingEnabled = true
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                    position = .region(MKCoordinateRegion(
+                        center: animatedPartnerCoordinate,
+                        span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                    ))
+                }
             }
         }
     }
