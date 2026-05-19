@@ -306,7 +306,6 @@ struct PartnerMapView: View {
             animatedPartnerLongitude = targetLon
         }
     }
-    }
     
     private func updateMapPosition() {
         if let lat = user.latitude, let lon = user.longitude, lat != 0.0, lon != 0.0 {
