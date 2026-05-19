@@ -1300,15 +1300,35 @@ class AuthManager {
                             // Always notify the UI view so it can render the message live
                             NotificationCenter.default.post(name: Notification.Name("GlimpseChatMessageReceived"), object: finalMsg)
                             
-                            // Refresh the chat rooms list in the background to automatically sync unread counts
+                            // Unified coordinated Task to sync chat rooms and read state without double-fetching race conditions
                             Task {
-                                _ = try? await self.fetchChatRooms()
-                            }
-                            
-                            if self.selectedTab == 3 && self.activeRoomId == finalMsg.room_id {
-                                Task {
+                                let isCurrentActiveRoom = self.selectedTab == 3 && self.activeRoomId == finalMsg.room_id
+                                if isCurrentActiveRoom && finalMsg.sender_id != self.currentUser?.id {
                                     await self.markMessagesAsRead(messageId: finalMsg.id)
-                                    _ = try? await self.fetchChatRooms()
+                                    // Instantly update the local UserDefaults session for this room
+                                    let currentUserId = self.currentUser?.id ?? 0
+                                    let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(finalMsg.room_id ?? 0)"
+                                    UserDefaults.standard.set(finalMsg.id, forKey: userDefaultsKey)
+                                }
+                                
+                                // Now safe to fetch room updates
+                                if var rooms = try? await self.fetchChatRooms() {
+                                    await MainActor.run {
+                                        let currentUserId = self.currentUser?.id ?? 0
+                                        for i in 0..<rooms.count {
+                                            let r = rooms[i]
+                                            let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(r.id)"
+                                            let storedId = UserDefaults.standard.integer(forKey: userDefaultsKey)
+                                            if let latestId = r.latest_message?.id, latestId > 0 && latestId <= storedId {
+                                                rooms[i].unread_count = 0
+                                            }
+                                            if isCurrentActiveRoom && r.id == finalMsg.room_id {
+                                                rooms[i].unread_count = 0
+                                            }
+                                        }
+                                        self.chatRooms = rooms
+                                        self.updateUnreadCount()
+                                    }
                                 }
                             }
                             

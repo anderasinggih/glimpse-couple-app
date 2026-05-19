@@ -164,13 +164,22 @@ struct ChatView: View {
                 // Always refresh the rooms list (unread counts etc)
                 Task { @MainActor in
                     if var rooms = try? await auth.fetchChatRooms() {
-                        if let activeRoom = selectedRoom {
-                            if let idx = rooms.firstIndex(where: { $0.id == activeRoom.id }) {
-                                rooms[idx].unread_count = 0
+                        let currentUserId = auth.currentUser?.id ?? 0
+                        for i in 0..<rooms.count {
+                            let r = rooms[i]
+                            let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(r.id)"
+                            let storedId = UserDefaults.standard.integer(forKey: userDefaultsKey)
+                            if let latestId = r.latest_message?.id, latestId > 0 && latestId <= storedId {
+                                rooms[i].unread_count = 0
+                            }
+                            
+                            if let activeRoom = selectedRoom, r.id == activeRoom.id {
+                                rooms[i].unread_count = 0
                             }
                         }
                         self.chatRooms = rooms
                         self.auth.chatRooms = rooms
+                        auth.updateUnreadCount()
                     }
                 }
                 // NOTE: Do NOT poll loadMessagesForSelectedRoom() here.
@@ -1414,14 +1423,26 @@ struct ChatView: View {
         Task { @MainActor in
             do {
                 var rooms = try await auth.fetchChatRooms()
-                if let activeRoom = selectedRoom {
-                    if let idx = rooms.firstIndex(where: { $0.id == activeRoom.id }) {
-                        rooms[idx].unread_count = 0
+                
+                // Bulletproof race-condition protection: override unread count if latest message is already read locally
+                let currentUserId = auth.currentUser?.id ?? 0
+                for i in 0..<rooms.count {
+                    let r = rooms[i]
+                    let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(r.id)"
+                    let storedId = UserDefaults.standard.integer(forKey: userDefaultsKey)
+                    if let latestId = r.latest_message?.id, latestId > 0 && latestId <= storedId {
+                        rooms[i].unread_count = 0
+                    }
+                    
+                    if let activeRoom = selectedRoom, r.id == activeRoom.id {
+                        rooms[i].unread_count = 0
                     }
                 }
+                
                 self.chatRooms = rooms
                 self.auth.chatRooms = rooms
                 self.isLoadingRooms = false
+                auth.updateUnreadCount()
             } catch {
                 print("❌ Failed to load chat rooms: \(error)")
                 self.isLoadingRooms = false
@@ -1618,7 +1639,8 @@ struct ChatView: View {
     private func attemptSendPendingMessage(_ msg: ChatMessage) async {
         guard NetworkMonitor.shared.isConnected else { return }
         do {
-            let sentMsg = try await auth.sendChatMessage(text: msg.message, roomId: selectedRoom?.id)
+            // Fix: Use msg.room_id instead of selectedRoom?.id in case user exits the room while sending
+            let sentMsg = try await auth.sendChatMessage(text: msg.message, roomId: msg.room_id)
             
             // Update the pending queue instantly
             var newPending: [ChatMessage] = []
@@ -1647,6 +1669,26 @@ struct ChatView: View {
             if isSameRoomActive || (isMainActive && roomIdKey == 0) {
                 self.messages = cachedArray
             }
+            
+            // Update local room list with the sent message instantly, marking it as read
+            if let idx = self.chatRooms.firstIndex(where: { $0.id == roomIdKey || ($0.is_main && roomIdKey == 0) }) {
+                var updatedRoom = self.chatRooms[idx]
+                updatedRoom.latest_message = RoomLatestMessage(
+                    id: sentMsg.id,
+                    message: sentMsg.message,
+                    sender_id: sentMsg.sender_id,
+                    created_at: sentMsg.created_at
+                )
+                updatedRoom.unread_count = 0 // Sent by self, so auto-seen/read!
+                self.chatRooms[idx] = updatedRoom
+                self.auth.chatRooms = self.chatRooms
+                self.auth.updateUnreadCount()
+            }
+            
+            // Instantly persist in UserDefaults to keep room baseline in sync
+            let currentUserId = auth.currentUser?.id ?? 0
+            let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(roomIdKey)"
+            UserDefaults.standard.set(sentMsg.id, forKey: userDefaultsKey)
         } catch {
             print("❌ Failed to send pending message: \(error)")
         }
