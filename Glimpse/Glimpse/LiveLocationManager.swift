@@ -278,7 +278,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                 }
                 
                 let dummyLocation = CLLocation(latitude: cached.latitude, longitude: cached.longitude)
-                self.processAndUploadLocation(dummyLocation)
+                self.processAndUploadLocation(dummyLocation, forceUpload: true)
             } else {
                 // Otherwise, get current coordinate first to cache it (unless simulated!)
                 if let currentLoc = self.locationManager.location {
@@ -297,6 +297,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                         self.setToStationary(at: currentLoc.coordinate)
                         LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi Cache Locked) 📶😴")
                     }
+                    self.processAndUploadLocation(currentLoc, forceUpload: true)
                 }
             }
         }
@@ -361,13 +362,12 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             
             // Trigger immediate upload of last cached location or current location to signal movement
             if let currentLoc = locationManager.location {
-                processAndUploadLocation(currentLoc)
+                processAndUploadLocation(currentLoc, forceUpload: true)
             }
         }
     }
     
-    // MARK: - Silent Upload Logic
-    private func processAndUploadLocation(_ location: CLLocation) {
+    private func processAndUploadLocation(_ location: CLLocation, forceUpload: Bool = false) {
         guard AuthManager.shared.isAuthenticated else { return }
         
         let speedInKmH = location.speed * 3.6
@@ -415,14 +415,26 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         let timeElapsed: TimeInterval = lastUploadTime != nil ? Date().timeIntervalSince(lastUploadTime!) : 9999.0
         let distanceMoved: CLLocationDistance = lastUploadedLocation != nil ? location.distance(from: lastUploadedLocation!) : 9999.0
         
-        guard lastUploadedLocation == nil || distanceMoved >= minDistance || timeElapsed >= minTime else {
-            return
+        if !forceUpload {
+            guard lastUploadedLocation == nil || distanceMoved >= minDistance || timeElapsed >= minTime else {
+                return
+            }
         }
         
         guard !isGeocoding else { return }
         isGeocoding = true
         
+        // Start background task to guarantee execution time in background state
+        let bgTaskID = UIApplication.shared.beginBackgroundTask(withName: "GlimpseUploadLocationBGTask") {
+            // Task expired
+        }
+        
         Task {
+            defer {
+                if bgTaskID != .invalid {
+                    UIApplication.shared.endBackgroundTask(bgTaskID)
+                }
+            }
             var locationName: String? = nil
             if let placemarks = try? await geocoder.reverseGeocodeLocation(location),
                let placemark = placemarks.first {
