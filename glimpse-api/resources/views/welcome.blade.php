@@ -100,7 +100,7 @@
                 <!-- Left Content -->
                 <div class="lg:col-span-7 space-y-6 text-left relative z-10">
                     <div class="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-electricPurple/10 border border-electricPurple/20 text-electricPurple text-xs font-semibold uppercase tracking-wider">
-                        <span>iOS 26 Liquid Glass Design System</span>
+                        <span>iOS 26 Liquid Glass · Protobuf Binary · WebSocket Realtime</span>
                     </div>
                     
                     <h2 class="text-4xl sm:text-6xl font-extrabold text-white tracking-tight leading-[1.1] mb-4">
@@ -259,10 +259,10 @@
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="text-center max-w-3xl mx-auto mb-16 space-y-4">
                     <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-electricPurple/10 border border-electricPurple/20 text-electricPurple text-[10px] font-bold uppercase tracking-wider animate-pulse">
-                        <span>📖 Complete REST & WebSocket API Specification</span>
+                        <span>📖 REST · WebSocket · Protobuf Binary Protocol</span>
                     </div>
                     <h3 class="text-3xl sm:text-4xl font-extrabold tracking-tight">API Reference Docs</h3>
-                    <p class="text-white/60 text-sm">Review Glimpse's highly structured REST endpoints to integrate companion services, handle authentication flow, send messages, and synchronize live map states.</p>
+                    <p class="text-white/60 text-sm">Glimpse uses a hybrid protocol: JSON for state/auth endpoints, and <strong class="text-electricPurple">custom Protobuf binary encoding</strong> for the chat pipeline to minimize payload size and maximize throughput on mobile networks.</p>
                 </div>
 
                 <!-- Interactive Docs Layout -->
@@ -479,25 +479,29 @@
                                     <span class="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold font-mono">POST</span>
                                     <span>/api/glimpse/chat</span>
                                 </h4>
-                                <p class="text-xs text-white/60">Sends an intimate chat bubble or a private flash card attachment that instantly routes to the companion device.</p>
+                                <p class="text-xs text-white/60">Sends an intimate chat message using <strong class="text-electricPurple">custom Protobuf binary encoding</strong>. The iOS client encodes messages as binary fields (not JSON) for minimal payload size. Server decodes, persists, and broadcasts via WebSocket.</p>
                                 
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-3 font-mono text-[11px] text-left">
-                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">Request Body</span>
-                                        <pre class="text-electricPurple font-medium">{
-  "message": "Did you see my flash photo? ❤️"
-}</pre>
+                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">Request — Protobuf Binary (Content-Type: application/octet-stream)</span>
+                                        <pre class="text-electricPurple font-medium">Field 1 (varint): sender_id = 1
+Field 2 (varint): room_id   = 5
+Field 3 (string): message   = "Hey love! ❤️"
+Field 4 (string): created_at= "2026-05-19T..."
+
+// Encoded as raw binary, not JSON
+// iOS: ChatMessage.encodeProtobuf()</pre>
                                     </div>
                                     
                                     <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-3 font-mono text-[11px] text-left">
-                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">JSON Response (200 OK)</span>
-                                        <pre class="text-activeCyan font-medium">{
-  "id": 125,
-  "couple_id": 5,
-  "sender_id": 1,
-  "message": "Did you see my flash photo? ❤️",
-  "created_at": "2026-05-17T21:56:00Z"
-}</pre>
+                                        <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">Response — Protobuf Binary (200 OK)</span>
+                                        <pre class="text-activeCyan font-medium">Field 1 (varint): id        = 125
+Field 2 (varint): room_id   = 5
+Field 3 (varint): sender_id = 1
+Field 4 (string): message   = "Hey love! ❤️"
+Field 5 (string): created_at= "2026-05-19T..."
+
+// iOS: ChatMessage.decodeProtobuf(from: data)</pre>
                                     </div>
                                 </div>
                             </div>
@@ -555,7 +559,7 @@ Authorization: Bearer 2|sanctum_access_token</pre>
                         <span>Data Flow Model</span>
                     </div>
                     <h3 class="text-3xl sm:text-4xl font-extrabold tracking-tight">System Architecture</h3>
-                    <p class="text-white/60 text-sm">Glimpse achieves sub-second reactive updates using high-performance HTTP request channels and scalable Pusher/Reverb WebSockets.</p>
+                    <p class="text-white/60 text-sm">Glimpse achieves sub-second reactive updates using a hybrid protocol: <strong class="text-electricPurple">Protobuf binary</strong> for the chat pipeline (minimal payload) and <strong class="text-activeCyan">WebSocket</strong> broadcasts for real-time push. State sync uses standard JSON REST calls.</p>
                 </div>
 
                 <!-- Visual Architecture Diagram Card -->
@@ -603,7 +607,7 @@ Authorization: Bearer 2|sanctum_access_token</pre>
                                         <span class="px-2 py-0.5 rounded bg-royalPurple text-[9px] font-extrabold uppercase tracking-wider text-white">Engine</span>
                                     </div>
                                     <span class="block font-bold text-white text-xs mt-1">Laravel Octane</span>
-                                    <span class="block text-[10px] text-white/50 mt-1">SQLite & Broadcasts</span>
+                                    <span class="block text-[10px] text-white/50 mt-1">MySQL · Protobuf · Broadcasts</span>
                                 </div>
 
                                 <!-- Arrow 2 -->

@@ -38,6 +38,7 @@ struct ChatView: View {
     @State private var networkMonitor = NetworkMonitor.shared
     @State private var pendingMessages: [ChatMessage] = []
     @State private var highlightedMessageId: Int? = nil
+    @State private var roomInitialLastReadId: Int? = nil
     
     var filteredMessages: [ChatMessage] {
         let cleanQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -113,6 +114,22 @@ struct ChatView: View {
                     auth.chatRooms = chatRooms
                     auth.updateUnreadCount()
                 }
+                
+                // Load per-room baseline unread message ID
+                let currentUserId = auth.currentUser?.id ?? 0
+                let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(activeRoom.id)"
+                let storedId = UserDefaults.standard.integer(forKey: userDefaultsKey)
+                self.roomInitialLastReadId = storedId > 0 ? storedId : (auth.currentUser?.last_seen_message_id ?? 0)
+                
+                // Sync read status to server using the latest cached room message
+                if let lastMsg = (messagesCache[activeRoom.id] ?? auth.roomMessagesCache[activeRoom.id] ?? []).last, lastMsg.id > 0 {
+                    Task {
+                        await auth.markMessagesAsRead(messageId: lastMsg.id)
+                    }
+                }
+            } else {
+                // Clear the divider baseline when leaving the room
+                self.roomInitialLastReadId = nil
             }
         }
         .onAppear {
@@ -134,16 +151,17 @@ struct ChatView: View {
                     tickCount = 0
                     auth.pushCurrentStatus()
                 }
-                // Refresh rooms list in background periodically
-                if selectedRoom == nil {
-                    Task { @MainActor in
-                        if let rooms = try? await auth.fetchChatRooms() {
-                            self.chatRooms = rooms
-                        }
+                // Always refresh the rooms list (unread counts etc)
+                Task { @MainActor in
+                    if let rooms = try? await auth.fetchChatRooms() {
+                        self.chatRooms = rooms
+                        self.auth.chatRooms = rooms
                     }
-                } else {
-                    loadMessagesForSelectedRoom()
                 }
+                // NOTE: Do NOT poll loadMessagesForSelectedRoom() here.
+                // WebSocket (Reverb/Pusher) handles real-time message delivery.
+                // Polling every 5s would race with optimistic messages and cause
+                // them to disappear before the server confirms them.
             }
         }
         // WebSocket synchronization for chat rooms
@@ -298,21 +316,25 @@ struct ChatView: View {
                             isInputFocused = false
                         }
                         .defaultScrollAnchor(.bottom)
+                        .scrollDismissesKeyboard(.interactively)
                         .onAppear {
-                            // Multiple timed scroll anchors to guarantee bottom alignment during transition slides
-                            for delay in [0.05, 0.15, 0.30, 0.45] {
+                            // Immediate scroll to bottom on room open
+                            proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                            // Extra delayed scrolls to catch async cache/fetch loads
+                            for delay in [0.08, 0.20, 0.40] {
                                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                                     proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                 }
                             }
                         }
                         .safeAreaInset(edge: .bottom) {
-                            bottomInputInsetView
+                            bottomInputInsetView(proxy: proxy)
                         }
                         .onChange(of: messages) { oldMessages, newMessages in
-                            if oldMessages.isEmpty {
-                                // Initial load: Scroll instantly to bottom to avoid sliding down from the top
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            if oldMessages.isEmpty || oldMessages.count < 3 {
+                                // Initial/cache load: scroll instantly to bottom
+                                proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
                                     proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                 }
                                 return
@@ -326,9 +348,9 @@ struct ChatView: View {
                                     return
                                 }
                                 
-                                // Scroll smoothly for incoming partner messages
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                // Scroll smoothly for incoming partner messages with a quick, snappy easeOut animation
+                                DispatchQueue.main.async {
+                                    withAnimation(.easeOut(duration: 0.15)) {
                                         proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                     }
                                 }
@@ -338,12 +360,10 @@ struct ChatView: View {
                             }
                         }
                         .onChange(of: pendingMessages) { oldPending, newPending in
-                            // Only scroll when a new pending message is added to avoid double scroll on removal
+                            // Snappy layout sync when adding pending messages
                             if newPending.count > oldPending.count {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
-                                        proxy.scrollTo("bottom_anchor", anchor: .bottom)
-                                    }
+                                DispatchQueue.main.async {
+                                    proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                 }
                             }
                         }
@@ -358,8 +378,12 @@ struct ChatView: View {
                         }
                         .onChange(of: isInputFocused) { _, isFocused in
                             if isFocused {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                                // Scroll to bottom when keyboard appears — use keyboard animation duration
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                    proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                    withAnimation(.easeOut(duration: 0.18)) {
                                         proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                     }
                                 }
@@ -426,7 +450,9 @@ struct ChatView: View {
                                         selectedRoom = nil
                                     }
                                     dragOffset = 0
-                                    messages = [] // Clear messages completely
+                                    // Don't clear messages — keep auth cache so next entry is instant
+                                    messages = []
+                                    pendingMessages = []
                                 }
                             } else {
                                 // Snap back to zero
@@ -477,12 +503,16 @@ struct ChatView: View {
                     ForEach(sortedChatRooms) { room in
                         Button {
                             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                            // Load from local cache instantly to prevent 1-second blank screen!
-                            if let cached = messagesCache[room.id] {
+                            // Priority: auth-level cache (survives tab switch) > local cache > empty
+                            if let authCached = auth.roomMessagesCache[room.id], !authCached.isEmpty {
+                                self.messages = authCached
+                                self.messagesCache[room.id] = authCached
+                            } else if let cached = messagesCache[room.id], !cached.isEmpty {
                                 self.messages = cached
                             } else {
                                 self.messages = []
                             }
+                            pendingMessages = []
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                 selectedRoom = room
                             }
@@ -561,7 +591,7 @@ struct ChatView: View {
     
     // --- 📥 BOTTOM INPUT INSET VIEW ---
     @ViewBuilder
-    private var bottomInputInsetView: some View {
+    private func bottomInputInsetView(proxy: ScrollViewProxy) -> some View {
         VStack(spacing: 0) {
             Rectangle()
                 .fill(Color.white.opacity(0.08))
@@ -977,7 +1007,7 @@ struct ChatView: View {
             .shadow(color: Color.black.opacity(0.15), radius: 8, y: 4)
             
             Button {
-                sendMessage()
+                sendMessage(scrollProxy: proxy)
             } label: {
                 Image(systemName: "paperplane.fill")
                     .font(.system(size: 16, weight: .bold))
@@ -1317,8 +1347,11 @@ struct ChatView: View {
         
         let roomId = selectedRoom?.id
         
-        // 1. Instant Stale-While-Revalidate from local cache
-        if let cached = messagesCache[roomId ?? 0] {
+        // 1. Load from auth-level persistent cache first (survives tab switching)
+        if let rId = roomId, let authCached = auth.roomMessagesCache[rId], !authCached.isEmpty {
+            self.messages = authCached
+            self.messagesCache[rId] = authCached
+        } else if let cached = messagesCache[roomId ?? 0], !cached.isEmpty {
             self.messages = cached
         } else if roomId == nil && !auth.latestFetchedMessages.isEmpty {
             self.messages = auth.latestFetchedMessages
@@ -1326,11 +1359,23 @@ struct ChatView: View {
             self.messages = []
         }
         
-        // 2. Fetch fresh messages from server specifically for this room
+        // 2. Fetch fresh from server, MERGE with local state
         Task { @MainActor in
-            if let msgs = try? await auth.fetchMessages(roomId: roomId) {
-                self.messages = msgs
-                self.messagesCache[roomId ?? 0] = msgs
+            if let serverMsgs = try? await auth.fetchMessages(roomId: roomId) {
+                let localMsgs = self.messagesCache[roomId ?? 0] ?? self.messages
+                var merged = serverMsgs
+                for localMsg in localMsgs {
+                    if localMsg.id > 0 && !merged.contains(where: { $0.id == localMsg.id }) {
+                        merged.append(localMsg)
+                    }
+                }
+                merged.sort { $0.id < $1.id }
+                self.messages = merged
+                self.messagesCache[roomId ?? 0] = merged
+                // Also sync back to auth-level cache
+                if let rId = roomId {
+                    auth.roomMessagesCache[rId] = merged
+                }
             }
         }
     }
@@ -1362,16 +1407,44 @@ struct ChatView: View {
     private func loadMessagesForSelectedRoom() {
         guard let activeRoom = selectedRoom else { return }
         
+        // Show auth-level persistent cache instantly (survives tab switching)
+        if let authCached = auth.roomMessagesCache[activeRoom.id], !authCached.isEmpty {
+            self.messages = authCached
+            self.messagesCache[activeRoom.id] = authCached
+        }
+        
         Task { @MainActor in
             do {
                 let msgs = try await auth.fetchMessages(roomId: activeRoom.id)
-                self.messages = msgs
-                self.messagesCache[activeRoom.id] = msgs // Cache fetched messages for instant loading next time
+                // Merge with any locally-added messages to avoid losing them
+                var merged = msgs
+                let localMsgs = self.messagesCache[activeRoom.id] ?? []
+                for localMsg in localMsgs {
+                    if localMsg.id > 0 && !merged.contains(where: { $0.id == localMsg.id }) {
+                        merged.append(localMsg)
+                    }
+                }
+                merged.sort { $0.id < $1.id }
+                self.messages = merged
+                self.messagesCache[activeRoom.id] = merged
+                auth.roomMessagesCache[activeRoom.id] = merged
                 // Reset unread counter locally upon entering the room
                 if let index = chatRooms.firstIndex(where: { $0.id == activeRoom.id }) {
                     chatRooms[index].unread_count = 0
                     auth.chatRooms = chatRooms
                     auth.updateUnreadCount()
+                }
+                
+                // Sync read status to server up to the latest fetched message
+                if let lastMsg = merged.last, lastMsg.id > 0 {
+                    Task {
+                        await auth.markMessagesAsRead(messageId: lastMsg.id)
+                        
+                        // Persist last read message ID for this room session
+                        let currentUserId = auth.currentUser?.id ?? 0
+                        let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(activeRoom.id)"
+                        UserDefaults.standard.set(lastMsg.id, forKey: userDefaultsKey)
+                    }
                 }
             } catch {
                 print("❌ Failed to fetch messages for room \(activeRoom.name): \(error)")
@@ -1463,13 +1536,16 @@ struct ChatView: View {
         }
     }
     
-    private func sendMessage() {
+    private func sendMessage(scrollProxy: ScrollViewProxy? = nil) {
         let cleanText = messageInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanText.isEmpty else { return }
         
         messageInput = ""
         AudioServicesPlaySystemSound(1104)
         UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        
+        // Instantly clear unread message divider baseline when sending a message
+        roomInitialLastReadId = nil
         
         let tempId = Int.random(in: -100000...(-1))
         let formatter = ISO8601DateFormatter()
@@ -1500,8 +1576,12 @@ struct ChatView: View {
             updated_at: createdAtStr
         )
         
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            self.pendingMessages.append(tempMsg)
+        // Append directly to avoid competing/overlapping spring animations that cause layout shifts
+        self.pendingMessages.append(tempMsg)
+        
+        // Perform an instant snappy scroll to bottom to eliminate any blink or lag
+        if let proxy = scrollProxy {
+            proxy.scrollTo("bottom_anchor", anchor: .bottom)
         }
         
         Task {
@@ -1526,10 +1606,14 @@ struct ChatView: View {
             
             // Sync local cache instantly to prevent sent messages from disappearing!
             let roomIdKey = sentMsg.room_id ?? 0
-            var cachedArray = self.messagesCache[roomIdKey] ?? []
+            var cachedArray = self.messagesCache[roomIdKey] ?? auth.roomMessagesCache[roomIdKey] ?? []
             if !cachedArray.contains(where: { $0.id == sentMsg.id }) {
                 cachedArray.append(sentMsg)
                 self.messagesCache[roomIdKey] = cachedArray
+                // Also write to auth-level persistent cache
+                if roomIdKey > 0 {
+                    auth.roomMessagesCache[roomIdKey] = cachedArray
+                }
             }
             
             // If the user is still viewing the room, update the active messages list
@@ -1644,8 +1728,8 @@ struct ChatView: View {
     }
     
     private var firstUnreadMessageId: Int? {
+        guard let initialReadId = roomInitialLastReadId else { return nil }
         let partnerId = auth.partner?.id ?? 0
-        let initialReadId = auth.initialLastReadId
         return messages.first(where: { msg in
             msg.sender_id == partnerId && msg.id > initialReadId
         })?.id
@@ -1783,16 +1867,22 @@ struct ChatView: View {
                 }
             }
             
-            // Sync local cache instantly for the active room
+            // Sync local cache and auth-level persistent cache for the active room
             let activeRoomKey = selectedRoom?.id ?? 0
             self.messagesCache[activeRoomKey] = self.messages
+            if activeRoomKey > 0 {
+                auth.roomMessagesCache[activeRoomKey] = self.messages
+            }
         } else {
-            // Even if the room is NOT active, append the new message to its cached array so it's ready when the user opens it!
+            // Even if the room is NOT active, append the new message to its cached array
             let targetRoomKey = newMsg.room_id ?? 0
-            var cachedArray = self.messagesCache[targetRoomKey] ?? []
+            var cachedArray = self.messagesCache[targetRoomKey] ?? auth.roomMessagesCache[targetRoomKey] ?? []
             if !cachedArray.contains(where: { $0.id == newMsg.id }) {
                 cachedArray.append(newMsg)
                 self.messagesCache[targetRoomKey] = cachedArray
+                if targetRoomKey > 0 {
+                    auth.roomMessagesCache[targetRoomKey] = cachedArray
+                }
             }
         }
         

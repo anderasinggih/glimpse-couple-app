@@ -30,8 +30,9 @@ class PartnerStateUpdated implements ShouldBroadcast
 
     public function broadcastWith(): array
     {
+        $protobufBinary = \App\Helpers\GlimpseProtobuf::encodeStateUpdated($this->user);
         return [
-            'user' => $this->user
+            'pb' => base64_encode($protobufBinary)
         ];
     }
 }

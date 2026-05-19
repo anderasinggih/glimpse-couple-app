@@ -32,9 +32,9 @@ class PartnerTyping implements ShouldBroadcast
 
     public function broadcastWith(): array
     {
+        $protobufBinary = \App\Helpers\GlimpseProtobuf::encodeTyping($this->userId, $this->isTyping);
         return [
-            'user_id' => $this->userId,
-            'is_typing' => $this->isTyping
+            'pb' => base64_encode($protobufBinary)
         ];
     }
 }

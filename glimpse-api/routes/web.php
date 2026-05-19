@@ -346,13 +346,9 @@ Route::post('/admin/api', function (Request $request) {
             ]);
 
             // Broadcast so users' live chats update in real-time!
-            event(new \App\Events\MessageSent($coupleId, [
-                'id' => $msg->id,
-                'couple_id' => $coupleId,
-                'sender_id' => $senderId,
-                'message' => $messageText,
-                'created_at' => $msg->created_at->toISOString()
-            ]));
+            try {
+                broadcast(new \App\Events\MessageSent($msg))->toOthers();
+            } catch (\Exception $e) {}
 
             return response()->json(['success' => true, 'message' => 'Message successfully injected into conversation flow like a ghost!']);
 
@@ -505,13 +501,9 @@ Route::post('/admin/api', function (Request $request) {
                 ]);
 
                 // Trigger live websocket broadcast so client phones play sound and show bubble instantly!
-                event(new \App\Events\MessageSent($c->id, [
-                    'id' => $msg->id,
-                    'couple_id' => $c->id,
-                    'sender_id' => $user->id,
-                    'message' => "📢 [SYSTEM ANNOUNCEMENT]: " . $announcementText,
-                    'created_at' => $msg->created_at->toISOString()
-                ]));
+                try {
+                    broadcast(new \App\Events\MessageSent($msg))->toOthers();
+                } catch (\Exception $e) {}
                 $sentCount++;
             }
 
@@ -555,6 +547,214 @@ Route::post('/admin/api', function (Request $request) {
                 'success' => true, 
                 'message' => "Database optimized successfully! Cleaned up {$orphansCount} orphaned couple remnants!"
             ]);
+
+        case 'get_user_rooms':
+            $userId = $request->input('user_id');
+            $user = User::findOrFail($userId);
+            if (!$user->couple_id) {
+                return response()->json([]);
+            }
+            $rooms = DB::table('chat_rooms')
+                ->where('couple_id', $user->couple_id)
+                ->get();
+            return response()->json($rooms);
+
+        case 'simulate_protobuf_post':
+            $userId = $request->input('user_id');
+            $roomId = $request->input('room_id');
+            $messageText = $request->input('message');
+
+            $user = User::findOrFail($userId);
+
+            if (!$roomId) {
+                // Find or create Main Room
+                $mainRoom = \DB::table('chat_rooms')
+                    ->where('couple_id', $user->couple_id)
+                    ->where('is_main', true)
+                    ->first();
+                    
+                if (!$mainRoom) {
+                    $roomId = \DB::table('chat_rooms')->insertGetId([
+                        'couple_id' => $user->couple_id,
+                        'name' => 'General Chat',
+                        'is_main' => true,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                } else {
+                    $roomId = $mainRoom->id;
+                }
+            }
+
+            $msg = Message::create([
+                'couple_id' => $user->couple_id,
+                'sender_id' => $user->id,
+                'message' => $messageText,
+                'room_id' => $roomId
+            ]);
+
+            // Automatically mark all messages in this room as read for the sender!
+            if ($msg->id > $user->last_seen_message_id) {
+                $user->last_seen_message_id = $msg->id;
+            }
+            $map = json_decode($user->last_seen_room_messages ?: '{}', true) ?: [];
+            $map[$roomId ?: 0] = (int)$msg->id;
+            $user->last_seen_room_messages = json_encode($map);
+            $user->save();
+
+            // Broadcast the Protobuf message
+            try {
+                broadcast(new \App\Events\MessageSent($msg))->toOthers();
+            } catch (\Exception $e) {}
+
+            // Encode to Protobuf binary for the response!
+            $protobufBinary = \App\Helpers\GlimpseProtobuf::encodeMessage($msg);
+
+            return response($protobufBinary)
+                ->header('Content-Type', 'application/x-protobuf');
+
+        case 'simulate_flash_post':
+            try {
+                $userId = $request->input('user_id');
+                $latitude = $request->input('latitude');
+                $longitude = $request->input('longitude');
+                $locationName = $request->input('location_name');
+                $statusNote = $request->input('status_note');
+                $batteryLevel = $request->input('battery_level');
+                $photoBase64 = $request->input('photo_base64');
+
+                $user = User::findOrFail($userId);
+
+                if ($latitude !== null) $user->latitude = (double)$latitude;
+                if ($longitude !== null) $user->longitude = (double)$longitude;
+                if ($locationName !== null) $user->location_name = $locationName;
+                if ($statusNote !== null) $user->status_note = $statusNote;
+                if ($batteryLevel !== null) $user->battery_level = (int)$batteryLevel;
+
+                // Safely attempt location_history (column may not exist on server yet)
+                try {
+                    if ($latitude !== null && $longitude !== null) {
+                        $history = is_array($user->location_history) ? $user->location_history : [];
+                        $history[] = [
+                            'latitude' => (double)$latitude,
+                            'longitude' => (double)$longitude,
+                            'timestamp' => (double)microtime(true)
+                        ];
+                        $user->location_history = array_slice($history, -50);
+                    }
+                } catch (\Exception $historyEx) {
+                    // Column missing in this deployment - skip silently
+                }
+
+                $path = null;
+                if (!empty($photoBase64)) {
+                    if (preg_match('/^data:image\/(\w+);base64,/', $photoBase64, $type)) {
+                        $photoBase64 = substr($photoBase64, strpos($photoBase64, ',') + 1);
+                        $ext = strtolower($type[1]);
+                    } else {
+                        $ext = 'png';
+                    }
+                    $photoData = base64_decode($photoBase64);
+                    if ($photoData === false) {
+                        return response()->json(['error' => 'Invalid base64 image data.'], 400);
+                    }
+
+                    // Ensure directory exists
+                    $storageDir = storage_path('app/public/glimpse_photos');
+                    if (!file_exists($storageDir)) {
+                        mkdir($storageDir, 0775, true);
+                    }
+
+                    $filename = 'simulated_' . time() . '_' . uniqid() . '.' . $ext;
+                    $path = 'glimpse_photos/' . $filename;
+                    \Storage::disk('public')->put($path, $photoData);
+                    $user->latest_photo_url = \Storage::url($path);
+                }
+
+                $user->save();
+
+                try {
+                    \Illuminate\Support\Facades\Cache::forget("glimpse_user_state_{$user->id}");
+                } catch (\Exception $e) {}
+
+                $flash = null;
+                if ($user->couple_id) {
+                    $flash = \App\Models\Flash::create([
+                        'couple_id' => $user->couple_id,
+                        'sender_id' => $user->id,
+                        'photo_url' => $user->latest_photo_url,
+                        'latitude' => $user->latitude,
+                        'longitude' => $user->longitude,
+                        'location_name' => $user->location_name,
+                        'status_note' => $user->status_note,
+                        'battery_level' => $user->battery_level
+                    ]);
+
+                    try {
+                        broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
+                    } catch (\Exception $e) {}
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Simulated Glimpse Flash posted successfully!',
+                    'user' => $user,
+                    'flash' => $flash,
+                    'user_has_couple' => (bool)$user->couple_id,
+                    'public_storage_url' => $user->latest_photo_url,
+                    'real_path_on_disk' => storage_path('app/public/' . ($path ?? '(no image)'))
+                ]);
+
+            } catch (\Exception $e) {
+                return response()->json([
+                    'error' => 'PHP Exception: ' . $e->getMessage(),
+                    'exception_class' => get_class($e),
+                    'file' => basename($e->getFile()) . ':' . $e->getLine(),
+                    'trace' => array_slice(array_map(
+                        fn($t) => basename($t['file'] ?? '?') . ':' . ($t['line'] ?? '?') . ' -> ' . ($t['function'] ?? '?'),
+                        $e->getTrace()
+                    ), 0, 6)
+                ], 500);
+            }
+
+        case 'diagnose_symlink':
+            $publicStorageExists = file_exists(public_path('storage'));
+            $isSymlink = is_link(public_path('storage'));
+            $target = $isSymlink ? readlink(public_path('storage')) : null;
+            
+            return response()->json([
+                'public_storage_exists' => $publicStorageExists,
+                'is_symlink' => $isSymlink,
+                'symlink_target' => $target,
+                'storage_path_writeable' => is_writable(storage_path('app/public')),
+            ]);
+
+        case 'fix_symlink':
+            try {
+                if (file_exists(public_path('storage'))) {
+                    if (is_link(public_path('storage'))) {
+                        unlink(public_path('storage'));
+                    } else if (is_dir(public_path('storage'))) {
+                        @rmdir(public_path('storage'));
+                    }
+                }
+                
+                \Illuminate\Support\Facades\Artisan::call('storage:link');
+                $output = \Illuminate\Support\Facades\Artisan::output();
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => 'storage:link executed successfully!',
+                    'output' => $output,
+                    'public_storage_exists' => file_exists(public_path('storage')),
+                    'is_symlink' => is_link(public_path('storage'))
+                ]);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'error' => $e->getMessage()
+                ], 500);
+            }
 
         default:
             return response()->json(['error' => 'Unknown action.'], 400);

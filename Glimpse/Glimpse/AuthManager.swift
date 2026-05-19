@@ -49,13 +49,6 @@ class AuthManager {
                 } else {
                     initialLastReadId = 0
                 }
-                
-                clearUnreadMessages()
-                if let lastMsg = latestFetchedMessages.last {
-                    Task {
-                        await markMessagesAsRead(messageId: lastMsg.id)
-                    }
-                }
             }
         }
     }
@@ -66,6 +59,8 @@ class AuthManager {
     var flashes: [GlimpseFlash] = []
     var chatRooms: [GlimpseChatRoom] = []
     var activeRoomId: Int? = nil
+    /// Persistent cache for room-specific messages — survives tab switching and view recreation
+    var roomMessagesCache: [Int: [ChatMessage]] = [:]
     
     // UPLOAD PROGRESS
     var isUploadingFlash: Bool = false
@@ -390,7 +385,10 @@ class AuthManager {
         
         let decoded = try JSONDecoder().decode([ChatMessage].self, from: data)
         await MainActor.run {
-            if roomId == nil {
+            if let rId = roomId {
+                // Persist room-specific messages in AuthManager-level cache (survives view lifecycle)
+                self.roomMessagesCache[rId] = decoded
+            } else {
                 self.latestFetchedMessages = decoded
                 self.updateUnreadCount()
                 self.saveMessagesCache()
@@ -1209,6 +1207,7 @@ class AuthManager {
                                 if let lon = update.longitude { p.longitude = lon }
                                 if let batt = update.batteryLevel { p.battery_level = batt }
                                 if let char = update.isCharging { p.is_charging = char }
+                                if let lastSeen = update.lastSeenMessageId { p.last_seen_message_id = lastSeen }
                                 p.status_note = update.statusNote
                                 p.location_name = update.locationName
                                 p.wifi_bssid = update.wifiBssid

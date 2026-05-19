@@ -802,109 +802,20 @@ struct MainDashboardView: View {
                                     .aspectRatio(1, contentMode: .fit)
                                     .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
                                     .scaleEffect(reactionCardScale)
-                                    .gesture(
-                                        DragGesture(minimumDistance: 0)
-                                            .onChanged { value in
-                                                if touchStartTime == nil {
-                                                    touchStartTime = Date()
-                                                    let startLoc = value.startLocation
-                                                    // Trigger fast long-press overlay after 120ms hold (snappy Haptic Touch)
-                                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                                                        guard let startTime = touchStartTime else { return }
-                                                        if !isLongPressActive {
-                                                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                                            withAnimation(.spring(response: 0.22, dampingFraction: 0.65)) {
-                                                                reactionCardScale = 0.94
-                                                                showReactions = true
-                                                                isLongPressActive = true
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                
-                                                guard isLongPressActive else { return }
-                                                
-                                                // Map touch position to the 5 emoji slots
-                                                let xPos = value.location.x
-                                                let cardWidth: CGFloat = 300.0 // standard card width boundary
-                                                let segmentWidth = cardWidth / 5.0
-                                                var index = Int(xPos / segmentWidth)
-                                                if index < 0 { index = 0 }
-                                                if index > 4 { index = 4 }
-                                                
-                                                if reactionHoveredIndex != index {
-                                                    reactionHoveredIndex = index
-                                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                                }
-                                            }
-                                            .onEnded { value in
-                                                let duration = Date().timeIntervalSince(touchStartTime ?? Date())
-                                                touchStartTime = nil
-                                                
-                                                if !isLongPressActive || duration < 0.12 {
-                                                    // Quick tap flips the card!
-                                                    NotificationCenter.default.post(name: NSNotification.Name("FlipDashboardCard"), object: nil)
-                                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.75)) {
-                                                        reactionCardScale = 1.0
-                                                        showReactions = false
-                                                        isLongPressActive = false
-                                                        reactionHoveredIndex = nil
-                                                    }
-                                                } else {
-                                                    // Released after long press! Send hovered emoji
-                                                    if let hoveredIdx = reactionHoveredIndex {
-                                                        let emojisList = ["❤️", "🔥", "✨", "😘", "💩"]
-                                                        let selectedEmoji = emojisList[hoveredIdx]
-                                                        
-                                                        // Trigger elegant card-edge sparkles instead of fullscreen burst
-                                                        triggerEdgeReactionAnimation(selectedEmoji)
-                                                        
-                                                        // Show Locket-style edge floating badge
-                                                        activeReactionBadge = selectedEmoji
-                                                        reactionBadgeAngle = Double.random(in: -15...15)
-                                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
-                                                            showReactionBadge = true
-                                                            reactionBadgeScale = 1.2
-                                                        }
-                                                        
-                                                        // Bounce effect
-                                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                                                            withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
-                                                                reactionBadgeScale = 1.0
-                                                            }
-                                                        }
-                                                        
-                                                        // Auto-hide the edge reaction badge after 4 seconds
-                                                        let currentBadge = selectedEmoji
-                                                        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
-                                                            if activeReactionBadge == currentBadge {
-                                                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                                                    reactionBadgeScale = 0.0
-                                                                    showReactionBadge = false
-                                                                }
-                                                            }
-                                                        }
-                                                        
-                                                        // Prevent the subsequent WebSocket broadcast from triggering double full-screen sparkles!
-                                                        isSuppressingGlobalLoveBurst = true
-                                                        
-                                                        // Sync love burst to server in background with the reaction emoji!
-                                                        Task {
-                                                            try? await auth.triggerServerLoveBurst(reaction: selectedEmoji)
-                                                        }
-                                                    }
-                                                    
-                                                    // Reset card scale and hide reactions
-                                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.75)) {
-                                                        reactionCardScale = 1.0
-                                                        showReactions = false
-                                                        isLongPressActive = false
-                                                        reactionHoveredIndex = nil
-                                                    }
-                                                }
-                                            }
-                                    )
+                                    .onTapGesture {
+                                        // Tap = flip the card with haptic (no swipe needed)
+                                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                        NotificationCenter.default.post(name: NSNotification.Name("FlipDashboardCard"), object: nil)
+                                    }
+                                    .onLongPressGesture(minimumDuration: 0.15, maximumDistance: 50) {
+                                        // Long press = show emoji reaction picker
+                                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                        withAnimation(.spring(response: 0.22, dampingFraction: 0.65)) {
+                                            reactionCardScale = 0.94
+                                            showReactions = true
+                                            isLongPressActive = true
+                                        }
+                                    }
                                 
                                 // Rising Edge Reaction Sparkles (Floating gracefully from bottom to top along borders)
                                 ForEach(edgeReactions) { particle in

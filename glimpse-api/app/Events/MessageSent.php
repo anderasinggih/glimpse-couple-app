@@ -31,7 +31,6 @@ class MessageSent implements ShouldBroadcast
     {
         $protobufBinary = \App\Helpers\GlimpseProtobuf::encodeMessage($this->message);
         return [
-            'message' => $this->message,
             'pb' => base64_encode($protobufBinary)
         ];
     }

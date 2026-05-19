@@ -454,10 +454,24 @@ class GlimpseController extends Controller
 
     public function sendMessage(Request $request)
     {
-        $request->validate([
-            'message' => 'required|string|max:500',
-            'room_id' => 'nullable|integer'
-        ]);
+        $messageText = '';
+        $roomId = null;
+        $isProtobuf = $request->header('Content-Type') === 'application/x-protobuf';
+
+        if ($isProtobuf) {
+            $protoData = $request->getContent();
+            $decoded = \App\Helpers\GlimpseProtobuf::decodeMessage($protoData);
+            $messageText = $decoded['message'] ?? '';
+            $roomId = $decoded['room_id'] ?? null;
+        } else {
+            $request->validate([
+                'message' => 'required|string|max:500',
+                'room_id' => 'nullable|integer'
+            ]);
+            $messageText = $request->input('message');
+            $roomId = $request->input('room_id');
+        }
+
         $user = $request->user();
 
         if (!$user->couple_id) {
@@ -469,7 +483,6 @@ class GlimpseController extends Controller
             return response()->json(['message' => 'Relationship is not active'], 400);
         }
 
-        $roomId = $request->input('room_id');
         if (!$roomId) {
             // Find or create Main Room
             $mainRoom = \DB::table('chat_rooms')
@@ -493,15 +506,31 @@ class GlimpseController extends Controller
         $msg = \App\Models\Message::create([
             'couple_id' => $user->couple_id,
             'sender_id' => $user->id,
-            'message' => $request->message,
+            'message' => $messageText,
             'room_id' => $roomId
         ]);
+
+        // Automatically mark all messages in this room as read for the sender!
+        if ($msg->id > $user->last_seen_message_id) {
+            $user->last_seen_message_id = $msg->id;
+        }
+        $map = json_decode($user->last_seen_room_messages ?: '{}', true) ?: [];
+        $map[$roomId ?: 0] = (int)$msg->id;
+        $user->last_seen_room_messages = json_encode($map);
+        $user->save();
+        $this->clearGlimpseCache($user->id);
 
         // Broadcast MessageSent event to the partner over WebSockets
         try {
             broadcast(new \App\Events\MessageSent($msg))->toOthers();
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+        }
+
+        if ($isProtobuf || $request->header('Accept') === 'application/x-protobuf') {
+            $protobufBinary = \App\Helpers\GlimpseProtobuf::encodeMessage($msg);
+            return response($protobufBinary)
+                ->header('Content-Type', 'application/x-protobuf');
         }
 
         return response()->json($msg);
@@ -512,7 +541,22 @@ class GlimpseController extends Controller
         $request->validate(['message_id' => 'required|integer']);
         $user = $request->user();
 
-        $user->last_seen_message_id = $request->message_id;
+        $message = \App\Models\Message::find($request->message_id);
+        if ($message) {
+            $roomId = $message->room_id ?: 0;
+            $map = json_decode($user->last_seen_room_messages ?: '{}', true) ?: [];
+            
+            $currentLastSeen = $map[$roomId] ?? 0;
+            if ($request->message_id > $currentLastSeen) {
+                $map[$roomId] = (int)$request->message_id;
+                $user->last_seen_room_messages = json_encode($map);
+            }
+        }
+
+        if ($request->message_id > $user->last_seen_message_id) {
+            $user->last_seen_message_id = $request->message_id;
+        }
+
         $user->save();
         $this->clearGlimpseCache($user->id);
 
@@ -522,34 +566,49 @@ class GlimpseController extends Controller
             \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
         }
 
-        return response()->json(['status' => 'ok', 'last_seen_message_id' => $user->last_seen_message_id]);
+        return response()->json([
+            'status' => 'ok', 
+            'last_seen_message_id' => $user->last_seen_message_id,
+            'last_seen_room_messages' => json_decode($user->last_seen_room_messages ?: '{}', true)
+        ]);
     }
 
     public function updateStatus(Request $request)
     {
-        $request->validate([
-            'latitude' => 'nullable|numeric',
-            'longitude' => 'nullable|numeric',
-            'battery_level' => 'nullable|integer',
-            'is_charging' => 'nullable|boolean',
-            'status_note' => 'nullable|string|max:30',
-            'location_name' => 'nullable|string|max:255',
-            'wifi_bssid' => 'nullable|string|max:255',
-        ]);
+        $isProtobuf = $request->header('Content-Type') === 'application/x-protobuf';
+        $data = [];
+
+        if ($isProtobuf) {
+            $protoData = $request->getContent();
+            $data = \App\Helpers\GlimpseProtobuf::decodeUserStatus($protoData);
+        } else {
+            $request->validate([
+                'latitude' => 'nullable|numeric',
+                'longitude' => 'nullable|numeric',
+                'battery_level' => 'nullable|integer',
+                'is_charging' => 'nullable|boolean',
+                'status_note' => 'nullable|string|max:30',
+                'location_name' => 'nullable|string|max:255',
+                'wifi_bssid' => 'nullable|string|max:255',
+            ]);
+            $data = $request->all();
+        }
 
         $user = $request->user();
         
-        if ($request->has('latitude')) $user->latitude = $request->latitude;
-        if ($request->has('longitude')) $user->longitude = $request->longitude;
-        if ($request->has('battery_level')) $user->battery_level = $request->battery_level;
-        if ($request->has('is_charging')) $user->is_charging = $request->is_charging ? 1 : 0;
-        if ($request->has('status_note')) $user->status_note = $request->status_note;
-        if ($request->has('location_name')) $user->location_name = $request->location_name;
+        if (array_key_exists('latitude', $data) && $data['latitude'] !== null) $user->latitude = $data['latitude'];
+        if (array_key_exists('longitude', $data) && $data['longitude'] !== null) $user->longitude = $data['longitude'];
+        if (array_key_exists('battery_level', $data) && $data['battery_level'] !== null) $user->battery_level = $data['battery_level'];
+        if (array_key_exists('is_charging', $data) && $data['is_charging'] !== null) {
+            $user->is_charging = $data['is_charging'] ? 1 : 0;
+        }
+        if (array_key_exists('status_note', $data) && $data['status_note'] !== null) $user->status_note = $data['status_note'];
+        if (array_key_exists('location_name', $data) && $data['location_name'] !== null) $user->location_name = $data['location_name'];
 
         // 🏡 Smart Place Anchor & Cozy Labeling (Zenly Style)
         $lat = $user->latitude;
         $lng = $user->longitude;
-        $wifiBssid = $request->input('wifi_bssid');
+        $wifiBssid = $data['wifi_bssid'] ?? null;
 
         if ($lat !== null && $lng !== null) {
             $today = now()->format('Y-m-d');
@@ -691,8 +750,8 @@ class GlimpseController extends Controller
             }
         }
 
-        if ($request->has('latitude') && $request->has('longitude')) {
-            $this->appendLocationHistory($user, $request->latitude, $request->longitude);
+        if (isset($data['latitude']) && isset($data['longitude']) && $data['latitude'] !== null && $data['longitude'] !== null) {
+            $this->appendLocationHistory($user, $data['latitude'], $data['longitude']);
         }
 
         $user->save();
@@ -1030,8 +1089,16 @@ class GlimpseController extends Controller
                 $unreadQuery->where('room_id', $room->id);
             }
 
-            if ($user->last_seen_message_id !== null) {
-                $unreadQuery->where('id', '>', $user->last_seen_message_id);
+            $roomIdKey = $room->is_main ? 0 : $room->id;
+            $map = json_decode($user->last_seen_room_messages ?: '{}', true) ?: [];
+            $roomLastSeen = $map[$roomIdKey] ?? ($map[$room->id] ?? null);
+
+            if ($roomLastSeen !== null) {
+                $unreadQuery->where('id', '>', $roomLastSeen);
+            } else {
+                if ($user->last_seen_message_id !== null) {
+                    $unreadQuery->where('id', '>', $user->last_seen_message_id);
+                }
             }
 
             $unreadCount = $unreadQuery->count();
