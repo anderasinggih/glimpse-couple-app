@@ -73,7 +73,7 @@ struct FullPartnerMapView: View {
                         let count = coords.count
                         
                         ForEach(0..<count - 1, id: \.self) { i in
-                            FootprintSegmentView(
+                            footprintSegment(
                                 coordinate1: coords[i],
                                 coordinate2: coords[i+1],
                                 index: i,
@@ -90,7 +90,7 @@ struct FullPartnerMapView: View {
                         let count = coords.count
                         
                         ForEach(0..<count - 1, id: \.self) { i in
-                            FootprintSegmentView(
+                            footprintSegment(
                                 coordinate1: coords[i],
                                 coordinate2: coords[i+1],
                                 index: i,
@@ -426,6 +426,27 @@ struct FullPartnerMapView: View {
         timerCancellable?.cancel()
     }
     
+    @MapContentBuilder
+    private func footprintSegment(coordinate1: CLLocationCoordinate2D, coordinate2: CLLocationCoordinate2D, index: Int, totalCount: Int, color: Color) -> some MapContent {
+        let progress = totalCount > 1 ? Double(index) / Double(totalCount - 1) : 1.0
+        let opacity = 0.35 + (progress * 0.45)
+        let width = CGFloat(4.0 + (progress * 4.0))
+        
+        // 1. Neon Glow Layer (subtle shadow effect)
+        MapPolyline(coordinates: [coordinate1, coordinate2])
+            .stroke(
+                color.opacity(opacity * 0.4),
+                style: StrokeStyle(lineWidth: width + 6.0, lineCap: .round, lineJoin: .round)
+            )
+        
+        // 2. Core Saturated Neon Layer
+        MapPolyline(coordinates: [coordinate1, coordinate2])
+            .stroke(
+                color.opacity(opacity),
+                style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
+            )
+    }
+    
     private func triggerImmediateSync() {
         Task {
             try? await auth.fetchState()
@@ -600,41 +621,6 @@ struct FullPartnerMapView: View {
     }
 }
 
-struct FootprintSegmentView: MapContent {
-    let coordinate1: CLLocationCoordinate2D
-    let coordinate2: CLLocationCoordinate2D
-    let index: Int
-    let totalCount: Int
-    let color: Color
-    
-    private var progress: Double {
-        totalCount > 1 ? Double(index) / Double(totalCount - 1) : 1.0
-    }
-    
-    private var opacity: Double {
-        0.35 + (progress * 0.45)
-    }
-    
-    private var width: CGFloat {
-        CGFloat(4.0 + (progress * 4.0))
-    }
-    
-    var body: some MapContent {
-        // 1. Neon Glow Layer
-        MapPolyline(coordinates: [coordinate1, coordinate2])
-            .stroke(
-                color.opacity(opacity * 0.4),
-                style: StrokeStyle(lineWidth: width + 6.0, lineCap: .round, lineJoin: .round)
-            )
-        
-        // 2. Core Saturated Neon Layer
-        MapPolyline(coordinates: [coordinate1, coordinate2])
-            .stroke(
-                color.opacity(opacity),
-                style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
-            )
-    }
-}
 
 extension GlimpseUser: Equatable {
     public static func == (lhs: GlimpseUser, rhs: GlimpseUser) -> Bool {
