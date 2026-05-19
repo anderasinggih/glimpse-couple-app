@@ -1294,27 +1294,28 @@ class AuthManager {
                         DispatchQueue.main.async {
                             if !self.latestFetchedMessages.contains(where: { $0.id == finalMsg.id }) {
                                 self.latestFetchedMessages.append(finalMsg)
-                                // Refresh the chat rooms list in the background to automatically sync unread counts
+                                self.saveMessagesCache()
+                            }
+                            
+                            // Always notify the UI view so it can render the message live
+                            NotificationCenter.default.post(name: Notification.Name("GlimpseChatMessageReceived"), object: finalMsg)
+                            
+                            // Refresh the chat rooms list in the background to automatically sync unread counts
+                            Task {
+                                _ = try? await self.fetchChatRooms()
+                            }
+                            
+                            if self.selectedTab == 3 && self.activeRoomId == finalMsg.room_id {
                                 Task {
+                                    await self.markMessagesAsRead(messageId: finalMsg.id)
                                     _ = try? await self.fetchChatRooms()
                                 }
-                                
-                                self.saveMessagesCache()
-                                NotificationCenter.default.post(name: Notification.Name("GlimpseChatMessageReceived"), object: finalMsg)
-                                
-                                if self.selectedTab == 3 && self.activeRoomId == finalMsg.room_id {
-                                    Task {
-                                        await self.markMessagesAsRead(messageId: finalMsg.id)
-                                        // Refresh after marking read
-                                        _ = try? await self.fetchChatRooms()
-                                    }
-                                }
-                                
-                                // Global sound & haptic alert for incoming messages from partner!
-                                if finalMsg.sender_id != self.currentUser?.id {
-                                    AudioServicesPlaySystemSound(1103) // Soft ting
-                                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                                }
+                            }
+                            
+                            // Global sound & haptic alert for incoming messages from partner!
+                            if finalMsg.sender_id != self.currentUser?.id {
+                                AudioServicesPlaySystemSound(1103) // Soft ting
+                                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                             }
                         }
                     }

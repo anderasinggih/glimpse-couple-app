@@ -1836,9 +1836,9 @@ struct ChatView: View {
         let isSameRoom = selectedRoom?.id == newMsg.room_id
         let isCurrentRoom = isSameRoom || (isMainRoom && newMsg.room_id == nil)
         
-        let currentUserId = auth.currentUser?.id ?? 0
-        let isMyMessage = newMsg.sender_id == currentUserId
-        let isPartnerMessage = !isMyMessage
+        let partnerId = auth.partner?.id ?? 0
+        let isPartnerMessage = newMsg.sender_id == partnerId
+        let isMyMessage = !isPartnerMessage
         
         if isCurrentRoom {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
