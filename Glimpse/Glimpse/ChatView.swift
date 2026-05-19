@@ -1311,7 +1311,12 @@ struct ChatView: View {
                 }
             }
             
-            if isMe && msg.id == auth.partner?.last_seen_message_id {
+            let isLatestSeen = isMe && msg.id == messages.last(where: {
+                $0.sender_id == (auth.currentUser?.id ?? 0) &&
+                $0.id <= (auth.partner?.last_seen_message_id ?? 0)
+            })?.id
+            
+            if isLatestSeen {
                 HStack(spacing: 3.5) {
                     Image(systemName: "checkmark.seal.fill")
                         .font(.system(size: 8))
