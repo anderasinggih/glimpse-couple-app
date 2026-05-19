@@ -438,12 +438,12 @@ struct FullPartnerMapView: View {
     
     @MapContentBuilder
     private func wavyConnectingLine(currentUser: GlimpseUser, partner: GlimpseUser) -> some MapContent {
-        let startLoc = CLLocation(latitude: animatedMyCoordinate.latitude, longitude: animatedMyCoordinate.longitude)
-        let endLoc = CLLocation(latitude: animatedPartnerCoordinate.latitude, longitude: animatedPartnerCoordinate.longitude)
+        let startLoc = CLLocation(latitude: currentUser.coordinate.latitude, longitude: currentUser.coordinate.longitude)
+        let endLoc = CLLocation(latitude: partner.coordinate.latitude, longitude: partner.coordinate.longitude)
         let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
         
         let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
-        let wavyCoords = generateWavyCoordinates(from: animatedMyCoordinate, to: animatedPartnerCoordinate, distanceInKm: distanceInKm, phase: wavePhase)
+        let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: partner.coordinate, distanceInKm: distanceInKm, phase: wavePhase)
         
         // 1. Bottom Layer: Outer Neon Glow
         MapPolyline(coordinates: wavyCoords)
@@ -684,7 +684,7 @@ struct FullPartnerMapView: View {
 }
 
 struct FootprintSegment: Identifiable {
-    var id: String { "\(coordinate1.latitude),\(coordinate1.longitude)-\(coordinate2.latitude),\(coordinate2.longitude)-\(index)" }
+    var id: String { "segment-\(index)" }
     let coordinate1: CLLocationCoordinate2D
     let coordinate2: CLLocationCoordinate2D
     let index: Int

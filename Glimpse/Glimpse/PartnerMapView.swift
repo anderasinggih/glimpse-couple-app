@@ -122,10 +122,10 @@ struct PartnerMapView: View {
                                let userLat = user.latitude, userLat != 0.0,
                                let myLat = currentUser.latitude, myLat != 0.0 {
                                 let startLoc = CLLocation(latitude: currentUser.coordinate.latitude, longitude: currentUser.coordinate.longitude)
-                                let endLoc = CLLocation(latitude: animatedPartnerCoordinate.latitude, longitude: animatedPartnerCoordinate.longitude)
+                                let endLoc = CLLocation(latitude: user.coordinate.latitude, longitude: user.coordinate.longitude)
                                 let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
                                 
-                                let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: animatedPartnerCoordinate, phase: wavePhase)
+                                let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: user.coordinate, phase: wavePhase)
                                 let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
                                 
                                 // 1. Bottom Layer: Outer Neon Glow
