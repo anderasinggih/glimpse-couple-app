@@ -662,7 +662,7 @@ struct ChatView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             
-            floatingInputBar
+            floatingInputBar(proxy: proxy)
                 .padding(.horizontal, 16)
                 .padding(.top, 6)
                 .padding(.bottom, 8)
@@ -978,7 +978,7 @@ struct ChatView: View {
     }
     
     // FLOATING MESSAGE INPUT BAR (Fully floating, glassmorphic, separate rounded capsule and button)
-    private var floatingInputBar: some View {
+    private func floatingInputBar(proxy: ScrollViewProxy) -> some View {
         let isMultiLine = messageInput.contains("\n") || messageInput.count > 26
         let currentRadius: CGFloat = isMultiLine ? 16 : 22
         
