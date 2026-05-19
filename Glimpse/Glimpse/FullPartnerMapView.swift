@@ -34,6 +34,36 @@ struct FullPartnerMapView: View {
         return CLLocationCoordinate2D(latitude: 0.0, longitude: 0.0)
     }
     
+    private var partnerSegments: [FootprintSegment] {
+        guard let partner = auth.partner,
+              let history = partner.location_history, history.count >= 2 else { return [] }
+        let coords = history.map { $0.coordinate }
+        let count = coords.count
+        return (0..<count - 1).map { i in
+            FootprintSegment(
+                coordinate1: coords[i],
+                coordinate2: coords[i+1],
+                index: i,
+                totalCount: count
+            )
+        }
+    }
+    
+    private var mySegments: [FootprintSegment] {
+        guard let myUser = auth.currentUser,
+              let history = myUser.location_history, history.count >= 2 else { return [] }
+        let coords = history.map { $0.coordinate }
+        let count = coords.count
+        return (0..<count - 1).map { i in
+            FootprintSegment(
+                coordinate1: coords[i],
+                coordinate2: coords[i+1],
+                index: i,
+                totalCount: count
+            )
+        }
+    }
+    
     // Polling timer for maps: 3.0 seconds
     @State private var timer: Timer.TimerPublisher = Timer.publish(every: 3.0, on: .main, in: .common)
     @State private var timerCancellable: Cancellable?
@@ -68,36 +98,25 @@ struct FullPartnerMapView: View {
                 // Full Screen Map with Pulsing Partner Marker
                 Map(position: $position) {
                     // 👣 Neon Footprints Trail for Partner (Zenly-Style) - Tapered Fading Shadow
-                    if let partnerHistory = partner.location_history, partnerHistory.count >= 2 {
-                        let coords = partnerHistory.map { $0.coordinate }
-                        let count = coords.count
-                        
-                        ForEach(0..<count - 1, id: \.self) { i in
-                            footprintSegment(
-                                coordinate1: coords[i],
-                                coordinate2: coords[i+1],
-                                index: i,
-                                totalCount: count,
-                                color: Color.activeCyan
-                            )
-                        }
+                    ForEach(partnerSegments) { segment in
+                        footprintSegment(
+                            coordinate1: segment.coordinate1,
+                            coordinate2: segment.coordinate2,
+                            index: segment.index,
+                            totalCount: segment.totalCount,
+                            color: Color.activeCyan
+                        )
                     }
                     
                     // 👣 Neon Footprints Trail for Me (Zenly-Style) - Tapered Fading Shadow
-                    if let myUser = auth.currentUser,
-                       let myHistory = myUser.location_history, myHistory.count >= 2 {
-                        let coords = myHistory.map { $0.coordinate }
-                        let count = coords.count
-                        
-                        ForEach(0..<count - 1, id: \.self) { i in
-                            footprintSegment(
-                                coordinate1: coords[i],
-                                coordinate2: coords[i+1],
-                                index: i,
-                                totalCount: count,
-                                color: Color.electricPurple
-                            )
-                        }
+                    ForEach(mySegments) { segment in
+                        footprintSegment(
+                            coordinate1: segment.coordinate1,
+                            coordinate2: segment.coordinate2,
+                            index: segment.index,
+                            totalCount: segment.totalCount,
+                            color: Color.electricPurple
+                        )
                     }
 
                     if auth.isTogether, let currentUser = auth.currentUser {
@@ -617,10 +636,18 @@ struct FullPartnerMapView: View {
             coordinates.append(CLLocationCoordinate2D(latitude: waveLat, longitude: waveLon))
         }
         
+        
         return coordinates
     }
 }
 
+struct FootprintSegment: Identifiable {
+    var id: String { "\(coordinate1.latitude),\(coordinate1.longitude)-\(coordinate2.latitude),\(coordinate2.longitude)-\(index)" }
+    let coordinate1: CLLocationCoordinate2D
+    let coordinate2: CLLocationCoordinate2D
+    let index: Int
+    let totalCount: Int
+}
 
 extension GlimpseUser: Equatable {
     public static func == (lhs: GlimpseUser, rhs: GlimpseUser) -> Bool {
