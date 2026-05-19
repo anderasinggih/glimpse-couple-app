@@ -26,6 +26,9 @@ struct PartnerMapView: View {
     // Auto-rotation timer every 10 seconds
     private let autoRotateTimer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
     
+    // Dead reckoning: check every 1 second if extrapolation is needed
+    private let deadReckoningTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+    
     init(user: GlimpseUser) {
         self.user = user
         _position = State(initialValue: .region(MKCoordinateRegion(
@@ -252,6 +255,57 @@ struct PartnerMapView: View {
                 }
             }
         }
+        .onReceive(deadReckoningTimer) { _ in
+            extrapolateDeadReckoning()
+        }
+    }
+    
+    private func extrapolateDeadReckoning() {
+        guard let history = user.location_history,
+              history.count >= 2 else { return }
+        
+        let lastUpdated = user.lastUpdatedDate
+        let elapsed = Date().timeIntervalSince(lastUpdated)
+        
+        // Extrapolate if network drops for >= 10 seconds but < 5 minutes (300 seconds)
+        guard elapsed >= 10.0 && elapsed < 300.0 else { return }
+        
+        let p1 = history[history.count - 2]
+        let p2 = history[history.count - 1]
+        
+        let t1 = Double(p1.timestamp)
+        let t2 = Double(p2.timestamp)
+        let dt = t2 - t1
+        
+        guard dt > 0 else { return }
+        
+        let dLat = p2.latitude - p1.latitude
+        let dLon = p2.longitude - p1.longitude
+        
+        let speedLat = dLat / dt
+        let speedLon = dLon / dt
+        
+        // Verify user is actually moving (not stationary / sleeping)
+        let distance = sqrt(pow(dLat * 111000, 2) + pow(dLon * 111000, 2))
+        let speedMetersPerSec = distance / dt
+        
+        // Extrapolate only if moving >= 1.5 m/s (~5.4 km/h)
+        guard speedMetersPerSec >= 1.5 else { return }
+        
+        let currentTimestamp = Date().timeIntervalSince1970
+        let timeSinceLastPoint = currentTimestamp - t2
+        
+        // Cap extrapolation duration to max 60 seconds to avoid drifting out of bounds
+        let extrapolationDuration = min(timeSinceLastPoint, 60.0)
+        
+        let targetLat = p2.latitude + (speedLat * extrapolationDuration)
+        let targetLon = p2.longitude + (speedLon * extrapolationDuration)
+        
+        withAnimation(.linear(duration: 1.0)) {
+            animatedPartnerLatitude = targetLat
+            animatedPartnerLongitude = targetLon
+        }
+    }
     }
     
     private func updateMapPosition() {

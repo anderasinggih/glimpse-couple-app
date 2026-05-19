@@ -29,6 +29,9 @@ struct FullPartnerMapView: View {
     @State private var previousPartnerDate: Date? = nil
     @State private var previousMyDate: Date? = nil
     
+    // Dead reckoning: check every 1 second if extrapolation is needed
+    private let deadReckoningTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+    
     private var animatedPartnerCoordinate: CLLocationCoordinate2D {
         if let partner = auth.partner {
             return CLLocationCoordinate2D(
@@ -91,9 +94,7 @@ struct FullPartnerMapView: View {
         }
     }
     
-    // Polling timer for maps: 3.0 seconds
-    @State private var timer: Timer.TimerPublisher = Timer.publish(every: 3.0, on: .main, in: .common)
-    @State private var timerCancellable: Cancellable?
+    // Polling timer removed (Replaced by WebSocket real-time updates)
     
     init(user: GlimpseUser) {
         _position = State(initialValue: .region(MKCoordinateRegion(
@@ -358,27 +359,59 @@ struct FullPartnerMapView: View {
                 animatedPartnerLatitude = lat
                 animatedPartnerLongitude = lon
             }
-            startPolling()
             triggerImmediateSync()
         }
-        .onDisappear {
-            stopPolling()
-        }
-        // Map Live Updates (every 3 seconds for instant real-time synchronization!)
-        .onReceive(timer) { _ in
-            Task {
-                try? await auth.fetchState()
-            }
+        .onReceive(deadReckoningTimer) { _ in
+            extrapolateDeadReckoning()
         }
     }
     
-    private func startPolling() {
-        timer = Timer.publish(every: 3.0, on: .main, in: .common)
-        timerCancellable = timer.connect()
-    }
-    
-    private func stopPolling() {
-        timerCancellable?.cancel()
+    private func extrapolateDeadReckoning() {
+        guard let partner = auth.partner,
+              let history = partner.location_history,
+              history.count >= 2 else { return }
+        
+        let lastUpdated = partner.lastUpdatedDate
+        let elapsed = Date().timeIntervalSince(lastUpdated)
+        
+        // Extrapolate if network drops for >= 10 seconds but < 5 minutes (300 seconds)
+        guard elapsed >= 10.0 && elapsed < 300.0 else { return }
+        
+        let p1 = history[history.count - 2]
+        let p2 = history[history.count - 1]
+        
+        let t1 = Double(p1.timestamp)
+        let t2 = Double(p2.timestamp)
+        let dt = t2 - t1
+        
+        guard dt > 0 else { return }
+        
+        let dLat = p2.latitude - p1.latitude
+        let dLon = p2.longitude - p1.longitude
+        
+        let speedLat = dLat / dt
+        let speedLon = dLon / dt
+        
+        // Verify user is actually moving (not stationary / sleeping)
+        let distance = sqrt(pow(dLat * 111000, 2) + pow(dLon * 111000, 2))
+        let speedMetersPerSec = distance / dt
+        
+        // Extrapolate only if moving >= 1.5 m/s (~5.4 km/h)
+        guard speedMetersPerSec >= 1.5 else { return }
+        
+        let currentTimestamp = Date().timeIntervalSince1970
+        let timeSinceLastPoint = currentTimestamp - t2
+        
+        // Cap extrapolation duration to max 60 seconds to avoid drifting out of bounds
+        let extrapolationDuration = min(timeSinceLastPoint, 60.0)
+        
+        let targetLat = p2.latitude + (speedLat * extrapolationDuration)
+        let targetLon = p2.longitude + (speedLon * extrapolationDuration)
+        
+        withAnimation(.linear(duration: 1.0)) {
+            animatedPartnerLatitude = targetLat
+            animatedPartnerLongitude = targetLon
+        }
     }
     
     @ViewBuilder

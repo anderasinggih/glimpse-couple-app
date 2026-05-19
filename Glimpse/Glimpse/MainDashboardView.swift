@@ -275,13 +275,7 @@ struct MainDashboardView: View {
         .onReceive(dashboardPollTimer) { _ in
             currentTime = Date()
             pollCounter += 1
-            
-            // Backup fallback state sync every 30 seconds (WebSocket handles instant updates!)
-            if pollCounter % 30 == 0 {
-                Task {
-                    try? await auth.fetchState()
-                }
-            }
+            // 100% relying on WebSockets for real-time data sync!
         }
         // React instantly to real-time Love Burst triggers via WebSocket
         .onChange(of: auth.lastLoveBurstTimestamp) { oldValue, newValue in

@@ -24,8 +24,6 @@ struct ChatView: View {
     @State private var messageInput = ""
     @State private var replyMessage: ChatMessage? = nil
     @State private var isSending = false
-    @State private var timer: Timer.TimerPublisher = Timer.publish(every: 5.0, on: .main, in: .common)
-    @State private var cancellable: Cancellable?
     @FocusState private var isInputFocused: Bool
     @FocusState private var isSearchFocused: Bool
     @FocusState private var isInsideChatSearchFocused: Bool
@@ -211,45 +209,7 @@ struct ChatView: View {
             if selectedRoom != nil {
                 loadMessagesForSelectedRoom()
             }
-            startPolling()
             auth.pushCurrentStatus()
-        }
-        .onDisappear {
-            stopPolling()
-        }
-        .onReceive(timer) { _ in
-            if auth.partner != nil, auth.coupleActive {
-                tickCount += 1
-                if tickCount >= 2 {
-                    tickCount = 0
-                    auth.pushCurrentStatus()
-                }
-                // Always refresh the rooms list (unread counts etc)
-                Task { @MainActor in
-                    if var rooms = try? await auth.fetchChatRooms() {
-                        let currentUserId = auth.currentUser?.id ?? 0
-                        for i in 0..<rooms.count {
-                            let r = rooms[i]
-                            let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(r.id)"
-                            let storedId = UserDefaults.standard.integer(forKey: userDefaultsKey)
-                            if let latestId = r.latest_message?.id, latestId > 0 && latestId <= storedId {
-                                rooms[i].unread_count = 0
-                            }
-                            
-                            if let activeRoom = selectedRoom, r.id == activeRoom.id {
-                                rooms[i].unread_count = 0
-                            }
-                        }
-                        self.chatRooms = rooms
-                        self.auth.chatRooms = rooms
-                        auth.updateUnreadCount()
-                    }
-                }
-                // NOTE: Do NOT poll loadMessagesForSelectedRoom() here.
-                // WebSocket (Reverb/Pusher) handles real-time message delivery.
-                // Polling every 5s would race with optimistic messages and cause
-                // them to disappear before the server confirms them.
-            }
         }
         // WebSocket synchronization for chat rooms
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomCreated"))) { notification in
@@ -2078,14 +2038,7 @@ struct ChatView: View {
         }
     }
     
-    private func startPolling() {
-        timer = Timer.publish(every: 5.0, on: .main, in: .common)
-        cancellable = timer.connect()
-    }
-    
-    private func stopPolling() {
-        cancellable?.cancel()
-    }
+
     
     private func formattedUrl(_ urlString: String) -> String {
         if urlString.hasPrefix("http") {
