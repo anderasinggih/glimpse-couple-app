@@ -29,6 +29,8 @@ struct ChatView: View {
     @State private var timer: Timer.TimerPublisher = Timer.publish(every: 5.0, on: .main, in: .common)
     @State private var cancellable: Cancellable?
     @FocusState private var isInputFocused: Bool
+    @FocusState private var isSearchFocused: Bool
+    @FocusState private var isInsideChatSearchFocused: Bool
     
     @State private var tickCount = 0
     @State private var isSearchingChat = false
@@ -383,9 +385,17 @@ struct ChatView: View {
                         }
                         .onTapGesture {
                             isInputFocused = false
+                            if isSearchingChat {
+                                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                                    isSearchingChat = false
+                                    searchQuery = ""
+                                }
+                                isInsideChatSearchFocused = false
+                                hideKeyboard()
+                            }
                         }
                         .defaultScrollAnchor(.bottom)
-                        .scrollDismissesKeyboard(.interactively)
+                        .scrollDismissesKeyboard(.immediately)
                         .onAppear {
                             if let highlightId = highlightedMessageId {
                                 // Scroll straight to targeted search result message!
@@ -569,8 +579,8 @@ struct ChatView: View {
     private func chatRoomsListView(partner: GlimpseUser) -> some View {
         ZStack(alignment: .top) {
             VStack(spacing: 0) {
-                // Header spacer (clears the blurred top header)
-                Spacer().frame(height: 95)
+                // Header spacer (clears the blurred top header precisely)
+                Spacer().frame(height: 104)
                 
                 // Sleek premium WhatsApp-style search bar
                 if !chatRooms.isEmpty {
@@ -581,6 +591,7 @@ struct ChatView: View {
                                 .font(.system(size: 14, weight: .bold))
                             
                             TextField("Search rooms or messages...", text: $searchQuery)
+                                .focused($isSearchFocused)
                                 .font(.system(size: 14, design: .rounded))
                                 .foregroundColor(.white)
                                 .autocorrectionDisabled()
@@ -606,6 +617,7 @@ struct ChatView: View {
                         )
                     }
                     .padding(.horizontal, 16)
+                    .padding(.top, 0)
                     .padding(.bottom, 6)
                 }
                 
@@ -635,7 +647,7 @@ struct ChatView: View {
                     List {
                         // Small spacer to give breathing room below search bar
                         Color.clear
-                            .frame(height: 4)
+                            .frame(height: 2)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                         
@@ -748,8 +760,16 @@ struct ChatView: View {
                     .scrollContentBackground(.hidden)
                     .background(Color.clear)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .scrollDismissesKeyboard(.immediately)
+                    .simultaneousGesture(
+                        TapGesture().onEnded {
+                            isSearchFocused = false
+                            hideKeyboard()
+                        }
+                    )
                 }
             }
+            .ignoresSafeArea(edges: .top)
             
             roomsListHeader(partner: partner)
                 .opacity(selectedRoom == nil ? 1.0 : Double(swipeProgress))
@@ -759,6 +779,9 @@ struct ChatView: View {
     }
     
     private func openRoomDirectly(_ room: GlimpseChatRoom) {
+        isSearchFocused = false
+        isInsideChatSearchFocused = false
+        hideKeyboard()
         if let authCached = auth.roomMessagesCache[room.id], !authCached.isEmpty {
             self.messages = authCached
             self.messagesCache[room.id] = authCached
@@ -775,6 +798,9 @@ struct ChatView: View {
     }
     
     private func openRoomAndHighlightMessage(room: GlimpseChatRoom, message: ChatMessage) {
+        isSearchFocused = false
+        isInsideChatSearchFocused = false
+        hideKeyboard()
         var cachedMsgs = messagesCache[room.id] ?? auth.roomMessagesCache[room.id] ?? []
         if !cachedMsgs.contains(where: { $0.id == message.id }) {
             cachedMsgs.append(message)
@@ -1190,6 +1216,12 @@ struct ChatView: View {
                         isSearchingChat.toggle()
                         if !isSearchingChat {
                             searchQuery = ""
+                            isInsideChatSearchFocused = false
+                        } else {
+                            // Automatically focus the search text field when opened
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                isInsideChatSearchFocused = true
+                            }
                         }
                     }
                 } label: {
@@ -1213,6 +1245,7 @@ struct ChatView: View {
                             .foregroundColor(.white.opacity(0.4))
                         
                         TextField("Search in chat...", text: $searchQuery)
+                            .focused($isInsideChatSearchFocused)
                             .font(.system(size: 14))
                             .foregroundColor(.white)
                             .tint(.activeCyan)
