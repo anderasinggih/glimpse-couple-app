@@ -1273,16 +1273,17 @@ struct ChatView: View {
                     Spacer()
                 }
                 
-                // Targeted Bubble Swipe ZStack
-                ZStack(alignment: .leading) {
-                    // Fading reply icon behind the bubble on swipe
-                    if isSwiped && swipeOffset > 10 {
+                // Targeted Bubble Swipe ZStack (aligned to trailing for natural left-swipe reply mechanics)
+                ZStack(alignment: .trailing) {
+                    // Fading reply icon revealed dynamically behind/beside the bubble on left swipe
+                    if isSwiped && swipeOffset < -5 {
                         Image(systemName: "arrow.uturn.left.circle.fill")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundColor(.activeCyan)
-                            .opacity(min(1.0, Double((swipeOffset - 10) / 40)))
-                            .scaleEffect(min(1.0, 0.6 + 0.4 * (swipeOffset / 50)))
-                            .offset(x: -28) // Rendered exactly to the left of the bubble
+                            .shadow(color: .activeCyan.opacity(0.35), radius: 6)
+                            .opacity(min(1.0, Double(abs(swipeOffset) / 45.0)))
+                            .scaleEffect(min(1.0, 0.5 + 0.5 * (abs(swipeOffset) / 50.0)))
+                            .offset(x: 28 + (swipeOffset * 0.12)) // Elastic dynamic tracking closer to the bubble
                     }
                     
                     Group {
@@ -1298,21 +1299,33 @@ struct ChatView: View {
                     .offset(x: isSwiped ? swipeOffset : 0)
                 }
                 .simultaneousGesture(
-                    DragGesture(minimumDistance: 12, coordinateSpace: .local)
+                    DragGesture(minimumDistance: 8, coordinateSpace: .local)
                         .onChanged { value in
-                            guard value.translation.width > 0 else { return }
+                            // WhatsApp & Telegram standard: Swipe LEFT to reply
+                            guard value.translation.width < 0 else { return }
                             swipedMessageId = msg.id
-                            swipeOffset = min(55, value.translation.width)
+                            
+                            // High-performance elastic spring/logarithmic dampening
+                            let dragAmount = value.translation.width
+                            let limit: CGFloat = -60
+                            if dragAmount < limit {
+                                let excess = dragAmount - limit
+                                swipeOffset = limit + excess * 0.35
+                            } else {
+                                swipeOffset = dragAmount
+                            }
                         }
                         .onEnded { value in
                             if swipedMessageId == msg.id {
-                                if value.translation.width > 35 {
+                                // Trigger reply if swipe exceeds WhatsApp/Telegram standard 35 points threshold
+                                if value.translation.width < -35 {
                                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                                     withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
                                         replyMessage = msg
                                     }
                                 }
-                                withAnimation(.spring(response: 0.25, dampingFraction: 0.82)) {
+                                // Snappy smooth spring bounce back
+                                withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
                                     swipeOffset = 0
                                     swipedMessageId = nil
                                 }
