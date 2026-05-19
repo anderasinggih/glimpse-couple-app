@@ -18,11 +18,11 @@ struct ChatView: View {
     @State private var renameRoomName = ""
     @State private var dragOffset: CGFloat = 0
     @State private var pinnedRoomIds: Set<Int> = []
-    @State private var replyMessage: ChatMessage? = nil
     
     @State private var messages: [ChatMessage] = []
     @State private var messagesCache: [Int: [ChatMessage]] = [:] // Local cache for instant message loads
     @State private var messageInput = ""
+    @State private var replyMessage: ChatMessage? = nil
     @State private var isSending = false
     @State private var timer: Timer.TimerPublisher = Timer.publish(every: 5.0, on: .main, in: .common)
     @State private var cancellable: Cancellable?
@@ -33,6 +33,8 @@ struct ChatView: View {
     @State private var tickCount = 0
     @State private var isSearchingChat = false
     @State private var searchQuery = ""
+    @State private var debouncedSearchQuery = ""
+    @State private var searchTask: Task<Void, Never>? = nil
     @State private var isShowingScrollToBottomButton = false
     @State private var showNoInternetAlert = false
     @State private var networkMonitor = NetworkMonitor.shared
@@ -48,7 +50,7 @@ struct ChatView: View {
     @State private var triggerJumpToDate = false
     
     var filteredMessages: [ChatMessage] {
-        let cleanQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanQuery = debouncedSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         if cleanQuery.isEmpty || isSearchingChat {
             return messages
         }
@@ -81,7 +83,7 @@ struct ChatView: View {
     }
     
     var globalSearchResults: [GlobalSearchResult] {
-        let cleanQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanQuery = debouncedSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanQuery.isEmpty else { return [] }
         
         // Collect all unique messages across caches
@@ -647,7 +649,24 @@ struct ChatView: View {
             .presentationDragIndicator(.visible)
         }
         .onChange(of: searchQuery) { oldValue, newValue in
-            updateLocalSearchMatches()
+            searchTask?.cancel()
+            
+            // If the query is empty, we bypass debounce for instant UI clearing
+            if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                debouncedSearchQuery = newValue
+                updateLocalSearchMatches()
+                return
+            }
+            
+            searchTask = Task {
+                try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s debounce
+                if !Task.isCancelled {
+                    await MainActor.run {
+                        self.debouncedSearchQuery = newValue
+                        self.updateLocalSearchMatches()
+                    }
+                }
+            }
         }
         .onChange(of: isSearchingChat) { oldValue, newValue in
             if !newValue {
@@ -741,10 +760,24 @@ struct ChatView: View {
                     List {
                         if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             // --- 🔍 SEARCH RESULTS VIEW ---
-                            let matchedRooms = sortedChatRooms.filter { $0.name.localizedCaseInsensitiveContains(searchQuery) }
+                            let matchedRooms = sortedChatRooms.filter { $0.name.localizedCaseInsensitiveContains(debouncedSearchQuery) }
                             let matchedMsgs = globalSearchResults
                             
-                            if matchedRooms.isEmpty && matchedMsgs.isEmpty {
+                            if searchQuery != debouncedSearchQuery {
+                                VStack(spacing: 16) {
+                                    Spacer().frame(height: 40)
+                                    ProgressView()
+                                        .tint(.activeCyan)
+                                        .scaleEffect(1.2)
+                                    Text("Searching...")
+                                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                                        .foregroundColor(.white.opacity(0.4))
+                                    Spacer().frame(height: 40)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                            } else if matchedRooms.isEmpty && matchedMsgs.isEmpty {
                                 VStack(spacing: 12) {
                                     Spacer().frame(height: 40)
                                     Image(systemName: "magnifyingglass")
@@ -2352,7 +2385,7 @@ struct ChatView: View {
     // --- 🔍 LOCAL CHAT SEARCH & NAVIGATION HELPERS ---
     
     private func updateLocalSearchMatches() {
-        let cleanQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanQuery = debouncedSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         if cleanQuery.isEmpty || !isSearchingChat {
             localSearchMatchIds = []
             localSearchCurrentIndex = -1
