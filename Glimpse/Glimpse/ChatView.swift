@@ -163,7 +163,12 @@ struct ChatView: View {
                 }
                 // Always refresh the rooms list (unread counts etc)
                 Task { @MainActor in
-                    if let rooms = try? await auth.fetchChatRooms() {
+                    if var rooms = try? await auth.fetchChatRooms() {
+                        if let activeRoom = selectedRoom {
+                            if let idx = rooms.firstIndex(where: { $0.id == activeRoom.id }) {
+                                rooms[idx].unread_count = 0
+                            }
+                        }
                         self.chatRooms = rooms
                         self.auth.chatRooms = rooms
                     }
@@ -1408,7 +1413,12 @@ struct ChatView: View {
         
         Task { @MainActor in
             do {
-                let rooms = try await auth.fetchChatRooms()
+                var rooms = try await auth.fetchChatRooms()
+                if let activeRoom = selectedRoom {
+                    if let idx = rooms.firstIndex(where: { $0.id == activeRoom.id }) {
+                        rooms[idx].unread_count = 0
+                    }
+                }
                 self.chatRooms = rooms
                 self.auth.chatRooms = rooms
                 self.isLoadingRooms = false
