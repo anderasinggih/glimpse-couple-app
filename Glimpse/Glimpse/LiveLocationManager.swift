@@ -16,6 +16,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     private let motionQueue = OperationQueue()
     private var isStationary = false
     private var motionDebounceTimer: Timer?
+    private var lastKnownActivity: CMMotionActivity?
     
     // Wi-Fi location anchoring
     private let pathMonitor = NWPathMonitor()
@@ -108,6 +109,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             guard let self = self, let activity = activity else { return }
             
             Task { @MainActor in
+                self.lastKnownActivity = activity
                 // Bypass motion sleep if location is simulated
                 if #available(iOS 15.0, *) {
                     if self.locationManager.location?.sourceInformation?.isSimulatedBySoftware == true {
@@ -369,10 +371,46 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         guard AuthManager.shared.isAuthenticated else { return }
         
         let speedInKmH = location.speed * 3.6
-        // If traveling fast (speed > 8 km/h), stream locations every 4 meters or 2 seconds for Zenly real-time smooth movement!
-        let isTraveling = speedInKmH > 8.0
-        let minDistance: CLLocationDistance = isTraveling ? 4.0 : 30.0
-        let minTime: TimeInterval = isTraveling ? 2.0 : 300.0
+        
+        // Zenly Dynamic Reporting Model based on activity classification
+        let isTraveling: Bool = {
+            if let activity = lastKnownActivity {
+                if activity.stationary {
+                    return false
+                }
+                if activity.automotive || activity.cycling || speedInKmH > 8.0 {
+                    return true
+                }
+            }
+            return speedInKmH > 8.0
+        }()
+        
+        let minDistance: CLLocationDistance = {
+            if let activity = lastKnownActivity, activity.stationary {
+                return 50.0 // Larger distance threshold when stationary
+            }
+            if isTraveling {
+                return 4.0 // High frequency when driving/cycling (4 meters)
+            }
+            // Walking/running
+            if let activity = lastKnownActivity, (activity.walking || activity.running) {
+                return 10.0 // Medium frequency when walking (10 meters)
+            }
+            return 30.0 // Default fallback
+        }()
+        
+        let minTime: TimeInterval = {
+            if let activity = lastKnownActivity, activity.stationary {
+                return 600.0 // 10 minutes when stationary to conserve battery
+            }
+            if isTraveling {
+                return 2.0 // High frequency when driving (2 seconds)
+            }
+            if let activity = lastKnownActivity, (activity.walking || activity.running) {
+                return 10.0 // Medium frequency when walking (10 seconds)
+            }
+            return 300.0 // Default fallback
+        }()
         
         let timeElapsed: TimeInterval = lastUploadTime != nil ? Date().timeIntervalSince(lastUploadTime!) : 9999.0
         let distanceMoved: CLLocationDistance = lastUploadedLocation != nil ? location.distance(from: lastUploadedLocation!) : 9999.0
