@@ -839,7 +839,7 @@ struct ChatView: View {
                         if room.unread_count > 0 {
                             Text("\(room.unread_count)")
                                 .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.white)
+                                .foregroundColor(.black) // High contrast solid black text!
                                 .frame(width: 18, height: 18)
                                 .background(Circle().fill(Color.activeCyan))
                         }
@@ -850,7 +850,7 @@ struct ChatView: View {
             .padding(.horizontal, 8)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(room.unread_count > 0 ? Color.activeCyan.opacity(0.06) : Color.clear)
+                    .fill(Color.clear) // Clean and transparent, no glowing background color
             )
             .contentShape(Rectangle())
             
