@@ -26,6 +26,9 @@ struct FullPartnerMapView: View {
     @State private var animatedMyLatitude: Double = 0.0
     @State private var animatedMyLongitude: Double = 0.0
     
+    @State private var previousPartnerDate: Date? = nil
+    @State private var previousMyDate: Date? = nil
+    
     private var animatedPartnerCoordinate: CLLocationCoordinate2D {
         if let partner = auth.partner {
             return CLLocationCoordinate2D(
@@ -179,11 +182,22 @@ struct FullPartnerMapView: View {
                 // Automatically move map camera smoothly when partner's live coordinates change
                 .onChange(of: partner.last_updated) { _, _ in
                     if let lat = partner.latitude, let lon = partner.longitude, lat != 0.0, lon != 0.0 {
+                        let newDate = partner.lastUpdatedDate
+                        let duration: Double = {
+                            if let prev = previousPartnerDate {
+                                let diff = newDate.timeIntervalSince(prev)
+                                // Limit between 1.0s and 10.0s to avoid crazy slow or fast animations
+                                return max(1.0, min(diff, 10.0))
+                            }
+                            return 3.0 // Default fallback
+                        }()
+                        previousPartnerDate = newDate
+                        
                         if animatedPartnerLatitude == 0.0 {
                             animatedPartnerLatitude = lat
                             animatedPartnerLongitude = lon
                         } else {
-                            withAnimation(.easeInOut(duration: 3.5)) {
+                            withAnimation(.linear(duration: duration)) {
                                 animatedPartnerLatitude = lat
                                 animatedPartnerLongitude = lon
                             }
@@ -194,11 +208,21 @@ struct FullPartnerMapView: View {
                     guard let currentUser = auth.currentUser else { return }
                     
                     if let lat = currentUser.latitude, let lon = currentUser.longitude, lat != 0.0, lon != 0.0 {
+                        let newDate = currentUser.lastUpdatedDate
+                        let duration: Double = {
+                            if let prev = previousMyDate {
+                                let diff = newDate.timeIntervalSince(prev)
+                                return max(1.0, min(diff, 10.0))
+                            }
+                            return 3.0 // Default fallback
+                        }()
+                        previousMyDate = newDate
+                        
                         if animatedMyLatitude == 0.0 {
                             animatedMyLatitude = lat
                             animatedMyLongitude = lon
                         } else {
-                            withAnimation(.easeInOut(duration: 3.5)) {
+                            withAnimation(.linear(duration: duration)) {
                                 animatedMyLatitude = lat
                                 animatedMyLongitude = lon
                             }

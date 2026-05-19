@@ -14,6 +14,7 @@ struct PartnerMapView: View {
     
     @State private var animatedPartnerLatitude: Double = 0.0
     @State private var animatedPartnerLongitude: Double = 0.0
+    @State private var previousUpdateDate: Date? = nil
     
     private var animatedPartnerCoordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(
@@ -230,11 +231,21 @@ struct PartnerMapView: View {
             updateLocalAddress()
             updateMapPosition()
             if let lat = user.latitude, let lon = user.longitude, lat != 0.0, lon != 0.0 {
+                let newDate = user.lastUpdatedDate
+                let duration: Double = {
+                    if let prev = previousUpdateDate {
+                        let diff = newDate.timeIntervalSince(prev)
+                        return max(1.0, min(diff, 10.0))
+                    }
+                    return 3.0 // Default
+                }()
+                previousUpdateDate = newDate
+                
                 if animatedPartnerLatitude == 0.0 {
                     animatedPartnerLatitude = lat
                     animatedPartnerLongitude = lon
                 } else {
-                    withAnimation(.easeInOut(duration: 3.5)) {
+                    withAnimation(.linear(duration: duration)) {
                         animatedPartnerLatitude = lat
                         animatedPartnerLongitude = lon
                     }
