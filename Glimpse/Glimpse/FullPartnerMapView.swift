@@ -121,57 +121,7 @@ struct FullPartnerMapView: View {
 
                     if auth.isTogether, let currentUser = auth.currentUser {
                         Annotation("Together", coordinate: animatedPartnerCoordinate) {
-                            ZStack {
-                                Circle()
-                                    .fill(LinearGradient(colors: [.electricPurple.opacity(0.3), .activeCyan.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                    .frame(width: 90, height: 90)
-                                    .scaleEffect(mapPulse ? 1.25 : 0.85)
-                                    .blur(radius: 8)
-                                    .onAppear {
-                                        withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                                            mapPulse = true
-                                        }
-                                    }
-                                
-                                HStack(spacing: -8) {
-                                    CachedImageView(urlString: currentUser.profile_photo_url)
-                                        .frame(width: 38, height: 38)
-                                        .clipShape(Circle())
-                                        .overlay(Circle().stroke(Color.activeCyan, lineWidth: 1.5))
-                                        .shadow(color: .activeCyan.opacity(0.5), radius: 5)
-                                    
-                                    Image(systemName: "heart.fill")
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.red)
-                                        .scaleEffect(mapPulse ? 1.2 : 0.8)
-                                        .shadow(color: .red, radius: 4)
-                                        .zIndex(5)
-                                    
-                                    CachedImageView(urlString: partner.profile_photo_url)
-                                        .frame(width: 38, height: 38)
-                                        .clipShape(Circle())
-                                        .overlay(Circle().stroke(Color.activeCyan, lineWidth: 1.5))
-                                        .shadow(color: .activeCyan.opacity(0.5), radius: 5)
-                                }
-                                .padding(6)
-                                .background(.ultraThinMaterial)
-                                .cornerRadius(24)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 24)
-                                        .stroke(
-                                            LinearGradient(colors: [.white.opacity(0.5), .clear], startPoint: .topLeading, endPoint: .bottomTrailing),
-                                            lineWidth: 0.5
-                                        )
-                                )
-                            }
-                            .onTapGesture {
-                                withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
-                                    position = .region(MKCoordinateRegion(
-                                        center: animatedPartnerCoordinate,
-                                        span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
-                                    ))
-                                }
-                            }
+                            togetherMarker(currentUser: currentUser, partner: partner)
                         }
                     } else {
                         // Wavy Connecting line
@@ -464,6 +414,61 @@ struct FullPartnerMapView: View {
                 color.opacity(opacity),
                 style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
             )
+    }
+    
+    @ViewBuilder
+    private func togetherMarker(currentUser: GlimpseUser, partner: GlimpseUser) -> some View {
+        ZStack {
+            Circle()
+                .fill(LinearGradient(colors: [.electricPurple.opacity(0.3), .activeCyan.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .frame(width: 90, height: 90)
+                .scaleEffect(mapPulse ? 1.25 : 0.85)
+                .blur(radius: 8)
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                        mapPulse = true
+                    }
+                }
+            
+            HStack(spacing: -8) {
+                CachedImageView(urlString: currentUser.profile_photo_url)
+                    .frame(width: 38, height: 38)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.activeCyan, lineWidth: 1.5))
+                    .shadow(color: .activeCyan.opacity(0.5), radius: 5)
+                
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.red)
+                    .scaleEffect(mapPulse ? 1.2 : 0.8)
+                    .shadow(color: .red, radius: 4)
+                    .zIndex(5)
+                
+                CachedImageView(urlString: partner.profile_photo_url)
+                    .frame(width: 38, height: 38)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.activeCyan, lineWidth: 1.5))
+                    .shadow(color: .activeCyan.opacity(0.5), radius: 5)
+            }
+            .padding(6)
+            .background(.ultraThinMaterial)
+            .cornerRadius(24)
+            .overlay(
+                RoundedRectangle(cornerRadius: 24)
+                    .stroke(
+                        LinearGradient(colors: [.white.opacity(0.5), .clear], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        lineWidth: 0.5
+                    )
+            )
+        }
+        .onTapGesture {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                position = .region(MKCoordinateRegion(
+                    center: animatedPartnerCoordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                ))
+            }
+        }
     }
     
     private func triggerImmediateSync() {
