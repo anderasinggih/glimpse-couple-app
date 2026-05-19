@@ -600,18 +600,26 @@ struct FullPartnerMapView: View {
     }
 }
 
-struct FootprintSegmentView: View {
+struct FootprintSegmentView: MapContent {
     let coordinate1: CLLocationCoordinate2D
     let coordinate2: CLLocationCoordinate2D
     let index: Int
     let totalCount: Int
     let color: Color
     
-    var body: some View {
-        let progress = totalCount > 1 ? Double(index) / Double(totalCount - 1) : 1.0
-        let opacity = 0.35 + (progress * 0.45)
-        let width = 4.0 + (progress * 4.0)
-        
+    private var progress: Double {
+        totalCount > 1 ? Double(index) / Double(totalCount - 1) : 1.0
+    }
+    
+    private var opacity: Double {
+        0.35 + (progress * 0.45)
+    }
+    
+    private var width: CGFloat {
+        CGFloat(4.0 + (progress * 4.0))
+    }
+    
+    var body: some MapContent {
         // 1. Neon Glow Layer
         MapPolyline(coordinates: [coordinate1, coordinate2])
             .stroke(
