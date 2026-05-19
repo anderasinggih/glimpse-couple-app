@@ -760,7 +760,7 @@ struct ChatView: View {
                                             roomRow(room)
                                                 .listRowBackground(Color.clear)
                                                 .listRowSeparator(.hidden)
-                                                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                                                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                                                 .onTapGesture {
                                                     openRoomDirectly(room)
                                                 }
@@ -774,7 +774,7 @@ struct ChatView: View {
                                             searchMessageRow(result)
                                                 .listRowBackground(Color.clear)
                                                 .listRowSeparator(.hidden)
-                                                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                                                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                                                 .onTapGesture {
                                                     highlightedMessageId = result.message.id
                                                     openRoomDirectly(result.room)
