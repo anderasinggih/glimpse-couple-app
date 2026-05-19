@@ -396,13 +396,15 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             if let placemarks = try? await geocoder.reverseGeocodeLocation(location),
                let placemark = placemarks.first {
                 let street = placemark.thoroughfare ?? ""
-                let subLoc = placemark.subLocality ?? placemark.locality ?? ""
+                let kelurahan = placemark.subLocality ?? ""
+                let kecamatan = placemark.subAdministrativeArea ?? ""
                 
-                if !street.isEmpty && !subLoc.isEmpty {
-                    locationName = "\(street), \(subLoc)"
-                } else {
-                    locationName = street.isEmpty ? subLoc : street
-                }
+                var addressParts: [String] = []
+                if !street.isEmpty { addressParts.append(street) }
+                if !kelurahan.isEmpty { addressParts.append(kelurahan) }
+                if !kecamatan.isEmpty { addressParts.append(kecamatan) }
+                
+                locationName = addressParts.isEmpty ? (placemark.locality ?? "Tidak Diketahui") : addressParts.joined(separator: ", ")
             }
             
             self.log("📤 GPS Uplink: Mengirim data ke server Laravel! (Lat: \(location.coordinate.latitude), Lon: \(location.coordinate.longitude), Nama: \(locationName ?? "Tidak Diketahui"), Jarak: \(Int(distanceMoved))m, Waktu: \(Int(timeElapsed))s)")

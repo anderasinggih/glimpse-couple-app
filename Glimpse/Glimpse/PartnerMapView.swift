@@ -281,14 +281,18 @@ struct PartnerMapView: View {
             if let placemarks = try? await geocoder.reverseGeocodeLocation(location),
                let placemark = placemarks.first {
                 let street = placemark.thoroughfare ?? ""
-                let subLoc = placemark.subLocality ?? placemark.locality ?? ""
+                let kelurahan = placemark.subLocality ?? ""
+                let kecamatan = placemark.subAdministrativeArea ?? ""
+                
+                var addressParts: [String] = []
+                if !street.isEmpty { addressParts.append(street) }
+                if !kelurahan.isEmpty { addressParts.append(kelurahan) }
+                if !kecamatan.isEmpty { addressParts.append(kecamatan) }
+                
+                let formattedAddress = addressParts.isEmpty ? (placemark.locality ?? "Tidak Diketahui") : addressParts.joined(separator: ", ")
                 
                 await MainActor.run {
-                    if !street.isEmpty && !subLoc.isEmpty {
-                        self.localAddress = "\(street), \(subLoc)"
-                    } else {
-                        self.localAddress = street.isEmpty ? subLoc : street
-                    }
+                    self.localAddress = formattedAddress
                 }
             }
         }

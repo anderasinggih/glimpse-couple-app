@@ -1799,15 +1799,19 @@ struct FlashLocationRow: View {
                     if let placemarks = try? await geocoder.reverseGeocodeLocation(location),
                        let placemark = placemarks.first {
                         let street = placemark.thoroughfare ?? ""
-                        let subLoc = placemark.subLocality ?? placemark.locality ?? ""
+                        let kelurahan = placemark.subLocality ?? ""
+                        let kecamatan = placemark.subAdministrativeArea ?? ""
+                        
+                        var addressParts: [String] = []
+                        if !street.isEmpty { addressParts.append(street) }
+                        if !kelurahan.isEmpty { addressParts.append(kelurahan) }
+                        if !kecamatan.isEmpty { addressParts.append(kecamatan) }
+                        
+                        let formattedAddress = addressParts.isEmpty ? (placemark.locality ?? "Tidak Diketahui") : addressParts.joined(separator: ", ")
                         
                         await MainActor.run {
                             withAnimation(.easeOut(duration: 0.3)) {
-                                if !street.isEmpty && !subLoc.isEmpty {
-                                    self.resolvedAddress = "\(street), \(subLoc)"
-                                } else {
-                                    self.resolvedAddress = street.isEmpty ? subLoc : street
-                                }
+                                self.resolvedAddress = formattedAddress
                             }
                         }
                     }
