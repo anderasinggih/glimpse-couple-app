@@ -9,7 +9,7 @@ struct PartnerMapView: View {
     @State private var isShowingPhoto = true
     @State private var localAddress: String? = nil
     @State private var auth = AuthManager.shared
-    @State private var mapPulse = false
+
     @State private var wavePhase = 0.0
     
     @State private var animatedPartnerLatitude: Double = 0.0
@@ -72,13 +72,8 @@ struct PartnerMapView: View {
                                     Circle()
                                         .fill(LinearGradient(colors: [.electricPurple.opacity(0.3), .activeCyan.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing))
                                         .frame(width: 90, height: 90)
-                                        .scaleEffect(mapPulse ? 1.25 : 0.85)
+                                        .scaleEffect(1.05)
                                         .blur(radius: 8)
-                                        .onAppear {
-                                            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                                                mapPulse = true
-                                            }
-                                        }
                                     
                                     HStack(spacing: -8) {
                                         CachedImageView(urlString: currentUser.profile_photo_url)
@@ -90,7 +85,7 @@ struct PartnerMapView: View {
                                         Image(systemName: "heart.fill")
                                             .font(.system(size: 16))
                                             .foregroundColor(.red)
-                                            .scaleEffect(mapPulse ? 1.2 : 0.8)
+                                            .scaleEffect(1.0)
                                             .shadow(color: .red, radius: 4)
                                             .zIndex(5)
                                         
@@ -229,9 +224,6 @@ struct PartnerMapView: View {
             if let lat = user.latitude, let lon = user.longitude, lat != 0.0, lon != 0.0 {
                 animatedPartnerLatitude = lat
                 animatedPartnerLongitude = lon
-            }
-            withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
-                wavePhase = 2 * .pi
             }
         }
         .onChange(of: user.latitude) {
@@ -438,26 +430,19 @@ struct PartnerMarker: View {
     var isCharging: Bool? = nil
     var locationName: String? = nil
     var isSleeping: Bool? = false
-    @State private var pulse = false
+
     
     var body: some View {
         ZStack {
             if !isOffline {
-                // Futuristic Orbiting Pulse
+                // Static Orbit Ring
                 Circle()
                     .stroke(
                         AngularGradient(colors: [.electricPurple, .activeCyan, .electricPurple], center: .center),
                         lineWidth: 2
                     )
                     .frame(width: 58, height: 58)
-                    .rotationEffect(.degrees(pulse ? 360 : 0))
-                    .scaleEffect(pulse ? 1.1 : 0.95)
-                    .opacity(pulse ? 0.6 : 0.3)
-                    .onAppear {
-                        withAnimation(.linear(duration: 4).repeatForever(autoreverses: false)) {
-                            pulse = true
-                        }
-                    }
+                    .opacity(0.8)
             }
             
             CachedImageView(urlString: photoUrl)
@@ -467,14 +452,12 @@ struct PartnerMarker: View {
                 .shadow(color: isOffline ? .clear : .electricPurple.opacity(0.4), radius: 8)
                 .saturation(isOffline ? 0.2 : 1.0)
             
-            // 💤 Premium Zenly-Style Sleeping Animation (Triple Zs rising and fading)
+            // 💤 Static Sleeping Badge
             if isSleeping == true {
-                ZStack {
-                    ForEach(0..<3) { index in
-                        SleepingZView(delay: Double(index) * 0.6)
-                    }
-                }
-                .offset(x: -22, y: -22) // Top-left corner of the avatar circle
+                Text("💤")
+                    .font(.system(size: 14))
+                    .offset(x: -20, y: -20) // Top-left corner of the avatar circle
+                    .shadow(color: .black.opacity(0.5), radius: 2)
             }
             
             // 🏡/💼/🎓 Smart Cozy Anchor Icon Badge
@@ -730,6 +713,19 @@ struct BatteryIndicator: View {
     }
 }
 
+class ImageCacheManager {
+    static let shared = ImageCacheManager()
+    private var memoryCache = NSCache<NSString, UIImage>()
+    
+    func getImage(for urlString: String) -> UIImage? {
+        return memoryCache.object(forKey: urlString as NSString)
+    }
+    
+    func saveImage(_ image: UIImage, for urlString: String) {
+        memoryCache.setObject(image, forKey: urlString as NSString)
+    }
+}
+
 struct CachedImageView: View {
     let urlString: String
     @State private var uiImage: UIImage? = nil
@@ -787,13 +783,19 @@ struct CachedImageView: View {
     
     private func loadImage() async {
         let finalUrlStr = formattedUrl()
+        
+        // 0. Cek In-Memory Cache (SUPER CEPAT, mencegah Memory Leak di Peta!)
+        if let cached = ImageCacheManager.shared.getImage(for: finalUrlStr) {
+            await MainActor.run { self.uiImage = cached }
+            return
+        }
+        
         guard let fileURL = cacheFileURL(for: finalUrlStr) else { return }
         
         // 1. Cek primary Cache file
         if let data = try? Data(contentsOf: fileURL), let cached = UIImage(data: data) {
-            await MainActor.run {
-                self.uiImage = cached
-            }
+            ImageCacheManager.shared.saveImage(cached, for: finalUrlStr) // Simpan ke RAM
+            await MainActor.run { self.uiImage = cached }
             return
         }
         
@@ -801,9 +803,8 @@ struct CachedImageView: View {
         if let fallbackURL = localCachesDirectoryURL(for: finalUrlStr),
            let data = try? Data(contentsOf: fallbackURL),
            let cached = UIImage(data: data) {
-            await MainActor.run {
-                self.uiImage = cached
-            }
+            ImageCacheManager.shared.saveImage(cached, for: finalUrlStr) // Simpan ke RAM
+            await MainActor.run { self.uiImage = cached }
             return
         }
         
@@ -822,9 +823,8 @@ struct CachedImageView: View {
                     }
                 }
                 
-                await MainActor.run {
-                    self.uiImage = fetched
-                }
+                ImageCacheManager.shared.saveImage(fetched, for: finalUrlStr) // Simpan ke RAM
+                await MainActor.run { self.uiImage = fetched }
             }
         } catch {
             // Error handling silent

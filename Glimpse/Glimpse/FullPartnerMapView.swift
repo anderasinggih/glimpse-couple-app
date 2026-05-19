@@ -326,9 +326,6 @@ struct FullPartnerMapView: View {
             }
             startPolling()
             triggerImmediateSync()
-            withAnimation(.linear(duration: 4.5).repeatForever(autoreverses: false)) {
-                wavePhase = 2 * .pi
-            }
         }
         .onDisappear {
             stopPolling()
