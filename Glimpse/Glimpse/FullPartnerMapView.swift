@@ -132,7 +132,7 @@ struct FullPartnerMapView: View {
                     MapScaleView()
                 }
                 .ignoresSafeArea()
-                .onMapCameraChange { context in
+                .onMapCameraChange(update: { context in
                     guard !isFlying else { return } // Ignore updates during cinematic flight transitions!
                     
                     if context.isUserInitiated {
@@ -151,7 +151,7 @@ struct FullPartnerMapView: View {
                     } else {
                         currentlyFocusedTarget = .partner
                     }
-                }
+                })
                 // Automatically move map camera smoothly when partner's live coordinates change
                 .onChange(of: partner.last_updated) { _, _ in
                     if isTrackingEnabled && currentlyFocusedTarget == .partner {
