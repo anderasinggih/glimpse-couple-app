@@ -128,6 +128,16 @@ struct ChatView: View {
                     }
                 }
             } else {
+                // Leaving the room: save final read state sweep to prevent badges from reappearing
+                if let oldRoom = oldValue, let lastMsg = messages.last, lastMsg.id > 0 {
+                    let currentUserId = auth.currentUser?.id ?? 0
+                    let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(oldRoom.id)"
+                    UserDefaults.standard.set(lastMsg.id, forKey: userDefaultsKey)
+                    Task {
+                        await auth.markMessagesAsRead(messageId: lastMsg.id)
+                    }
+                }
+                
                 // Clear the divider baseline when leaving the room
                 self.roomInitialLastReadId = nil
             }
@@ -1863,6 +1873,18 @@ struct ChatView: View {
                     }
                     if !alreadyExists {
                         self.messages.append(newMsg)
+                    }
+                    
+                    // Live-mark partner message as read if we are inside the active room
+                    if isPartnerMessage {
+                        Task {
+                            await auth.markMessagesAsRead(messageId: newMsg.id)
+                            
+                            // Instantly update the local UserDefaults session for this room
+                            let currentUserId = auth.currentUser?.id ?? 0
+                            let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(selectedRoom?.id ?? 0)"
+                            UserDefaults.standard.set(newMsg.id, forKey: userDefaultsKey)
+                        }
                     }
                 }
             }
