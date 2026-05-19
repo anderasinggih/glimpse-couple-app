@@ -71,7 +71,7 @@ struct FullPartnerMapView: View {
     init(user: GlimpseUser) {
         _position = State(initialValue: .region(MKCoordinateRegion(
             center: user.coordinate,
-            span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+            span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
         )))
         _currentCameraCenter = State(initialValue: user.coordinate)
         _currentlyFocusedTarget = State(initialValue: .partner)
@@ -154,15 +154,6 @@ struct FullPartnerMapView: View {
                 }
                 // Automatically move map camera smoothly when partner's live coordinates change
                 .onChange(of: partner.last_updated) { _, _ in
-                    if isTrackingEnabled && currentlyFocusedTarget == .partner {
-                        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                            position = .region(MKCoordinateRegion(
-                                center: partner.coordinate,
-                                span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
-                            ))
-                        }
-                    }
-                    
                     if let lat = partner.latitude, let lon = partner.longitude, lat != 0.0, lon != 0.0 {
                         if animatedPartnerLatitude == 0.0 {
                             animatedPartnerLatitude = lat
@@ -175,13 +166,20 @@ struct FullPartnerMapView: View {
                         }
                     }
                 }
+                .onChange(of: animatedPartnerLatitude) { _, newLat in
+                    guard isTrackingEnabled && currentlyFocusedTarget == .partner else { return }
+                    position = .region(MKCoordinateRegion(
+                        center: CLLocationCoordinate2D(latitude: newLat, longitude: animatedPartnerLongitude),
+                        span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
+                    ))
+                }
                 .onChange(of: auth.currentUser?.latitude) { _, _ in
                     guard isTrackingEnabled && currentlyFocusedTarget == .me else { return }
                     if let myCoord = auth.currentUser?.coordinate {
                         withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
                             position = .region(MKCoordinateRegion(
                                 center: myCoord,
-                                span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                                span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
                             ))
                         }
                     }
@@ -374,7 +372,7 @@ struct FullPartnerMapView: View {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                 position = .region(MKCoordinateRegion(
                     center: animatedPartnerCoordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                    span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
                 ))
             }
         }
@@ -421,7 +419,7 @@ struct FullPartnerMapView: View {
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                     position = .region(MKCoordinateRegion(
                         center: currentUser.coordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                        span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
                     ))
                 }
             }
@@ -445,7 +443,7 @@ struct FullPartnerMapView: View {
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                     position = .region(MKCoordinateRegion(
                         center: animatedPartnerCoordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                        span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
                     ))
                 }
             }
@@ -464,7 +462,7 @@ struct FullPartnerMapView: View {
                     withAnimation(.spring()) {
                         position = .region(MKCoordinateRegion(
                             center: partner.coordinate,
-                            span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                            span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
                         ))
                     }
                 }
@@ -519,7 +517,7 @@ struct FullPartnerMapView: View {
                 withAnimation(.spring(response: 1.6, dampingFraction: 0.86)) {
                     position = .camera(MapCamera(
                         centerCoordinate: end,
-                        distance: 500.0,
+                        distance: 150.0,
                         heading: 0.0,
                         pitch: 0.0
                     ))
@@ -648,7 +646,7 @@ struct FootprintSegmentView: MapContent {
     }
     
     private var width: CGFloat {
-        CGFloat(4.0 + (progress * 4.0))
+        CGFloat(1.5 + (progress * 1.5))
     }
     
     @MapContentBuilder
@@ -656,8 +654,8 @@ struct FootprintSegmentView: MapContent {
         // 1. Neon Glow Layer
         MapPolyline(coordinates: [segment.coordinate1, segment.coordinate2])
             .stroke(
-                color.opacity(opacity * 0.4),
-                style: StrokeStyle(lineWidth: width + 6.0, lineCap: .round, lineJoin: .round)
+                color.opacity(opacity * 0.3),
+                style: StrokeStyle(lineWidth: width + 2.0, lineCap: .round, lineJoin: .round)
             )
         
         // 2. Core Saturated Neon Layer

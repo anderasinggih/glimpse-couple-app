@@ -38,7 +38,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         // Background Tracking Capabilities
         locationManager.allowsBackgroundLocationUpdates = true
         locationManager.pausesLocationUpdatesAutomatically = false
-        locationManager.showsBackgroundLocationIndicator = false
+        locationManager.showsBackgroundLocationIndicator = true
         
         setupNetworkPathMonitor()
     }
@@ -189,23 +189,16 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                         self.log("⚡ Akurasi Dinamis (CM): GPS dikonfigurasi ke \(accuracy == kCLLocationAccuracyBest ? "AKURASI TERBAIK 🚗" : "HEMAT DAYA 🚶‍♂️") (Filter: \(filter)m)")
                     }
                     
-                    if self.isStationary && self.motionDebounceTimer == nil {
-                        self.log("⏳ Pergerakan Terdeteksi: Memantau apakah gerakan berlanjut selama 3 menit sebelum menyalakan GPS...")
-                        LiveDebugLogger.shared.setGPSStatus("Evaluating Movement... ⏳")
-                        
-                        // Schedule GPS wake-up after 3 minutes (180 seconds) of continuous motion
-                        self.motionDebounceTimer = Timer.scheduledTimer(withTimeInterval: 180.0, repeats: false) { [weak self] _ in
-                            guard let self = self else { return }
-                            
-                            Task { @MainActor in
-                                self.removeStationaryGeofence()
-                                self.isStationary = false
-                                self.motionDebounceTimer = nil
-                                self.log("🏃‍♂️ Sensor Gerak (Sustained): Gerakan berlanjut selama 3 menit. Membangunkan GPS kembali secara real-time!")
-                                self.locationManager.startUpdatingLocation()
-                                LiveDebugLogger.shared.setGPSStatus("Active (\(tipeGerak)) 🏃‍♂️")
-                            }
+                    if self.isStationary {
+                        self.removeStationaryGeofence()
+                        self.isStationary = false
+                        if self.motionDebounceTimer != nil {
+                            self.motionDebounceTimer?.invalidate()
+                            self.motionDebounceTimer = nil
                         }
+                        self.log("🏃‍♂️ Sensor Gerak: Gerakan terdeteksi (\(tipeGerak)). Membangunkan GPS!")
+                        self.locationManager.startUpdatingLocation()
+                        LiveDebugLogger.shared.setGPSStatus("Active (\(tipeGerak)) 🏃‍♂️")
                     }
                 }
             }
