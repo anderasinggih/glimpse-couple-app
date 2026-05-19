@@ -303,6 +303,55 @@ Route::post('/admin/api', function (Request $request) {
 
             return response()->json(['success' => true, 'message' => "Location updated successfully for {$user->name}."]);
 
+        case 'push_diagnostics':
+            $userId = $request->input('user_id');
+            $type = $request->input('type');
+            $user = User::findOrFail($userId);
+            
+            $customBattery = $request->input('battery_level');
+            $customCharging = $request->input('is_charging');
+            $customStatusNote = $request->input('status_note');
+            $customLatitude = $request->input('latitude');
+            $customLongitude = $request->input('longitude');
+            $customLocName = $request->input('location_name');
+
+            if ($type === 'custom') {
+                if ($customBattery !== null) $user->battery_level = (int)$customBattery;
+                if ($customCharging !== null) $user->is_charging = (bool)$customCharging;
+                if ($customStatusNote !== null) $user->status_note = $customStatusNote;
+                if ($customLatitude !== null) $user->latitude = (double)$customLatitude;
+                if ($customLongitude !== null) $user->longitude = (double)$customLongitude;
+                if ($customLocName !== null) $user->location_name = $customLocName;
+            } elseif ($type === 'battery_low') {
+                $user->battery_level = 12;
+                $user->is_charging = false;
+            } elseif ($type === 'is_charging') {
+                $user->is_charging = !$user->is_charging;
+                if ($user->is_charging && $user->battery_level < 100) {
+                    $user->battery_level = min(100, $user->battery_level + 5);
+                }
+            } elseif ($type === 'online') {
+                $user->latitude += (mt_rand(-1000, 1000) / 1000000.0);
+                $user->longitude += (mt_rand(-1000, 1000) / 1000000.0);
+                $user->location_name = $user->location_name ?: 'Simulated Pulse';
+            } elseif ($type === 'critical_alert') {
+                $user->battery_level = 1;
+                $user->is_charging = false;
+                $user->status_note = "Emergency! 🔴";
+            }
+            
+            $user->save();
+
+            try {
+                \Illuminate\Support\Facades\Cache::forget("glimpse_user_state_{$user->id}");
+            } catch (\Exception $e) {}
+
+            try {
+                event(new \App\Events\PartnerStateUpdated($user));
+            } catch (\Exception $e) {}
+
+            return response()->json(['success' => true, 'message' => "Simulated event [{$type}] broadcasted successfully for {$user->name}."]);
+
         case 'clear_chat':
             $coupleId = $request->input('couple_id');
             Message::where('couple_id', $coupleId)->delete();
@@ -312,6 +361,7 @@ Route::post('/admin/api', function (Request $request) {
             $coupleId = $request->input('couple_id');
             $couple = Couple::with('users')->findOrFail($coupleId);
             $messages = Message::where('couple_id', $coupleId)->orderBy('created_at', 'asc')->get();
+            $rooms = DB::table('chat_rooms')->where('couple_id', $coupleId)->get();
             
             return response()->json([
                 'success' => true,
@@ -319,6 +369,7 @@ Route::post('/admin/api', function (Request $request) {
                     'id' => $couple->id,
                     'users' => $couple->users->map(fn($u) => ['id' => $u->id, 'name' => $u->name, 'email' => $u->email, 'profile_photo_url' => $u->profile_photo_url]),
                 ],
+                'rooms' => $rooms,
                 'messages' => $messages
             ]);
 
@@ -326,6 +377,7 @@ Route::post('/admin/api', function (Request $request) {
             $coupleId = $request->input('couple_id');
             $senderId = $request->input('sender_id');
             $messageText = $request->input('message');
+            $roomId = $request->input('room_id'); // Optional target room ID
             
             // Avoid Foreign Key Constraint Violation (sender_id = 0 is invalid since no user 0 exists)
             if (empty($senderId) || $senderId == 0) {
@@ -342,7 +394,8 @@ Route::post('/admin/api', function (Request $request) {
             $msg = Message::create([
                 'couple_id' => $coupleId,
                 'sender_id' => $senderId,
-                'message' => $messageText
+                'message' => $messageText,
+                'room_id' => ($roomId > 0) ? (int)$roomId : null
             ]);
 
             // Broadcast so users' live chats update in real-time!

@@ -9,6 +9,11 @@ import SwiftUI
 
 @main
 struct GlimpseApp: App {
+    init() {
+        // Start background location tracking immediately on application launch (including background location wakeups!)
+        LiveLocationManager.shared.startTracking()
+    }
+    
     var body: some Scene {
         WindowGroup {
             ContentView()

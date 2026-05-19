@@ -24,6 +24,7 @@ class AuthManager {
     var lastLoveBurstTimestamp: Double = 0.0
     var lastLoveBurstReaction: String? = nil
     var activeSchedule: GlimpseSchedule? = nil
+    var pendingInvitation: GlimpseSchedule? = nil
     var showScheduleSheet = false
     var showInviteDeclinedAlert = false
     var showSessionTerminatedAlert = false
@@ -129,6 +130,7 @@ class AuthManager {
             self.totalMeetings = responseData.total_meetings ?? 0
             self.lastLoveBurstTimestamp = responseData.love_burst_timestamp ?? 0.0
             self.activeSchedule = responseData.active_schedule
+            self.pendingInvitation = responseData.pending_invitation
             
             if wasPending && isNowDisconnected {
                 self.showInviteDeclinedAlert = true
@@ -569,7 +571,7 @@ class AuthManager {
         }
     }
 
-    func updateProfile(name: String?, email: String?, bornDate: String?, photo: UIImage?) async throws {
+    func updateProfile(name: String?, email: String?, bornDate: String?, gender: String?, photo: UIImage?) async throws {
         guard let url = URL(string: "\(baseURL)/user/update") else { return }
         guard let token = userToken else { return }
         
@@ -598,6 +600,12 @@ class AuthManager {
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
             body.append("Content-Disposition: form-data; name=\"born_date\"\r\n\r\n".data(using: .utf8)!)
             body.append("\(bornDate)\r\n".data(using: .utf8)!)
+        }
+        
+        if let gender = gender {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"gender\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(gender)\r\n".data(using: .utf8)!)
         }
         
         if let photo = photo, let imageData = photo.compressedForApp(maxDimension: 400, targetBytes: 100_000) {
@@ -760,7 +768,7 @@ class AuthManager {
         }
     }
     
-    func register(name: String, email: String, bornDate: String?, password: String) async throws {
+    func register(name: String, email: String, bornDate: String?, gender: String?, password: String) async throws {
         guard let url = URL(string: "\(baseURL)/register") else { return }
         
         var request = URLRequest(url: url)
@@ -771,6 +779,9 @@ class AuthManager {
         var body: [String: Any] = ["name": name, "email": email, "password": password]
         if let bd = bornDate {
             body["born_date"] = bd
+        }
+        if let g = gender {
+            body["gender"] = g
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
@@ -1459,6 +1470,7 @@ class AuthManager {
             self.totalMeetings = responseData.total_meetings ?? 0
             self.lastLoveBurstTimestamp = responseData.love_burst_timestamp ?? 0.0
             self.activeSchedule = responseData.active_schedule
+            self.pendingInvitation = responseData.pending_invitation
             
             // Mark loaded so that it doesn't show loading spinner if cached data is present!
             self.isInitialStateLoaded = true
@@ -1497,6 +1509,48 @@ class AuthManager {
         }
         
         print("✅ Image cache successfully cleared!")
+    }
+    
+    func getImageCacheSize() -> String {
+        let fileManager = FileManager.default
+        var totalBytes: Int64 = 0
+        
+        // 1. App Group Cache files
+        if let groupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+            if let files = try? fileManager.contentsOfDirectory(at: groupURL, includingPropertiesForKeys: [.fileSizeKey]) {
+                for file in files {
+                    if file.lastPathComponent.hasPrefix("img_cache_") {
+                        if let resourceValues = try? file.resourceValues(forKeys: [.fileSizeKey]),
+                           let size = resourceValues.fileSize {
+                            totalBytes += Int64(size)
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 2. Standard Caches directory files
+        if let cachesURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first {
+            if let files = try? fileManager.contentsOfDirectory(at: cachesURL, includingPropertiesForKeys: [.fileSizeKey]) {
+                for file in files {
+                    if file.lastPathComponent.hasPrefix("img_cache_") {
+                        if let resourceValues = try? file.resourceValues(forKeys: [.fileSizeKey]),
+                           let size = resourceValues.fileSize {
+                            totalBytes += Int64(size)
+                        }
+                    }
+                }
+            }
+        }
+        
+        if totalBytes == 0 {
+            return "0 KB"
+        }
+        
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useKB, .useMB, .useGB]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: totalBytes)
     }
 }
 

@@ -22,9 +22,12 @@ struct ProfileView: View {
     @AppStorage("glimpse_theme_accent") var themeAccentHex = "00FFFF"
     @AppStorage("glimpse_haptic_strength") var hapticStrength = "rigid"
     @AppStorage("glimpse_dynamic_orbs") var dynamicOrbsEnabled = true
+    @AppStorage("glimpse_default_map_style") var defaultMapStyle = "satellite"
+    @State private var cacheSize = "Calculating..."
     
     @State private var isShowingThemeSelection = false
     @State private var isShowingHapticSelection = false
+    @State private var isShowingMapStyleSelection = false
     
     @State private var notificationsEnabled = true
     @Binding var scrollOffset: CGFloat
@@ -188,6 +191,12 @@ struct ProfileView: View {
                             }
                             
                             Button {
+                                isShowingMapStyleSelection = true
+                            } label: {
+                                CompactMenuRow(icon: "map.fill", title: "Default map style", value: defaultMapStyleTitle(), color: .activeCyan)
+                            }
+                            
+                            Button {
                                 dynamicOrbsEnabled.toggle()
                                 triggerHapticExample()
                             } label: {
@@ -215,7 +224,7 @@ struct ProfileView: View {
                             Button {
                                 isShowingClearCacheAlert = true
                             } label: {
-                                CompactMenuRow(icon: "trash.fill", title: "Clear cache storage", value: "Clear photos", color: .activeCyan)
+                                CompactMenuRow(icon: "trash.fill", title: "Clear cache storage", value: cacheSize, color: .activeCyan)
                             }
                             
                             Link(destination: URL(string: "https://api.galleryfortwo.my.id/privacy")!) {
@@ -304,6 +313,10 @@ struct ProfileView: View {
             HapticSelectionView(hapticStrength: $hapticStrength)
                 .presentationDetents([.height(420)])
         }
+        .sheet(isPresented: $isShowingMapStyleSelection) {
+            MapStyleSelectionView(defaultMapStyle: $defaultMapStyle)
+                .presentationDetents([.height(290)])
+        }
         .alert("Connect Partner", isPresented: $isShowingInviteAlert) {
             TextField("Partner code", text: $inviteCodeInput)
                 .autocapitalization(.allCharacters)
@@ -370,6 +383,7 @@ struct ProfileView: View {
         .alert("Clear Image Cache?", isPresented: $isShowingClearCacheAlert) {
             Button("Clear", role: .destructive) {
                 auth.clearImageCache()
+                cacheSize = auth.getImageCacheSize()
                 UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
                 isShowingClearCacheSuccess = true
             }
@@ -381,6 +395,9 @@ struct ProfileView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text("All image cache has been successfully removed to free up your phone storage.")
+        }
+        .onAppear {
+            cacheSize = auth.getImageCacheSize()
         }
     }
     
@@ -544,6 +561,14 @@ struct ProfileView: View {
         }
     }
     
+    private func defaultMapStyleTitle() -> String {
+        switch defaultMapStyle {
+        case "satellite": return "Satellite Mode"
+        case "standard": return "Standard Mode"
+        default: return "Satellite Mode"
+        }
+    }
+    
     private func formattedPairedDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "d MMM yyyy"
@@ -620,6 +645,7 @@ struct EditProfileView: View {
     @State private var email = ""
     @State private var bornDate = Calendar.current.date(byAdding: .year, value: -18, to: Date()) ?? Date()
     @State private var bornDateSelected = false
+    @State private var gender = ""
     @State private var showDatePicker = false
     @State private var selectedItem: PhotosPickerItem?
     @State private var selectedImage: UIImage?
@@ -631,6 +657,7 @@ struct EditProfileView: View {
         self.auth = auth
         _name = State(initialValue: auth.currentUser?.name ?? "")
         _email = State(initialValue: auth.currentUser?.email ?? "")
+        _gender = State(initialValue: auth.currentUser?.gender ?? "")
         
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
@@ -748,6 +775,61 @@ struct EditProfileView: View {
                         .cornerRadius(12)
                     }
                     .buttonStyle(PlainButtonStyle())
+                    
+                    // Gender Selection
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Gender")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.white.opacity(0.6))
+                            .padding(.leading, 4)
+                        
+                        HStack(spacing: 12) {
+                            Button(action: {
+                                gender = "male"
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            }) {
+                                HStack {
+                                    Image(systemName: gender == "male" ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(gender == "male" ? .activeCyan : .white.opacity(0.3))
+                                    Text("Male")
+                                        .font(.system(size: 15, weight: gender == "male" ? .bold : .regular))
+                                        .foregroundColor(gender == "male" ? .white : .white.opacity(0.6))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(gender == "male" ? Color.activeCyan.opacity(0.15) : Color.white.opacity(0.05))
+                                .cornerRadius(12)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(gender == "male" ? Color.activeCyan : Color.clear, lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            
+                            Button(action: {
+                                gender = "female"
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            }) {
+                                HStack {
+                                    Image(systemName: gender == "female" ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(gender == "female" ? .electricPurple : .white.opacity(0.3))
+                                    Text("Female")
+                                        .font(.system(size: 15, weight: gender == "female" ? .bold : .regular))
+                                        .foregroundColor(gender == "female" ? .white : .white.opacity(0.6))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(gender == "female" ? Color.electricPurple.opacity(0.15) : Color.white.opacity(0.05))
+                                .cornerRadius(12)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(gender == "female" ? Color.electricPurple : Color.clear, lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                    .padding(.top, 4)
                 }
                 .padding(.horizontal)
                 
@@ -821,10 +903,11 @@ struct EditProfileView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         let dateStr = bornDateSelected ? formatter.string(from: bornDate) : nil
+        let genderVal = gender.isEmpty ? nil : gender
         
         Task {
             do {
-                try await auth.updateProfile(name: name, email: email, bornDate: dateStr, photo: selectedImage)
+                try await auth.updateProfile(name: name, email: email, bornDate: dateStr, gender: genderVal, photo: selectedImage)
                 dismiss()
             } catch {
                 print("Failed to save: \(error)")
@@ -1110,6 +1193,96 @@ struct HapticSelectionView: View {
             UINotificationFeedbackGenerator().notificationOccurred(.warning)
         default:
             break
+        }
+    }
+}
+
+struct MapStyleSelectionView: View {
+    @Binding var defaultMapStyle: String
+    @Environment(\.dismiss) var dismiss
+    
+    let options = [
+        ("Satellite Mode", "satellite", "Hybrid high-res satellite map imagery", "globe.americas.fill"),
+        ("Standard Mode", "standard", "Clean minimalist vector map layout", "map.fill")
+    ]
+    
+    var body: some View {
+        ZStack {
+            Color.deepVelvet.ignoresSafeArea()
+            
+            VStack(spacing: 16) {
+                VStack(spacing: 4) {
+                    Text("Default Map Style")
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    
+                    Text("Choose the default style for all map views in the app")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.5))
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top, 24)
+                
+                VStack(spacing: 8) {
+                    ForEach(options, id: \.1) { option in
+                        Button {
+                            defaultMapStyle = option.1
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: option.3)
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(defaultMapStyle == option.1 ? .deepVelvet : .activeCyan)
+                                    .frame(width: 28, height: 28)
+                                    .background(defaultMapStyle == option.1 ? Color.activeCyan : Color.activeCyan.opacity(0.1))
+                                    .clipShape(Circle())
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(option.0)
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundColor(defaultMapStyle == option.1 ? .deepVelvet : .white)
+                                    Text(option.2)
+                                        .font(.system(size: 10.5))
+                                        .foregroundColor(defaultMapStyle == option.1 ? .deepVelvet.opacity(0.7) : .white.opacity(0.4))
+                                }
+                                
+                                Spacer()
+                                
+                                if defaultMapStyle == option.1 {
+                                    Image(systemName: "checkmark.seal.fill")
+                                        .foregroundColor(.deepVelvet)
+                                        .font(.system(size: 15))
+                                }
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(defaultMapStyle == option.1 ? Color.activeCyan : Color.white.opacity(0.04))
+                            .cornerRadius(14)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(defaultMapStyle == option.1 ? Color.clear : Color.white.opacity(0.05), lineWidth: 1)
+                            )
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Apply & Close")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundColor(.deepVelvet)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(Color.activeCyan)
+                        .cornerRadius(12)
+                }
+                .padding(.horizontal)
+                .padding(.top, 4)
+                
+                Spacer()
+            }
         }
     }
 }

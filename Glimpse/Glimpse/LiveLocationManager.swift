@@ -44,8 +44,9 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     }
     
     func startTracking() {
-        locationManager.requestWhenInUseAuthorization()
+        locationManager.requestAlwaysAuthorization()
         locationManager.startUpdatingLocation()
+        locationManager.startMonitoringSignificantLocationChanges()
         LiveDebugLogger.shared.setGPSStatus("Active GPS 🛰️")
         
         startMotionTracking()
@@ -58,8 +59,37 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     
     func stopTracking() {
         locationManager.stopUpdatingLocation()
+        locationManager.stopMonitoringSignificantLocationChanges()
+        removeStationaryGeofence()
         motionActivityManager.stopActivityUpdates()
         LiveDebugLogger.shared.setGPSStatus("Stopped 🛑")
+    }
+    
+    // MARK: - Stationary Geofencing for Zenly-Style Background Wake
+    private func setToStationary(at coordinate: CLLocationCoordinate2D) {
+        guard !isStationary else { return }
+        isStationary = true
+        locationManager.stopUpdatingLocation()
+        registerStationaryGeofence(at: coordinate)
+    }
+    
+    private func registerStationaryGeofence(at coordinate: CLLocationCoordinate2D) {
+        removeStationaryGeofence()
+        
+        let region = CLCircularRegion(center: coordinate, radius: 50.0, identifier: "GlimpseStationaryGeofence")
+        region.notifyOnExit = true
+        region.notifyOnEntry = false
+        locationManager.startMonitoring(for: region)
+        self.log("🔒 Geofence Terdaftar: Pagar virtual 50m aktif di \(coordinate.latitude), \(coordinate.longitude)")
+    }
+    
+    private func removeStationaryGeofence() {
+        for monitored in locationManager.monitoredRegions {
+            if monitored.identifier == "GlimpseStationaryGeofence" {
+                locationManager.stopMonitoring(for: monitored)
+                self.log("🔓 Geofence Dihapus.")
+            }
+        }
     }
     
     // MARK: - Elite Debug Logging Helper (Zero overhead in App Store release build!)
@@ -98,9 +128,13 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                     }
                     
                     if !self.isStationary {
-                        self.isStationary = true
                         self.log("🛑 Sensor Gerak (Stationary): HP terdeteksi DIAM di tempat. Menidurkan GPS demi hemat baterai!")
-                        self.locationManager.stopUpdatingLocation()
+                        if let currentLoc = self.locationManager.location {
+                            self.setToStationary(at: currentLoc.coordinate)
+                        } else {
+                            self.isStationary = true
+                            self.locationManager.stopUpdatingLocation()
+                        }
                         LiveDebugLogger.shared.setGPSStatus("Sleeping (Stationary) 😴")
                     }
                 } else {
@@ -114,8 +148,12 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                             self.motionDebounceTimer = nil
                         }
                         if !self.isStationary {
-                            self.isStationary = true
-                            self.locationManager.stopUpdatingLocation()
+                            if let currentLoc = self.locationManager.location {
+                                self.setToStationary(at: currentLoc.coordinate)
+                            } else {
+                                self.isStationary = true
+                                self.locationManager.stopUpdatingLocation()
+                            }
                         }
                         LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi Shield) 📶🏡😴")
                         return
@@ -160,6 +198,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                             guard let self = self else { return }
                             
                             Task { @MainActor in
+                                self.removeStationaryGeofence()
                                 self.isStationary = false
                                 self.motionDebounceTimer = nil
                                 self.log("🏃‍♂️ Sensor Gerak (Sustained): Gerakan berlanjut selama 3 menit. Membangunkan GPS kembali secara real-time!")
@@ -239,7 +278,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                 
                 if shouldStop {
                     self.log("😴 GPS Dinonaktifkan: Terkunci pada cache koordinat Wi-Fi stasioner. Menghemat baterai!")
-                    self.locationManager.stopUpdatingLocation()
+                    self.setToStationary(at: cached)
                     LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi Locked) 📶😴")
                 }
                 
@@ -260,7 +299,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                     
                     if shouldStop {
                         self.log("😴 GPS Dinonaktifkan: Titik Wi-Fi berhasil di-cache. Menidurkan GPS!")
-                        self.locationManager.stopUpdatingLocation()
+                        self.setToStationary(at: currentLoc.coordinate)
                         LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi Cache Locked) 📶😴")
                     }
                 }
@@ -309,7 +348,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             
             if shouldStop {
                 self.log("😴 GPS Dinonaktifkan: Wi-Fi terdaftar dari pembacaan satelit. Menidurkan GPS!")
-                locationManager.stopUpdatingLocation()
+                self.setToStationary(at: location.coordinate)
                 LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi GPS Lock) 📶😴")
             }
         }
@@ -317,15 +356,35 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         processAndUploadLocation(location)
     }
     
+    func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
+        if region.identifier == "GlimpseStationaryGeofence" {
+            self.log("🏃‍♂️ Geofence Exit: Keluar dari pagar virtual! Membangunkan GPS untuk pelacakan real-time.")
+            removeStationaryGeofence()
+            self.isStationary = false
+            self.locationManager.startUpdatingLocation()
+            LiveDebugLogger.shared.setGPSStatus("Active (Geofence Exit) 🏃‍♂️")
+            
+            // Trigger immediate upload of last cached location or current location to signal movement
+            if let currentLoc = locationManager.location {
+                processAndUploadLocation(currentLoc)
+            }
+        }
+    }
+    
     // MARK: - Silent Upload Logic
     private func processAndUploadLocation(_ location: CLLocation) {
         guard AuthManager.shared.isAuthenticated else { return }
         
-        // Rule: Only upload if it's the first upload, OR if the distance moved is > 30 meters, OR if > 5 minutes has elapsed
+        let speedInKmH = location.speed * 3.6
+        // If traveling fast (speed > 8 km/h), stream locations every 4 meters or 2 seconds for Zenly real-time smooth movement!
+        let isTraveling = speedInKmH > 8.0
+        let minDistance: CLLocationDistance = isTraveling ? 4.0 : 30.0
+        let minTime: TimeInterval = isTraveling ? 2.0 : 300.0
+        
         let timeElapsed: TimeInterval = lastUploadTime != nil ? Date().timeIntervalSince(lastUploadTime!) : 9999.0
         let distanceMoved: CLLocationDistance = lastUploadedLocation != nil ? location.distance(from: lastUploadedLocation!) : 9999.0
         
-        guard lastUploadedLocation == nil || distanceMoved >= 30.0 || timeElapsed >= 300.0 else {
+        guard lastUploadedLocation == nil || distanceMoved >= minDistance || timeElapsed >= minTime else {
             return
         }
         

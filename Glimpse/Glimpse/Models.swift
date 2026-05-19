@@ -18,6 +18,7 @@ struct GlimpseUser: Codable, Identifiable {
     let email: String
     let profile_photo_url: String
     let born_date: String?
+    var gender: String?
     var latitude: Double?
     var longitude: Double?
     var location_name: String?
@@ -75,6 +76,7 @@ struct CoupleResponse: Codable {
     let total_meetings: Int?
     let love_burst_timestamp: Double?
     let active_schedule: GlimpseSchedule?
+    let pending_invitation: GlimpseSchedule?
     
     var pairedDate: Date? {
         guard let paired = paired_at else { return nil }
@@ -131,6 +133,7 @@ extension GlimpseUser {
         email: "anderas@glimpse.com",
         profile_photo_url: "https://ui-avatars.com/api/?name=Anderas",
         born_date: "1999-05-18",
+        gender: "male",
         latitude: -6.9740,
         longitude: 107.6303,
         location_name: "My Home",
@@ -153,6 +156,7 @@ extension GlimpseUser {
         email: "unknown@glimpse.com",
         profile_photo_url: "https://ui-avatars.com/api/?name=Unknown",
         born_date: nil,
+        gender: nil,
         latitude: 0.0,
         longitude: 0.0,
         location_name: "Unknown Location",
@@ -291,5 +295,53 @@ extension ChatMessage {
             parentMessage: parts[2],
             actualMessage: actualMessage
         )
+    }
+    
+    var cleanDisplayContent: String {
+        if message.hasPrefix("[FLASH_ATTACHMENT]") {
+            return "📸 Sent a Flash Photo"
+        }
+        if message.hasPrefix("[KENCAN_INVITATION]") {
+            return "📅 Sent a Date Invitation"
+        }
+        if let reply = replyInfo {
+            return reply.actualMessage
+        }
+        return message
+    }
+}
+
+extension RoomLatestMessage {
+    var replyInfo: ChatMessage.ParsedReply? {
+        guard message.hasPrefix("{{reply:") else { return nil }
+        guard let closingRange = message.range(of: "}}") else { return nil }
+        
+        let headerStr = String(message[message.startIndex..<closingRange.lowerBound])
+            .replacingOccurrences(of: "{{reply:", with: "")
+        
+        let actualMessage = String(message[closingRange.upperBound...])
+        
+        let parts = headerStr.components(separatedBy: "|")
+        guard parts.count >= 3, let parentId = Int(parts[0]) else { return nil }
+        
+        return ChatMessage.ParsedReply(
+            parentId: parentId,
+            senderName: parts[1],
+            parentMessage: parts[2],
+            actualMessage: actualMessage
+        )
+    }
+    
+    var cleanDisplayContent: String {
+        if message.hasPrefix("[FLASH_ATTACHMENT]") {
+            return "📸 Sent a Flash Photo"
+        }
+        if message.hasPrefix("[KENCAN_INVITATION]") {
+            return "📅 Sent a Date Invitation"
+        }
+        if let reply = replyInfo {
+            return reply.actualMessage
+        }
+        return message
     }
 }

@@ -16,6 +16,7 @@ class AuthController extends Controller
             'name' => 'required|string|max:30',
             'email' => 'required|string|email|max:100|unique:users',
             'born_date' => 'nullable|date',
+            'gender' => 'nullable|string|in:male,female',
             'password' => 'required|string|min:8|max:32',
         ]);
 
@@ -23,6 +24,7 @@ class AuthController extends Controller
             'name' => $request->name,
             'email' => $request->email,
             'born_date' => $request->born_date,
+            'gender' => $request->gender,
             'password' => Hash::make($request->password),
         ]);
 

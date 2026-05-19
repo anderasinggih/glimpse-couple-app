@@ -7,6 +7,7 @@ struct SignupView: View {
     @State private var password = ""
     @State private var bornDate = Calendar.current.date(byAdding: .year, value: -18, to: Date()) ?? Date()
     @State private var bornDateSelected = false
+    @State private var gender = ""
     @State private var showDatePicker = false
     @State private var isLoading = false
     @State private var errorMessage = ""
@@ -99,6 +100,63 @@ struct SignupView: View {
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
+                    
+                    // Gender Selection
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Gender")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.white.opacity(0.6))
+                            .padding(.leading, 4)
+                        
+                        HStack(spacing: 12) {
+                            Button(action: {
+                                focusedField = nil
+                                gender = "male"
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            }) {
+                                HStack {
+                                    Image(systemName: gender == "male" ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(gender == "male" ? .activeCyan : .white.opacity(0.3))
+                                    Text("Male")
+                                        .font(.system(size: 15, weight: gender == "male" ? .bold : .regular))
+                                        .foregroundColor(gender == "male" ? .white : .white.opacity(0.6))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(gender == "male" ? Color.activeCyan.opacity(0.15) : Color.white.opacity(0.06))
+                                .cornerRadius(12)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(gender == "male" ? Color.activeCyan : Color.white.opacity(0.12), lineWidth: 1.2)
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            
+                            Button(action: {
+                                focusedField = nil
+                                gender = "female"
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            }) {
+                                HStack {
+                                    Image(systemName: gender == "female" ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(gender == "female" ? .electricPurple : .white.opacity(0.3))
+                                    Text("Female")
+                                        .font(.system(size: 15, weight: gender == "female" ? .bold : .regular))
+                                        .foregroundColor(gender == "female" ? .white : .white.opacity(0.6))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(gender == "female" ? Color.electricPurple.opacity(0.15) : Color.white.opacity(0.06))
+                                .cornerRadius(12)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(gender == "female" ? Color.electricPurple : Color.white.opacity(0.12), lineWidth: 1.2)
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                    .padding(.top, 4)
                 }
                 .onSubmit {
                     if focusedField == .name { focusedField = .email }
@@ -200,6 +258,10 @@ struct SignupView: View {
             errorMessage = "Password must be at least 8 characters."
             return false
         }
+        if gender.isEmpty {
+            errorMessage = "Please select your gender."
+            return false
+        }
         return true
     }
     
@@ -217,6 +279,7 @@ struct SignupView: View {
                 name: name.trimmingCharacters(in: .whitespaces),
                 email: email.lowercased().trimmingCharacters(in: .whitespaces),
                 bornDate: dateStr,
+                gender: gender,
                 password: password
             )
         } catch {

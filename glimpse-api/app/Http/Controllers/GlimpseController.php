@@ -25,6 +25,24 @@ class GlimpseController extends Controller
                 $couple = \App\Models\Couple::find($user->couple_id);
             }
 
+            // Apply temp coordinates from cache if available to prevent database lag reads
+            if ($tempUserCoord = \Cache::get("user_{$user->id}_temp_coordinate")) {
+                if (isset($tempUserCoord['latitude'])) $user->latitude = $tempUserCoord['latitude'];
+                if (isset($tempUserCoord['longitude'])) $user->longitude = $tempUserCoord['longitude'];
+                if (isset($tempUserCoord['location_name'])) $user->location_name = $tempUserCoord['location_name'];
+                if (isset($tempUserCoord['battery_level'])) $user->battery_level = $tempUserCoord['battery_level'];
+                if (isset($tempUserCoord['is_charging'])) $user->is_charging = $tempUserCoord['is_charging'];
+                if (isset($tempUserCoord['status_note'])) $user->status_note = $tempUserCoord['status_note'];
+            }
+            if ($partner && ($tempPartnerCoord = \Cache::get("user_{$partner->id}_temp_coordinate"))) {
+                if (isset($tempPartnerCoord['latitude'])) $partner->latitude = $tempPartnerCoord['latitude'];
+                if (isset($tempPartnerCoord['longitude'])) $partner->longitude = $tempPartnerCoord['longitude'];
+                if (isset($tempPartnerCoord['location_name'])) $partner->location_name = $tempPartnerCoord['location_name'];
+                if (isset($tempPartnerCoord['battery_level'])) $partner->battery_level = $tempPartnerCoord['battery_level'];
+                if (isset($tempPartnerCoord['is_charging'])) $partner->is_charging = $tempPartnerCoord['is_charging'];
+                if (isset($tempPartnerCoord['status_note'])) $partner->status_note = $tempPartnerCoord['status_note'];
+            }
+
             $photoUrl = $user->profile_photo_url;
             if ($photoUrl && !str_starts_with($photoUrl, 'http')) {
                 $photoUrl = url($photoUrl);
@@ -81,12 +99,32 @@ class GlimpseController extends Controller
             }
 
             $activeSchedule = null;
+            $pendingInvitation = null;
             if ($user->couple_id) {
+                // Get the closest accepted upcoming schedule
                 $activeSchedule = \App\Models\Schedule::where('couple_id', $user->couple_id)
                     ->where('scheduled_at', '>=', now())
-                    ->whereIn('status', ['pending', 'accepted'])
+                    ->where('status', 'accepted')
                     ->orderBy('scheduled_at', 'asc')
                     ->first();
+                
+                // Get the closest pending invitation from the partner
+                $pendingInvitation = \App\Models\Schedule::where('couple_id', $user->couple_id)
+                    ->where('scheduled_at', '>=', now())
+                    ->where('status', 'pending')
+                    ->where('creator_id', '!=', $user->id)
+                    ->orderBy('scheduled_at', 'asc')
+                    ->first();
+
+                // Fallback: if no accepted schedule, show pending schedule created by the user
+                if (!$activeSchedule) {
+                    $activeSchedule = \App\Models\Schedule::where('couple_id', $user->couple_id)
+                        ->where('scheduled_at', '>=', now())
+                        ->where('status', 'pending')
+                        ->where('creator_id', $user->id)
+                        ->orderBy('scheduled_at', 'asc')
+                        ->first();
+                }
             }
 
             return [
@@ -97,6 +135,7 @@ class GlimpseController extends Controller
                     'invite_code' => $user->invite_code,
                     'profile_photo_url' => $photoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($user->name),
                     'born_date' => $user->born_date,
+                    'gender' => $user->gender,
                     'couple_id' => $user->couple_id !== null ? (int)$user->couple_id : null,
                     'latitude' => $user->latitude !== null ? (double)$user->latitude : null,
                     'longitude' => $user->longitude !== null ? (double)$user->longitude : null,
@@ -116,6 +155,7 @@ class GlimpseController extends Controller
                     'email' => $partner->email,
                     'profile_photo_url' => $partnerPhotoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($partner->name),
                     'born_date' => $partner->born_date,
+                    'gender' => $partner->gender,
                     'couple_id' => $partner->couple_id !== null ? (int)$partner->couple_id : null,
                     'latitude' => $partner->latitude !== null ? (double)$partner->latitude : null,
                     'longitude' => $partner->longitude !== null ? (double)$partner->longitude : null,
@@ -140,6 +180,7 @@ class GlimpseController extends Controller
                 'total_meetings' => (int)$totalMeetings,
                 'love_burst_timestamp' => $loveBurstTimestamp,
                 'active_schedule' => $this->formatSchedule($activeSchedule),
+                'pending_invitation' => $this->formatSchedule($pendingInvitation),
             ];
         });
 
@@ -153,12 +194,14 @@ class GlimpseController extends Controller
             'name' => 'sometimes|string|max:30',
             'email' => 'sometimes|email|max:100|unique:users,email,' . $user->id,
             'born_date' => 'sometimes|nullable|date',
+            'gender' => 'sometimes|nullable|string|in:male,female',
             'profile_photo' => 'sometimes|image|max:5120'
         ]);
 
         if ($request->has('name')) $user->name = $request->name;
         if ($request->has('email')) $user->email = $request->email;
         if ($request->has('born_date')) $user->born_date = $request->born_date;
+        if ($request->has('gender')) $user->gender = $request->gender;
         
         if ($request->hasFile('profile_photo')) {
             if ($user->profile_photo_url && !str_contains($user->profile_photo_url, 'ui-avatars')) {
@@ -183,6 +226,7 @@ class GlimpseController extends Controller
                 'name' => $user->name,
                 'email' => $user->email,
                 'born_date' => $user->born_date,
+                'gender' => $user->gender,
                 'profile_photo_url' => $photoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($user->name),
             ]
         ]);
@@ -754,10 +798,29 @@ class GlimpseController extends Controller
             $this->appendLocationHistory($user, $data['latitude'], $data['longitude']);
         }
 
-        $user->save();
-        $this->clearGlimpseCache($user->id);
+        // --- Database Write Throttling (Zenly Speed Optimization) ---
+        $lastDbWrite = (int)\Cache::get("user_{$user->id}_last_db_write", 0);
+        $currentTime = time();
+        $shouldSaveToDb = ($currentTime - $lastDbWrite) >= 10; // Save to DB at most once every 10 seconds
 
-        // Broadcast live state updates to the partner instantly over WebSockets
+        if ($shouldSaveToDb) {
+            $user->save();
+            \Cache::put("user_{$user->id}_last_db_write", $currentTime, 3600);
+            $this->clearGlimpseCache($user->id);
+        } else {
+            // If throttling DB, we still save the coordinate in Cache to prevent stale reads
+            \Cache::put("user_{$user->id}_temp_coordinate", [
+                'latitude' => $user->latitude,
+                'longitude' => $user->longitude,
+                'location_name' => $user->location_name,
+                'battery_level' => $user->battery_level,
+                'is_charging' => $user->is_charging,
+                'status_note' => $user->status_note,
+                'updated_at' => now()->toIso8601String()
+            ], 60);
+        }
+
+        // Broadcast live state updates to the partner instantly over WebSockets (ALWAYS broadcast!)
         try {
             broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
         } catch (\Exception $e) {

@@ -10,10 +10,11 @@ struct MainDashboardView: View {
     @State private var lastSeenLoveBurstTimestamp: Double = 0.0
     @State private var popHearts: [PopHeart] = []
     @State private var expandedFlashId: Int? = nil
-    @State private var visibleFlashLimit: Int = 4
+    @State private var visibleFlashLimit: Int = 3
     @State private var streakCardBounce = false
     @State private var anniversaryCardBounce = false
     @State private var scheduleCardBounce = false
+    @State private var selectedDetailSchedule: GlimpseSchedule? = nil
     @State private var showScheduleDetailPopup = false
     @State private var showReactions = false
     @State private var reactionCardScale: CGFloat = 1.0
@@ -175,30 +176,6 @@ struct MainDashboardView: View {
                     .tag(4)
             }
             .tint(.electricPurple)
-            .simultaneousGesture(
-                DragGesture().onEnded { value in
-                    // Disable swipe-to-switch on Map tab (Tab 1) and Chat tab (Tab 3) so user can swipe/pan freely
-                    guard auth.selectedTab != 1 && auth.selectedTab != 3 else { return }
-                    
-                    // SWIPE LOGIC
-                    let threshold: CGFloat = 100
-                    if value.translation.width > threshold {
-                        // Swipe Right -> Previous Tab
-                        if auth.selectedTab > 0 {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                auth.selectedTab -= 1
-                            }
-                        }
-                    } else if value.translation.width < -threshold {
-                        // Swipe Left -> Next Tab
-                        if auth.selectedTab < 4 {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                auth.selectedTab += 1
-                            }
-                        }
-                    }
-                }
-            )
             
             if showReactions {
                 Color.clear
@@ -231,23 +208,15 @@ struct MainDashboardView: View {
             // GLOBAL POP HEARTS OVERLAY (BOTTOM TO TOP FLOATERS)
             ZStack {
                 ForEach(popHearts) { heart in
-                    ZStack {
+                    Group {
                         if let emoji = heart.emojiString {
                             Text(emoji)
-                                .font(.system(size: 40))
+                                .font(.system(size: 32))
                                 .scaleEffect(heart.scale)
-                                .shadow(color: .black.opacity(0.15), radius: 4)
                         } else if let sysName = heart.systemName {
                             Image(systemName: sysName)
-                                .font(.system(size: 32, weight: .bold))
-                                .foregroundColor(heart.color.opacity(0.15))
-                                .scaleEffect(heart.scale + 0.15)
-                                .blur(radius: 4)
-                            
-                            Image(systemName: sysName)
-                                .font(.system(size: 32, weight: .bold))
-                                .foregroundColor(heart.color)
-                                .shadow(color: heart.color.opacity(0.5), radius: 6)
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(.red)
                                 .scaleEffect(heart.scale)
                         }
                     }
@@ -293,261 +262,8 @@ struct MainDashboardView: View {
                 .zIndex(9999)
             }
             
-            // Premium Detail Popup Modal for Active Schedule
-            if showScheduleDetailPopup, let schedule = auth.activeSchedule {
-                let isCreator = schedule.creator_id == (auth.currentUser?.id ?? 0)
-                let alarmTime = schedule.scheduledDate.addingTimeInterval(TimeInterval(-schedule.reminder_minutes * 60))
-                
-                ZStack {
-                    // Blurred Backdrop (tapping it dismisses the popup)
-                    Color.black.opacity(0.4)
-                        .ignoresSafeArea()
-                        .onTapGesture {
-                            let generator = UIImpactFeedbackGenerator(style: .light)
-                            generator.impactOccurred()
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                showScheduleDetailPopup = false
-                            }
-                        }
-                    
-                    // Card Dialog Container
-                    VStack(alignment: .leading, spacing: 18) {
-                        // Close / Action Row
-                        HStack {
-                            HStack(spacing: 6) {
-                                Image(systemName: "calendar")
-                                    .foregroundColor(.activeCyan)
-                                    .font(.system(size: 15))
-                                Text(schedule.status == "pending" ? "Date Invitation" : "Upcoming Date")
-                                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                                    .foregroundColor(.activeCyan)
-                            }
-                            
-                            Spacer()
-                            
-                            Button {
-                                let generator = UIImpactFeedbackGenerator(style: .light)
-                                generator.impactOccurred()
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    showScheduleDetailPopup = false
-                                }
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 22))
-                                    .foregroundColor(.white.opacity(0.4))
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
-                        
-                        // Event Details Block
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(schedule.title)
-                                .font(.system(size: 22, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                            
-                            HStack(spacing: 8) {
-                                Image(systemName: "clock.fill")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.activeCyan)
-                                Text(schedule.scheduledDate.formatted(date: .long, time: .shortened))
-                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                    .foregroundColor(.white.opacity(0.8))
-                            }
-                        }
-                        .padding(.vertical, 4)
-                        
-                        Divider()
-                            .background(Color.white.opacity(0.12))
-                        
-                        // Alarm Metadata Block
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "bell.fill")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.white.opacity(0.6))
-                                Text("Alarm Set For")
-                                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white.opacity(0.4))
-                            }
-                            
-                            Text("\(schedule.reminder_minutes) minutes before (\(alarmTime.formatted(date: .omitted, time: .shortened)))")
-                                .font(.system(size: 14, weight: .medium, design: .rounded))
-                                .foregroundColor(.white.opacity(0.8))
-                        }
-                        
-                        // Status Block
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "info.circle.fill")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.white.opacity(0.6))
-                                Text("RSVP Status")
-                                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white.opacity(0.4))
-                            }
-                            
-                            HStack(spacing: 6) {
-                                Image(systemName: schedule.status == "accepted" ? "checkmark.circle.fill" : "hourglass")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(schedule.status == "accepted" ? .activeCyan : .orange)
-                                Text(schedule.status == "accepted" ? "Accepted by both partners" : "Waiting for partner response")
-                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                    .foregroundColor(schedule.status == "accepted" ? .activeCyan : .orange)
-                            }
-                        }
-                        
-                        // Interactive RSVP Actions inside the Detail Popup
-                        if schedule.status == "pending" {
-                            if !isCreator {
-                                HStack(spacing: 12) {
-                                    Button {
-                                        let generator = UIImpactFeedbackGenerator(style: .medium)
-                                        generator.impactOccurred()
-                                        Task {
-                                            do {
-                                                try await auth.respondToSchedule(id: schedule.id, accept: true)
-                                                isDashboardToastSuccess = true
-                                                dashboardToastMessage = "Accepted the date! Set your alarm now."
-                                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                                    showScheduleDetailPopup = false
-                                                    showDashboardToast = true
-                                                }
-                                                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                                                    withAnimation { showDashboardToast = false }
-                                                }
-                                            } catch {
-                                                isDashboardToastSuccess = false
-                                                dashboardToastMessage = error.localizedDescription
-                                                withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
-                                                    showDashboardToast = true
-                                                }
-                                                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                                                    withAnimation { showDashboardToast = false }
-                                                }
-                                            }
-                                        }
-                                    } label: {
-                                        Text("Accept Date")
-                                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                                            .foregroundColor(.deepVelvet)
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 12)
-                                            .background(Color.activeCyan)
-                                            .cornerRadius(12)
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                    
-                                    Button {
-                                        let generator = UIImpactFeedbackGenerator(style: .light)
-                                        generator.impactOccurred()
-                                        Task {
-                                            do {
-                                                try await auth.respondToSchedule(id: schedule.id, accept: false)
-                                                isDashboardToastSuccess = true
-                                                dashboardToastMessage = "Date invitation declined."
-                                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                                    showScheduleDetailPopup = false
-                                                    showDashboardToast = true
-                                                }
-                                                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                                                    withAnimation { showDashboardToast = false }
-                                                }
-                                            } catch {
-                                                isDashboardToastSuccess = false
-                                                dashboardToastMessage = error.localizedDescription
-                                                withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
-                                                    showDashboardToast = true
-                                                }
-                                                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                                                    withAnimation { showDashboardToast = false }
-                                                }
-                                            }
-                                        }
-                                    } label: {
-                                        Text("Decline")
-                                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                                            .foregroundColor(.white)
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 12)
-                                            .background(Color.white.opacity(0.12))
-                                            .cornerRadius(12)
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                }
-                                .padding(.top, 6)
-                            } else {
-                                HStack {
-                                    Spacer()
-                                    ProgressView()
-                                        .tint(.activeCyan)
-                                        .scaleEffect(0.8)
-                                    Text("Waiting for partner to accept...")
-                                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                                        .foregroundColor(.white.opacity(0.6))
-                                    Spacer()
-                                }
-                                .padding(.vertical, 10)
-                                .background(Color.white.opacity(0.04))
-                                .cornerRadius(12)
-                                .padding(.top, 6)
-                            }
-                        } else if schedule.status == "accepted" {
-                            // Set alarm button
-                            Button {
-                                AlarmManager.shared.requestAccessAndAddEvent(
-                                    title: schedule.title,
-                                    date: schedule.scheduledDate,
-                                    reminderMinutes: schedule.reminder_minutes,
-                                    note: "Scheduled with Glimpse"
-                                ) { success, msg in
-                                    DispatchQueue.main.async {
-                                        isDashboardToastSuccess = success
-                                        dashboardToastMessage = msg
-                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                            showScheduleDetailPopup = false
-                                            showDashboardToast = true
-                                        }
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                                            withAnimation { showDashboardToast = false }
-                                        }
-                                    }
-                                }
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "alarm.fill")
-                                        .font(.system(size: 14))
-                                    Text("Set iPhone Alarm & Calendar Alert")
-                                }
-                                .font(.system(size: 14, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(Color.white.opacity(0.15))
-                                .cornerRadius(12)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
-                                )
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .padding(.top, 6)
-                        }
-                    }
-                    .padding(24)
-                    .background(
-                        LinearGradient(colors: [Color.deepVelvet, Color.black.opacity(0.95)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
-                    .cornerRadius(28)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 28)
-                            .stroke(Color.activeCyan.opacity(0.3), lineWidth: 1.5)
-                    )
-                    .shadow(color: Color.black.opacity(0.6), radius: 25, y: 15)
-                    .padding(.horizontal, 32)
-                }
-                .transition(.scale(scale: 0.95).combined(with: .opacity))
-                .zIndex(99999)
-            }
+            
+            // Empty placeholder for sheet trigger, detail logic is now in a sheet presentation.
         }
         .onAppear {
             LiveLocationManager.shared.startTracking()
@@ -614,6 +330,19 @@ struct MainDashboardView: View {
         }
         .sheet(isPresented: $bindableAuth.showScheduleSheet) {
             SchedulePlannerView()
+        }
+        .sheet(item: $selectedDetailSchedule) { schedule in
+            ScheduleDetailSheetView(
+                schedule: schedule,
+                auth: auth,
+                isPresented: Binding(
+                    get: { selectedDetailSchedule != nil },
+                    set: { if !$0 { selectedDetailSchedule = nil } }
+                ),
+                showToast: $showDashboardToast,
+                toastMessage: $dashboardToastMessage,
+                toastSuccess: $isDashboardToastSuccess
+            )
         }
     }
     
@@ -797,81 +526,14 @@ struct MainDashboardView: View {
                                 .padding(.bottom, 12)
                             }
                             
-                            ZStack {
-                                PartnerMapView(user: partner)
-                                    .aspectRatio(1, contentMode: .fit)
-                                    .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
-                                    .scaleEffect(reactionCardScale)
-                                    .onTapGesture {
-                                        // Tap = flip the card with haptic (no swipe needed)
-                                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                        NotificationCenter.default.post(name: NSNotification.Name("FlipDashboardCard"), object: nil)
-                                    }
-                                    .onLongPressGesture(minimumDuration: 0.15, maximumDistance: 50) {
-                                        // Long press = show emoji reaction picker
-                                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                        withAnimation(.spring(response: 0.22, dampingFraction: 0.65)) {
-                                            reactionCardScale = 0.94
-                                            showReactions = true
-                                            isLongPressActive = true
-                                        }
-                                    }
-                                
-                                // Rising Edge Reaction Sparkles (Floating gracefully from bottom to top along borders)
-                                ForEach(edgeReactions) { particle in
-                                    Text(particle.emoji)
-                                        .font(.system(size: 34))
-                                        .scaleEffect(particle.scale)
-                                        .rotationEffect(.degrees(particle.rotation))
-                                        .opacity(particle.opacity)
-                                        .offset(x: particle.x, y: particle.y)
-                                        .shadow(color: .black.opacity(0.2), radius: 4)
-                                        .zIndex(205)
+                            PartnerMapView(user: partner)
+                                .aspectRatio(1, contentMode: .fit)
+                                .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
+                                .onTapGesture {
+                                    // Tap = flip the card with haptic (no swipe needed)
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    NotificationCenter.default.post(name: NSNotification.Name("FlipDashboardCard"), object: nil)
                                 }
-                                
-                                // Locket-Style Edge Floating Reaction Badge
-                                if let badge = activeReactionBadge, showReactionBadge {
-                                    Text(badge)
-                                        .font(.system(size: 42))
-                                        .padding(8)
-                                        .background(.ultraThinMaterial)
-                                        .clipShape(Circle())
-                                        .overlay(Circle().stroke(Color.white.opacity(0.3), lineWidth: 1.2))
-                                        .shadow(color: .black.opacity(0.3), radius: 6, y: 4)
-                                        .rotationEffect(.degrees(reactionBadgeAngle))
-                                        .scaleEffect(reactionBadgeScale)
-                                        .offset(x: 130, y: -130) // Overlap perfectly at the top-right corner!
-                                        .transition(.scale(scale: 0.3).combined(with: .opacity))
-                                        .zIndex(210)
-                                }
-                                
-                                if showReactions {
-                                    // Glassmorphic Capsule Reaction Overlay
-                                    HStack(spacing: 20) {
-                                        ForEach(Array(["❤️", "🔥", "✨", "😘", "💩"].enumerated()), id: \.offset) { index, emoji in
-                                            Text(emoji)
-                                                .font(.system(size: 38))
-                                                .scaleEffect(reactionHoveredIndex == index ? 1.45 : 1.0)
-                                                .animation(.spring(response: 0.2, dampingFraction: 0.6), value: reactionHoveredIndex)
-                                                .shadow(color: .black.opacity(0.3), radius: 4)
-                                        }
-                                    }
-                                    .padding(.horizontal, 24)
-                                    .padding(.vertical, 14)
-                                    .background(.ultraThinMaterial)
-                                    .clipShape(Capsule())
-                                    .overlay(
-                                        Capsule()
-                                            .stroke(LinearGradient(colors: [.white.opacity(0.4), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
-                                    )
-                                    .shadow(color: .black.opacity(0.4), radius: 15, y: 10)
-                                    .transition(.asymmetric(
-                                        insertion: .scale(scale: 0.8, anchor: .center).combined(with: .opacity),
-                                        removal: .scale(scale: 0.8, anchor: .center).combined(with: .opacity)
-                                    ))
-                                    .zIndex(200)
-                                }
-                            }
                             
                             // Together Streak & Meeting Counters Card (Interactive & Haptic!)
                             VStack(spacing: 12) {
@@ -1262,8 +924,169 @@ struct MainDashboardView: View {
                                         withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
                                             scheduleCardBounce = false
                                         }
-                                        showScheduleDetailPopup = true
+                                        selectedDetailSchedule = schedule
                                     }
+                                }
+                                .padding(.top, 8)
+                            }
+                            
+                            // Pending Partner Date Invitation Card (Interactive & Haptic!)
+                            if let pendingInvitation = auth.pendingInvitation, pendingInvitation.id != auth.activeSchedule?.id {
+                                let isCreator = pendingInvitation.creator_id == (auth.currentUser?.id ?? 0)
+                                let alarmTime = pendingInvitation.scheduledDate.addingTimeInterval(TimeInterval(-pendingInvitation.reminder_minutes * 60))
+                                
+                                VStack(alignment: .leading, spacing: 14) {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            HStack(spacing: 6) {
+                                                Image(systemName: "envelope.badge.fill")
+                                                    .foregroundColor(.pink)
+                                                    .font(.system(size: 14))
+                                                Text("New Date Invitation")
+                                                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                                                    .foregroundColor(.pink)
+                                            }
+                                            
+                                            Text(pendingInvitation.title)
+                                                .font(.system(size: 17, weight: .bold, design: .rounded))
+                                                .foregroundColor(.white)
+                                                .padding(.top, 2)
+                                            
+                                            Text(pendingInvitation.scheduledDate.formatted(date: .abbreviated, time: .shortened))
+                                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                                .foregroundColor(.white.opacity(0.8))
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        // Calendar Badge
+                                        VStack(spacing: 2) {
+                                            Text(pendingInvitation.scheduledDate.formatted(.dateTime.day()))
+                                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                                .foregroundColor(.white)
+                                            Text(pendingInvitation.scheduledDate.formatted(.dateTime.month(.abbreviated)))
+                                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                                .foregroundColor(.white.opacity(0.4))
+                                        }
+                                        .frame(width: 44, height: 44)
+                                        .background(Color.white.opacity(0.1))
+                                        .cornerRadius(10)
+                                    }
+                                    
+                                    // Reminder info
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "bell.fill")
+                                            .font(.system(size: 11))
+                                        Text("Alarm set for: \(pendingInvitation.reminder_minutes)m before (\(alarmTime.formatted(date: .omitted, time: .shortened)))")
+                                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                                    }
+                                    .foregroundColor(.white.opacity(0.6))
+                                    
+                                    // Accept / Decline controls if not creator
+                                    if !isCreator {
+                                        HStack(spacing: 12) {
+                                            Button {
+                                                let generator = UIImpactFeedbackGenerator(style: .medium)
+                                                generator.impactOccurred()
+                                                Task {
+                                                    do {
+                                                        try await auth.respondToSchedule(id: pendingInvitation.id, accept: true)
+                                                        isDashboardToastSuccess = true
+                                                        dashboardToastMessage = "Accepted the date! Set your alarm now."
+                                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                                                            showDashboardToast = true
+                                                        }
+                                                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                                            withAnimation { showDashboardToast = false }
+                                                        }
+                                                    } catch {
+                                                        isDashboardToastSuccess = false
+                                                        dashboardToastMessage = error.localizedDescription
+                                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                                                            showDashboardToast = true
+                                                        }
+                                                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                                            withAnimation { showDashboardToast = false }
+                                                        }
+                                                    }
+                                                }
+                                            } label: {
+                                                Text("Accept Date")
+                                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                                    .foregroundColor(.deepVelvet)
+                                                    .frame(maxWidth: .infinity)
+                                                    .padding(.vertical, 10)
+                                                    .background(Color.pink)
+                                                    .cornerRadius(12)
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                            
+                                            Button {
+                                                let generator = UIImpactFeedbackGenerator(style: .light)
+                                                generator.impactOccurred()
+                                                Task {
+                                                    do {
+                                                        try await auth.respondToSchedule(id: pendingInvitation.id, accept: false)
+                                                        isDashboardToastSuccess = true
+                                                        dashboardToastMessage = "Date invitation declined."
+                                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                                                            showDashboardToast = true
+                                                        }
+                                                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                                            withAnimation { showDashboardToast = false }
+                                                        }
+                                                    } catch {
+                                                        isDashboardToastSuccess = false
+                                                        dashboardToastMessage = error.localizedDescription
+                                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                                                            showDashboardToast = true
+                                                        }
+                                                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                                            withAnimation { showDashboardToast = false }
+                                                        }
+                                                    }
+                                                }
+                                            } label: {
+                                                Text("Decline")
+                                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                                    .foregroundColor(.white)
+                                                    .frame(maxWidth: .infinity)
+                                                    .padding(.vertical, 10)
+                                                    .background(Color.white.opacity(0.1))
+                                                    .cornerRadius(12)
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                        }
+                                    } else {
+                                        HStack(spacing: 8) {
+                                            Spacer()
+                                            ProgressView()
+                                                .tint(.pink)
+                                                .scaleEffect(0.8)
+                                            Text("Waiting for partner to accept...")
+                                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                                .foregroundColor(.white.opacity(0.6))
+                                            Spacer()
+                                        }
+                                        .padding(.vertical, 8)
+                                        .background(Color.white.opacity(0.04))
+                                        .cornerRadius(10)
+                                    }
+                                }
+                                .padding(20)
+                                .background(
+                                    LinearGradient(colors: [Color.pink.opacity(0.15), Color.electricPurple.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                )
+                                .cornerRadius(20)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .stroke(Color.pink.opacity(0.35), lineWidth: 1.2)
+                                )
+                                .shadow(color: Color.pink.opacity(0.1), radius: 8, y: 3)
+                                .onTapGesture {
+                                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                                    generator.impactOccurred()
+                                    selectedDetailSchedule = pendingInvitation
                                 }
                                 .padding(.top, 8)
                             }
@@ -1458,35 +1281,63 @@ struct MainDashboardView: View {
                                         }
                                     }
                                     
-                                    // "See More" / "See Less" Button
-                                    if auth.flashes.count > 4 {
-                                        Button {
-                                            withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
-                                                if visibleFlashLimit < auth.flashes.count {
-                                                    visibleFlashLimit = auth.flashes.count
-                                                } else {
-                                                    visibleFlashLimit = 4
+                                    // "See More" / "See Less" Buttons (Incrementing/Decrementing by 3)
+                                    if auth.flashes.count > 3 {
+                                        HStack(spacing: 12) {
+                                            if visibleFlashLimit > 3 {
+                                                Button {
+                                                    let generator = UIImpactFeedbackGenerator(style: .light)
+                                                    generator.impactOccurred()
+                                                    withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+                                                        visibleFlashLimit = max(visibleFlashLimit - 3, 3)
+                                                    }
+                                                } label: {
+                                                    HStack {
+                                                        Image(systemName: "chevron.up.circle.fill")
+                                                            .font(.system(size: 14))
+                                                        Text("See Less")
+                                                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                                                    }
+                                                    .foregroundColor(.white.opacity(0.6))
+                                                    .padding(.vertical, 12)
+                                                    .frame(maxWidth: .infinity)
+                                                    .background(Color.white.opacity(0.02))
+                                                    .cornerRadius(12)
+                                                    .overlay(
+                                                        RoundedRectangle(cornerRadius: 12)
+                                                            .stroke(Color.white.opacity(0.05), lineWidth: 1)
+                                                    )
                                                 }
+                                                .buttonStyle(PlainButtonStyle())
                                             }
-                                        } label: {
-                                            HStack {
-                                                Text(visibleFlashLimit < auth.flashes.count ? "See More Captures" : "See Less")
-                                                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                                                    .foregroundColor(visibleFlashLimit >= auth.flashes.count ? .white.opacity(0.6) : .activeCyan)
-                                                Image(systemName: visibleFlashLimit < auth.flashes.count ? "chevron.down.circle.fill" : "chevron.up.circle.fill")
-                                                    .font(.system(size: 14))
-                                                    .foregroundColor(visibleFlashLimit >= auth.flashes.count ? .white.opacity(0.6) : .activeCyan)
+                                            
+                                            if visibleFlashLimit < auth.flashes.count {
+                                                Button {
+                                                    let generator = UIImpactFeedbackGenerator(style: .light)
+                                                    generator.impactOccurred()
+                                                    withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+                                                        visibleFlashLimit = min(visibleFlashLimit + 3, auth.flashes.count)
+                                                    }
+                                                } label: {
+                                                    HStack {
+                                                        Text("See More")
+                                                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                                                        Image(systemName: "chevron.down.circle.fill")
+                                                            .font(.system(size: 14))
+                                                    }
+                                                    .foregroundColor(.activeCyan)
+                                                    .padding(.vertical, 12)
+                                                    .frame(maxWidth: .infinity)
+                                                    .background(Color.white.opacity(0.04))
+                                                    .cornerRadius(12)
+                                                    .overlay(
+                                                        RoundedRectangle(cornerRadius: 12)
+                                                            .stroke(Color.activeCyan.opacity(0.2), lineWidth: 1)
+                                                    )
+                                                }
+                                                .buttonStyle(PlainButtonStyle())
                                             }
-                                            .padding(.vertical, 12)
-                                            .frame(maxWidth: .infinity)
-                                            .background(Color.white.opacity(visibleFlashLimit >= auth.flashes.count ? 0.02 : 0.04))
-                                            .cornerRadius(12)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .stroke(visibleFlashLimit >= auth.flashes.count ? Color.white.opacity(0.05) : Color.activeCyan.opacity(0.2), lineWidth: 1)
-                                            )
                                         }
-                                        .buttonStyle(PlainButtonStyle())
                                         .padding(.top, 8)
                                     }
                                 }
@@ -1722,13 +1573,13 @@ struct MainDashboardView: View {
         // System pop sound effect
         AudioServicesPlaySystemSound(1306)
         
-        // 8 elegant floating hearts
-        for _ in 0..<8 {
+        // 5 elegant lightweight floating hearts
+        for _ in 0..<5 {
             let heartId = UUID()
             
             // Randomly scatter horizontal start positions across the screen
-            let startX = CGFloat.random(in: -140...140)
-            let endX = startX + CGFloat.random(in: -50...50)
+            let startX = CGFloat.random(in: -120...120)
+            let endX = startX + CGFloat.random(in: -40...40)
             
             // Initial Y starting just below the bottom of the screen
             let startY: CGFloat = 80
@@ -1736,24 +1587,14 @@ struct MainDashboardView: View {
             let screenHeight = UIScreen.main.bounds.height
             let endY = -screenHeight - 100
             
-            // Vibrant shades of love (red, pink, rose red, velvet)
-            let colors = [
-                Color.pink,
-                Color(hex: "FF3B30"), // iOS System Red
-                Color(hex: "FF2D55"), // iOS System Rose Pink
-                Color(hex: "FF4D94"), // Hot Pink
-                Color.electricPurple.opacity(0.8) // Sleek purple-pink
-            ]
-            let color = colors.randomElement()!
-            
             let particle = PopHeart(
                 id: heartId,
                 x: startX,
                 y: startY,
-                scale: CGFloat.random(in: 0.6...1.2),
-                color: color,
+                scale: CGFloat.random(in: 0.6...1.1),
+                color: .red,
                 opacity: 1.0,
-                rotation: Double.random(in: -30...30),
+                rotation: Double.random(in: -20...20),
                 systemName: "heart.fill",
                 emojiString: nil
             )
@@ -1761,18 +1602,18 @@ struct MainDashboardView: View {
             self.popHearts.append(particle)
             
             // Animate floats upward beautifully
-            withAnimation(.easeOut(duration: CGFloat.random(in: 2.2...3.0))) {
+            withAnimation(.easeOut(duration: CGFloat.random(in: 1.8...2.5))) {
                 if let idx = self.popHearts.firstIndex(where: { $0.id == heartId }) {
                     self.popHearts[idx].x = endX
                     self.popHearts[idx].y = endY
                     self.popHearts[idx].opacity = 0.0
-                    self.popHearts[idx].scale *= 1.3
-                    self.popHearts[idx].rotation += Double.random(in: -60...60)
+                    self.popHearts[idx].scale *= 1.2
+                    self.popHearts[idx].rotation += Double.random(in: -40...40)
                 }
             }
             
             // Clean up when animation ends
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                 self.popHearts.removeAll(where: { $0.id == heartId })
             }
         }
@@ -1988,4 +1829,251 @@ struct EdgeReaction: Identifiable {
 
 #Preview {
     MainDashboardView()
+}
+
+struct ScheduleDetailSheetView: View {
+    let schedule: GlimpseSchedule
+    let auth: AuthManager
+    @Binding var isPresented: Bool
+    @Binding var showToast: Bool
+    @Binding var toastMessage: String
+    @Binding var toastSuccess: Bool
+    
+    var body: some View {
+        let isCreator = schedule.creator_id == (auth.currentUser?.id ?? 0)
+        let alarmTime = schedule.scheduledDate.addingTimeInterval(TimeInterval(-schedule.reminder_minutes * 60))
+        
+        ZStack {
+            Color.deepVelvet.ignoresSafeArea()
+            
+            VStack(alignment: .leading, spacing: 22) {
+                // Drag indicator spacer
+                HStack {
+                    Spacer()
+                    Capsule()
+                        .fill(Color.white.opacity(0.2))
+                        .frame(width: 40, height: 5)
+                    Spacer()
+                }
+                .padding(.top, 12)
+                
+                // Header Title
+                HStack(spacing: 8) {
+                    Image(systemName: "calendar")
+                        .foregroundColor(.activeCyan)
+                        .font(.system(size: 16, weight: .bold))
+                    Text(schedule.status == "pending" ? "Date Invitation" : "Upcoming Date")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundColor(.activeCyan)
+                    
+                    Spacer()
+                    
+                    Button {
+                        isPresented = false
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                
+                // Event Details Block
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(schedule.title)
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    
+                    HStack(spacing: 8) {
+                        Image(systemName: "clock.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.activeCyan)
+                        Text(schedule.scheduledDate.formatted(date: .long, time: .shortened))
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                }
+                
+                Divider()
+                    .background(Color.white.opacity(0.12))
+                
+                // Alarm Metadata Block
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "bell.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.6))
+                        Text("ALARM SET FOR")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+                    
+                    Text("\(schedule.reminder_minutes) minutes before (\(alarmTime.formatted(date: .omitted, time: .shortened)))")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.8))
+                }
+                
+                // Status Block
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.6))
+                        Text("RSVP STATUS")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+                    
+                    HStack(spacing: 6) {
+                        Image(systemName: schedule.status == "accepted" ? "checkmark.circle.fill" : "hourglass")
+                            .font(.system(size: 14))
+                            .foregroundColor(schedule.status == "accepted" ? .activeCyan : .orange)
+                        Text(schedule.status == "accepted" ? "Accepted by both partners" : "Waiting for partner response")
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundColor(schedule.status == "accepted" ? .activeCyan : .orange)
+                    }
+                }
+                
+                Spacer()
+                
+                // Interactive RSVP Actions inside the Detail Popup
+                if schedule.status == "pending" {
+                    if !isCreator {
+                        HStack(spacing: 16) {
+                            Button {
+                                let generator = UIImpactFeedbackGenerator(style: .medium)
+                                generator.impactOccurred()
+                                isPresented = false
+                                Task {
+                                    do {
+                                        try await auth.respondToSchedule(id: schedule.id, accept: true)
+                                        toastSuccess = true
+                                        toastMessage = "Accepted the date! Set your alarm now."
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                                            showToast = true
+                                        }
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                            withAnimation { showToast = false }
+                                        }
+                                    } catch {
+                                        toastSuccess = false
+                                        toastMessage = error.localizedDescription
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                                            showToast = true
+                                        }
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                            withAnimation { showToast = false }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                Text("Accept Date")
+                                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                                    .foregroundColor(.deepVelvet)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(Color.activeCyan)
+                                    .cornerRadius(14)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            
+                            Button {
+                                let generator = UIImpactFeedbackGenerator(style: .light)
+                                generator.impactOccurred()
+                                isPresented = false
+                                Task {
+                                    do {
+                                        try await auth.respondToSchedule(id: schedule.id, accept: false)
+                                        toastSuccess = true
+                                        toastMessage = "Date invitation declined."
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                                            showToast = true
+                                        }
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                            withAnimation { showToast = false }
+                                        }
+                                    } catch {
+                                        toastSuccess = false
+                                        toastMessage = error.localizedDescription
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                                            showToast = true
+                                        }
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                            withAnimation { showToast = false }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                Text("Decline")
+                                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(Color.white.opacity(0.12))
+                                    .cornerRadius(14)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    } else {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .tint(.activeCyan)
+                                .scaleEffect(0.8)
+                            Text("Waiting for partner to accept...")
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.6))
+                            Spacer()
+                        }
+                        .padding(.vertical, 14)
+                        .background(Color.white.opacity(0.04))
+                        .cornerRadius(14)
+                    }
+                } else if schedule.status == "accepted" {
+                    // Set alarm button
+                    Button {
+                        isPresented = false
+                        AlarmManager.shared.requestAccessAndAddEvent(
+                            title: schedule.title,
+                            date: schedule.scheduledDate,
+                            reminderMinutes: schedule.reminder_minutes,
+                            note: "Scheduled with Glimpse"
+                        ) { success, msg in
+                            DispatchQueue.main.async {
+                                toastSuccess = success
+                                toastMessage = msg
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    showToast = true
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                    withAnimation { showToast = false }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "alarm.fill")
+                                .font(.system(size: 14))
+                            Text("Set iPhone Alarm & Calendar Alert")
+                        }
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.white.opacity(0.15))
+                        .cornerRadius(14)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 34)
+        }
+        .presentationDetents([.fraction(0.55)])
+        .presentationDragIndicator(.hidden)
+    }
 }

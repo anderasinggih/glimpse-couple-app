@@ -23,6 +23,7 @@ class User extends Authenticatable
         'name',
         'email',
         'born_date',
+        'gender',
         'password',
         'invite_code',
         'couple_id',
@@ -66,6 +67,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'location_history' => 'array',
+            'is_charging' => 'boolean',
         ];
     }
 }

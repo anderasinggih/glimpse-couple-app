@@ -8,6 +8,7 @@ enum MapFocusTarget {
 }
 
 struct FullPartnerMapView: View {
+    @AppStorage("glimpse_default_map_style") var defaultMapStyle = "satellite"
     @State private var auth = AuthManager.shared
     @State private var position: MapCameraPosition
     @State private var mapStyle: MapStyle = .standard(emphasis: .muted)
@@ -18,6 +19,20 @@ struct FullPartnerMapView: View {
     @State private var currentCameraCenter: CLLocationCoordinate2D? = nil
     @State private var currentlyFocusedTarget: MapFocusTarget = .partner
     @State private var isFlying = false
+    @State private var isTrackingEnabled = true
+    
+    @State private var animatedPartnerLatitude: Double = 0.0
+    @State private var animatedPartnerLongitude: Double = 0.0
+    
+    private var animatedPartnerCoordinate: CLLocationCoordinate2D {
+        if let partner = auth.partner {
+            return CLLocationCoordinate2D(
+                latitude: animatedPartnerLatitude != 0.0 ? animatedPartnerLatitude : (partner.latitude ?? 0.0),
+                longitude: animatedPartnerLongitude != 0.0 ? animatedPartnerLongitude : (partner.longitude ?? 0.0)
+            )
+        }
+        return CLLocationCoordinate2D(latitude: 0.0, longitude: 0.0)
+    }
     
     // Polling timer for maps: 3.0 seconds
     @State private var timer: Timer.TimerPublisher = Timer.publish(every: 3.0, on: .main, in: .common)
@@ -30,6 +45,9 @@ struct FullPartnerMapView: View {
         )))
         _currentCameraCenter = State(initialValue: user.coordinate)
         _currentlyFocusedTarget = State(initialValue: .partner)
+        
+        let savedStyle = UserDefaults.standard.string(forKey: "glimpse_default_map_style") ?? "satellite"
+        _isSatellite = State(initialValue: savedStyle == "satellite")
     }
     
     var body: some View {
@@ -49,47 +67,61 @@ struct FullPartnerMapView: View {
             } else if let partner = auth.partner {
                 // Full Screen Map with Pulsing Partner Marker
                 Map(position: $position) {
-                    // 👣 Neon Footprints Trail for Partner (Zenly-Style)
+                    // 👣 Neon Footprints Trail for Partner (Zenly-Style) - Tapered Fading Shadow
                     if let partnerHistory = partner.location_history, partnerHistory.count >= 2 {
                         let coords = partnerHistory.map { $0.coordinate }
+                        let count = coords.count
                         
-                        // 1. Neon Glow Layer
-                        MapPolyline(coordinates: coords)
-                            .stroke(
-                                Color.activeCyan.opacity(0.35),
-                                style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
-                            )
-                        
-                        // 2. Core Saturated Neon Layer
-                        MapPolyline(coordinates: coords)
-                            .stroke(
-                                Color.activeCyan,
-                                style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
-                            )
+                        ForEach(0..<count - 1, id: \.self) { i in
+                            let progress = Double(i) / Double(count - 1)
+                            let opacity = 0.35 + (progress * 0.45) // Opacity ranges from 0.35 (oldest) to 0.8 (newest)
+                            let width = 4.0 + (progress * 4.0)     // Width ranges from 4.0 to 8.0
+                            
+                            // 1. Neon Glow Layer (subtle shadow effect)
+                            MapPolyline(coordinates: [coords[i], coords[i+1]])
+                                .stroke(
+                                    Color.activeCyan.opacity(opacity * 0.4),
+                                    style: StrokeStyle(lineWidth: width + 6.0, lineCap: .round, lineJoin: .round)
+                                )
+                            
+                            // 2. Core Saturated Neon Layer
+                            MapPolyline(coordinates: [coords[i], coords[i+1]])
+                                .stroke(
+                                    Color.activeCyan.opacity(opacity),
+                                    style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
+                                )
+                        }
                     }
                     
-                    // 👣 Neon Footprints Trail for Me (Zenly-Style)
+                    // 👣 Neon Footprints Trail for Me (Zenly-Style) - Tapered Fading Shadow
                     if let myUser = auth.currentUser,
                        let myHistory = myUser.location_history, myHistory.count >= 2 {
                         let coords = myHistory.map { $0.coordinate }
+                        let count = coords.count
                         
-                        // 1. Neon Glow Layer
-                        MapPolyline(coordinates: coords)
-                            .stroke(
-                                Color.electricPurple.opacity(0.35),
-                                style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
-                            )
-                        
-                        // 2. Core Saturated Neon Layer
-                        MapPolyline(coordinates: coords)
-                            .stroke(
-                                Color.electricPurple,
-                                style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
-                            )
+                        ForEach(0..<count - 1, id: \.self) { i in
+                            let progress = Double(i) / Double(count - 1)
+                            let opacity = 0.35 + (progress * 0.45) // Opacity ranges from 0.35 (oldest) to 0.8 (newest)
+                            let width = 4.0 + (progress * 4.0)     // Width ranges from 4.0 to 8.0
+                            
+                            // 1. Neon Glow Layer (subtle shadow effect)
+                            MapPolyline(coordinates: [coords[i], coords[i+1]])
+                                .stroke(
+                                    Color.electricPurple.opacity(opacity * 0.4),
+                                    style: StrokeStyle(lineWidth: width + 6.0, lineCap: .round, lineJoin: .round)
+                                )
+                            
+                            // 2. Core Saturated Neon Layer
+                            MapPolyline(coordinates: [coords[i], coords[i+1]])
+                                .stroke(
+                                    Color.electricPurple.opacity(opacity),
+                                    style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
+                                )
+                        }
                     }
 
                     if auth.isTogether, let currentUser = auth.currentUser {
-                        Annotation("Together", coordinate: partner.coordinate) {
+                        Annotation("Together", coordinate: animatedPartnerCoordinate) {
                             ZStack {
                                 Circle()
                                     .fill(LinearGradient(colors: [.electricPurple.opacity(0.3), .activeCyan.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -136,7 +168,7 @@ struct FullPartnerMapView: View {
                             .onTapGesture {
                                 withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                                     position = .region(MKCoordinateRegion(
-                                        center: partner.coordinate,
+                                        center: animatedPartnerCoordinate,
                                         span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
                                     ))
                                 }
@@ -149,11 +181,11 @@ struct FullPartnerMapView: View {
                            let myLat = currentUser.latitude, myLat != 0.0 {
                             
                             let startLoc = CLLocation(latitude: currentUser.coordinate.latitude, longitude: currentUser.coordinate.longitude)
-                            let endLoc = CLLocation(latitude: partner.coordinate.latitude, longitude: partner.coordinate.longitude)
+                            let endLoc = CLLocation(latitude: animatedPartnerCoordinate.latitude, longitude: animatedPartnerCoordinate.longitude)
                             let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
                             
                             let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
-                            let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: partner.coordinate, distanceInKm: distanceInKm, phase: wavePhase)
+                            let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: animatedPartnerCoordinate, distanceInKm: distanceInKm, phase: wavePhase)
                             
                             // 1. Bottom Layer: Outer Neon Glow
                             MapPolyline(coordinates: wavyCoords)
@@ -182,6 +214,7 @@ struct FullPartnerMapView: View {
                                 }
                                 .onTapGesture {
                                     currentlyFocusedTarget = .me
+                                    isTrackingEnabled = true
                                     withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                                         position = .region(MKCoordinateRegion(
                                             center: currentUser.coordinate,
@@ -192,7 +225,7 @@ struct FullPartnerMapView: View {
                             }
                         }
                         
-                        Annotation(partner.name, coordinate: partner.coordinate) {
+                        Annotation(partner.name, coordinate: animatedPartnerCoordinate) {
                             ZStack {
                                 Circle()
                                     .fill(Color.activeCyan.opacity(0.2))
@@ -203,9 +236,10 @@ struct FullPartnerMapView: View {
                             }
                             .onTapGesture {
                                 currentlyFocusedTarget = .partner
+                                isTrackingEnabled = true
                                 withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                                     position = .region(MKCoordinateRegion(
-                                        center: partner.coordinate,
+                                        center: animatedPartnerCoordinate,
                                         span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
                                     ))
                                 }
@@ -222,6 +256,10 @@ struct FullPartnerMapView: View {
                 .onMapCameraChange(frequency: .onEnd) { context in
                     guard !isFlying else { return } // Ignore updates during cinematic flight transitions!
                     
+                    if context.isUserInitiated {
+                        isTrackingEnabled = false
+                    }
+                    
                     currentCameraCenter = context.camera.centerCoordinate
                     
                     guard let currentUser = auth.currentUser else { return }
@@ -237,11 +275,36 @@ struct FullPartnerMapView: View {
                 }
                 // Automatically move map camera smoothly when partner's live coordinates change
                 .onChange(of: partner.last_updated) { _, _ in
-                    withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                        position = .region(MKCoordinateRegion(
-                            center: partner.coordinate,
-                            span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
-                        ))
+                    if isTrackingEnabled && currentlyFocusedTarget == .partner {
+                        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                            position = .region(MKCoordinateRegion(
+                                center: partner.coordinate,
+                                span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                            ))
+                        }
+                    }
+                    
+                    if let lat = partner.latitude, let lon = partner.longitude, lat != 0.0, lon != 0.0 {
+                        if animatedPartnerLatitude == 0.0 {
+                            animatedPartnerLatitude = lat
+                            animatedPartnerLongitude = lon
+                        } else {
+                            withAnimation(.easeInOut(duration: 3.5)) {
+                                animatedPartnerLatitude = lat
+                                animatedPartnerLongitude = lon
+                            }
+                        }
+                    }
+                }
+                .onChange(of: auth.currentUser?.latitude) { _, _ in
+                    guard isTrackingEnabled && currentlyFocusedTarget == .me else { return }
+                    if let myCoord = auth.currentUser?.coordinate {
+                        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                            position = .region(MKCoordinateRegion(
+                                center: myCoord,
+                                span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                            ))
+                        }
                     }
                 }
                 
@@ -353,6 +416,10 @@ struct FullPartnerMapView: View {
             }
         }
         .onAppear {
+            if let partner = auth.partner, let lat = partner.latitude, let lon = partner.longitude {
+                animatedPartnerLatitude = lat
+                animatedPartnerLongitude = lon
+            }
             startPolling()
             triggerImmediateSync()
             withAnimation(.linear(duration: 4.5).repeatForever(autoreverses: false)) {
@@ -384,6 +451,10 @@ struct FullPartnerMapView: View {
             try? await auth.fetchState()
             if let partner = auth.partner {
                 await MainActor.run {
+                    if let lat = partner.latitude, let lon = partner.longitude {
+                        animatedPartnerLatitude = lat
+                        animatedPartnerLongitude = lon
+                    }
                     withAnimation(.spring()) {
                         position = .region(MKCoordinateRegion(
                             center: partner.coordinate,
@@ -396,6 +467,7 @@ struct FullPartnerMapView: View {
     }
     
     private func triggerCinematicFlight(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D, targetFocus: MapFocusTarget) {
+        isTrackingEnabled = true
         let startLoc = CLLocation(latitude: start.latitude, longitude: start.longitude)
         let endLoc = CLLocation(latitude: end.latitude, longitude: end.longitude)
         let distance = startLoc.distance(from: endLoc)

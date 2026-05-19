@@ -3,6 +3,7 @@ import MapKit
 import Combine
 
 struct PartnerMapView: View {
+    @AppStorage("glimpse_default_map_style") var defaultMapStyle = "satellite"
     let user: GlimpseUser
     @State private var position: MapCameraPosition
     @State private var isShowingPhoto = true
@@ -10,6 +11,16 @@ struct PartnerMapView: View {
     @State private var auth = AuthManager.shared
     @State private var mapPulse = false
     @State private var wavePhase = 0.0
+    
+    @State private var animatedPartnerLatitude: Double = 0.0
+    @State private var animatedPartnerLongitude: Double = 0.0
+    
+    private var animatedPartnerCoordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(
+            latitude: animatedPartnerLatitude != 0.0 ? animatedPartnerLatitude : (user.latitude ?? 0.0),
+            longitude: animatedPartnerLongitude != 0.0 ? animatedPartnerLongitude : (user.longitude ?? 0.0)
+        )
+    }
     
     // Auto-rotation timer every 10 seconds
     private let autoRotateTimer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
@@ -56,7 +67,7 @@ struct PartnerMapView: View {
                         if auth.isTogether, let currentUser = auth.currentUser,
                            let userLat = user.latitude, userLat != 0.0,
                            let myLat = currentUser.latitude, myLat != 0.0 {
-                            Annotation("Together", coordinate: user.coordinate) {
+                            Annotation("Together", coordinate: animatedPartnerCoordinate) {
                                 ZStack {
                                     Circle()
                                         .fill(LinearGradient(colors: [.electricPurple.opacity(0.3), .activeCyan.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -103,7 +114,7 @@ struct PartnerMapView: View {
                                 .onTapGesture {
                                     withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                                         position = .region(MKCoordinateRegion(
-                                            center: user.coordinate,
+                                            center: animatedPartnerCoordinate,
                                             span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
                                         ))
                                     }
@@ -115,10 +126,10 @@ struct PartnerMapView: View {
                                let userLat = user.latitude, userLat != 0.0,
                                let myLat = currentUser.latitude, myLat != 0.0 {
                                 let startLoc = CLLocation(latitude: currentUser.coordinate.latitude, longitude: currentUser.coordinate.longitude)
-                                let endLoc = CLLocation(latitude: user.coordinate.latitude, longitude: user.coordinate.longitude)
+                                let endLoc = CLLocation(latitude: animatedPartnerCoordinate.latitude, longitude: animatedPartnerCoordinate.longitude)
                                 let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
                                 
-                                let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: user.coordinate, phase: wavePhase)
+                                let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: animatedPartnerCoordinate, phase: wavePhase)
                                 let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
                                 
                                 // 1. Bottom Layer: Outer Neon Glow
@@ -158,7 +169,7 @@ struct PartnerMapView: View {
                             }
                             
                             if let userLat = user.latitude, userLat != 0.0 {
-                                Annotation(user.name, coordinate: user.coordinate) {
+                                Annotation(user.name, coordinate: animatedPartnerCoordinate) {
                                     ZStack {
                                         Circle()
                                             .fill(Color.activeCyan.opacity(0.3))
@@ -170,7 +181,7 @@ struct PartnerMapView: View {
                                     .onTapGesture {
                                         withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                                             position = .region(MKCoordinateRegion(
-                                                center: user.coordinate,
+                                                center: animatedPartnerCoordinate,
                                                 span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
                                             ))
                                         }
@@ -179,7 +190,7 @@ struct PartnerMapView: View {
                             }
                         }
                     }
-                    .mapStyle(.hybrid(elevation: .realistic))
+                    .mapStyle(defaultMapStyle == "satellite" ? .hybrid(elevation: .realistic) : .standard(emphasis: .muted))
                     .onChange(of: user.latitude) {
                         updateMapPosition()
                     }
@@ -197,6 +208,7 @@ struct PartnerMapView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .onTapGesture {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             withAnimation(.easeInOut(duration: 0.5)) {
                 isShowingPhoto.toggle()
             }
@@ -214,6 +226,10 @@ struct PartnerMapView: View {
         .onAppear {
             updateLocalAddress()
             updateMapPosition()
+            if let lat = user.latitude, let lon = user.longitude, lat != 0.0, lon != 0.0 {
+                animatedPartnerLatitude = lat
+                animatedPartnerLongitude = lon
+            }
             withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
                 wavePhase = 2 * .pi
             }
@@ -221,6 +237,17 @@ struct PartnerMapView: View {
         .onChange(of: user.latitude) {
             updateLocalAddress()
             updateMapPosition()
+            if let lat = user.latitude, let lon = user.longitude, lat != 0.0, lon != 0.0 {
+                if animatedPartnerLatitude == 0.0 {
+                    animatedPartnerLatitude = lat
+                    animatedPartnerLongitude = lon
+                } else {
+                    withAnimation(.easeInOut(duration: 3.5)) {
+                        animatedPartnerLatitude = lat
+                        animatedPartnerLongitude = lon
+                    }
+                }
+            }
         }
     }
     

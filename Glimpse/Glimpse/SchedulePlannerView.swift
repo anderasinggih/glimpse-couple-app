@@ -11,6 +11,21 @@ class AlarmManager {
         eventStore.requestFullAccessToEvents { granted, error in
             if granted && error == nil {
                 do {
+                    // Check duplicate first
+                    let predicate = self.eventStore.predicateForEvents(withStart: date.addingTimeInterval(-3600), end: date.addingTimeInterval(3600), calendars: nil)
+                    let existingEvents = self.eventStore.events(matching: predicate)
+                    let eventTitle = "Glimpse Date: \(title)"
+                    
+                    if existingEvents.contains(where: { $0.title == eventTitle }) {
+                        // Play gentle alert haptic feedback
+                        DispatchQueue.main.sync {
+                            let generator = UINotificationFeedbackGenerator()
+                            generator.notificationOccurred(.warning)
+                        }
+                        completion(true, "Already added to your Apple Calendar! 📅")
+                        return
+                    }
+                    
                     let success = try self.createCalendarEvent(title: title, date: date, reminderMinutes: reminderMinutes, note: note)
                     if success {
                         completion(true, "Successfully added to your Apple Calendar with alarm!")
@@ -357,7 +372,7 @@ struct SchedulePlannerView: View {
                     }
                 } else {
                     ScrollView(showsIndicators: false) {
-                        VStack(spacing: 14) {
+                        VStack(alignment: .leading, spacing: 14) {
                             ForEach(upcoming) { schedule in
                                 ScheduleRow(schedule: schedule)
                             }
@@ -391,7 +406,7 @@ struct SchedulePlannerView: View {
                     }
                 } else {
                     ScrollView(showsIndicators: false) {
-                        VStack(spacing: 14) {
+                        VStack(alignment: .leading, spacing: 14) {
                             ForEach(history) { schedule in
                                 ScheduleRow(schedule: schedule, isPast: true)
                             }
@@ -538,6 +553,7 @@ struct SchedulePlannerView: View {
                 .padding(.top, 4)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(Color.white.opacity(isPast ? 0.02 : 0.05))
         .cornerRadius(18)

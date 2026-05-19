@@ -453,15 +453,69 @@
                                 </select>
                             </div>
                             
-                            <div class="grid grid-cols-2 gap-4">
-                                <button onclick="triggerSimulatedUpdate('battery_low')" class="py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 font-semibold text-xs transition-all">
-                                    Simulate Low Battery (12%)
-                                </button>
-                                <button onclick="triggerSimulatedUpdate('is_charging')" class="py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-semibold text-xs transition-all">
-                                    Toggle Charging Active
-                                </button>
-                                <button onclick="triggerSimulatedUpdate('online')" class="py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-semibold text-xs transition-all col-span-2">
-                                    Simulate Active Location Pulsing
+                            <!-- Presets -->
+                            <div class="space-y-2">
+                                <span class="block text-[10px] font-bold uppercase text-white/40 tracking-wider">⚡ Quick Presets</span>
+                                <div class="grid grid-cols-2 gap-2.5">
+                                    <button onclick="triggerSimulatedUpdate('battery_low')" class="py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 font-semibold text-[11px] transition-all">
+                                        Low Battery (12%)
+                                    </button>
+                                    <button onclick="triggerSimulatedUpdate('is_charging')" class="py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 font-semibold text-[11px] transition-all">
+                                        Toggle Charging
+                                    </button>
+                                    <button onclick="triggerSimulatedUpdate('online')" class="py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-cyan-400 font-semibold text-[11px] transition-all">
+                                        Location Pulse (Tiny Shift)
+                                    </button>
+                                    <button onclick="triggerSimulatedUpdate('critical_alert')" class="py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 font-semibold text-[11px] transition-all">
+                                        Critical Alert (1%)
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Custom Injector Form -->
+                            <div class="pt-4 border-t border-white/5 space-y-3">
+                                <span class="block text-[10px] font-bold uppercase text-white/40 tracking-wider">🛠️ Custom State Injector</span>
+                                
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-[10px] text-white/50 mb-1">Battery Level</label>
+                                        <input type="number" id="injectBattery" placeholder="Battery (0-100)" min="0" max="100" class="w-full px-3 py-2 rounded-xl border border-white/10 bg-slate-950 text-white text-xs focus:outline-none focus:border-electricPurple">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-white/50 mb-1">Charging State</label>
+                                        <div class="flex items-center h-8">
+                                            <input type="checkbox" id="injectCharging" class="w-4 h-4 rounded border-white/10 bg-slate-950 text-electricPurple focus:ring-0 focus:ring-offset-0">
+                                            <span class="ml-2 text-xs text-white/60">Is Charging</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-[10px] text-white/50 mb-1">Status Note</label>
+                                    <input type="text" id="injectStatusNote" placeholder="Simulate user status note..." class="w-full px-3 py-2 rounded-xl border border-white/10 bg-slate-950 text-white text-xs focus:outline-none focus:border-electricPurple">
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-[10px] text-white/50 mb-1">Latitude</label>
+                                        <input type="number" step="any" id="injectLatitude" placeholder="e.g. -6.2088" class="w-full px-3 py-2 rounded-xl border border-white/10 bg-slate-950 text-white text-xs focus:outline-none focus:border-electricPurple">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-white/50 mb-1">Longitude</label>
+                                        <input type="number" step="any" id="injectLongitude" placeholder="e.g. 106.8456" class="w-full px-3 py-2 rounded-xl border border-white/10 bg-slate-950 text-white text-xs focus:outline-none focus:border-electricPurple">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-[10px] text-white/50 mb-1">Location Name</label>
+                                    <input type="text" id="injectLocationName" placeholder="Simulate location name (e.g. Starbucks)..." class="w-full px-3 py-2 rounded-xl border border-white/10 bg-slate-950 text-white text-xs focus:outline-none focus:border-electricPurple">
+                                </div>
+
+                                <button onclick="triggerCustomInject()" class="w-full py-2.5 rounded-xl bg-electricPurple hover:bg-electricPurple/80 text-slate-950 font-bold text-xs transition-all flex items-center justify-center space-x-1.5 shadow-lg shadow-electricPurple/20">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                                    </svg>
+                                    <span>Broadcast Custom State</span>
                                 </button>
                             </div>
                         </div>
@@ -936,6 +990,14 @@
                 </button>
             </div>
 
+            <!-- Room Selector Dropdown -->
+            <div class="flex-shrink-0 flex items-center justify-between bg-slate-950/40 p-2.5 rounded-xl border border-white/5 text-xs">
+                <span class="font-bold text-white/50 uppercase text-[9px] tracking-wider">Active Spy Room:</span>
+                <select id="spyRoomSelect" onchange="changeSpyRoom()" class="px-3 py-1.5 rounded-lg border border-white/10 bg-slate-900 text-white text-xs font-semibold focus:outline-none focus:border-activeCyan">
+                    <!-- populated dynamically -->
+                </select>
+            </div>
+
             <!-- Chat Stream Body -->
             <div id="spyChatStream" class="flex-grow overflow-y-auto space-y-4 pr-1 p-2 rounded-xl bg-slate-950/50 border border-white/5 min-h-0">
                 <!-- Chat bubbles will be dynamically injected here -->
@@ -1306,7 +1368,39 @@
 
         function triggerSimulatedUpdate(type) {
             const userId = document.getElementById('simulatorUserSelect').value;
+            if (!userId) {
+                alert("Please select a user first!");
+                return;
+            }
             adminApiCall('push_diagnostics', { user_id: userId, type: type });
+        }
+
+        function triggerCustomInject() {
+            const userId = document.getElementById('simulatorUserSelect').value;
+            if (!userId) {
+                alert("Please select a user first!");
+                return;
+            }
+            
+            const battery = document.getElementById('injectBattery').value;
+            const charging = document.getElementById('injectCharging').checked;
+            const statusNote = document.getElementById('injectStatusNote').value.trim();
+            const lat = document.getElementById('injectLatitude').value;
+            const lon = document.getElementById('injectLongitude').value;
+            const locName = document.getElementById('injectLocationName').value.trim();
+            
+            const payload = {
+                user_id: userId,
+                type: 'custom',
+                battery_level: battery !== '' ? parseInt(battery) : null,
+                is_charging: charging,
+                status_note: statusNote !== '' ? statusNote : null,
+                latitude: lat !== '' ? parseFloat(lat) : null,
+                longitude: lon !== '' ? parseFloat(lon) : null,
+                location_name: locName !== '' ? locName : null
+            };
+            
+            adminApiCall('push_diagnostics', payload);
         }
 
         function clearChat() {
@@ -1800,14 +1894,19 @@
         // --- DEWA SPYGLASS HANDLERS ---
         let activeSpyCoupleId = null;
         let activeSpyUsers = [];
+        let activeSpyRooms = [];
+        let activeSpyMessages = [];
+        let selectedSpyRoomId = 'main'; // 'main' or room ID integer
 
-        async function openChatSpy(coupleId) {
+        async function openChatSpy(coupleId, keepRoomSelected = false) {
             activeSpyCoupleId = coupleId;
             const token = localStorage.getItem('glimpse_admin_token');
             const stream = document.getElementById('spyChatStream');
-            stream.innerHTML = '<div class="p-8 text-center text-white/40 animate-pulse">Establishing secure spy tunnel connection...</div>';
             
-            document.getElementById('chatSpyModal').classList.remove('hidden');
+            if (!keepRoomSelected) {
+                stream.innerHTML = '<div class="p-8 text-center text-white/40 animate-pulse">Establishing secure spy tunnel connection...</div>';
+                document.getElementById('chatSpyModal').classList.remove('hidden');
+            }
 
             try {
                 const response = await fetch(`/admin/api?token=${encodeURIComponent(token)}`, {
@@ -1823,10 +1922,13 @@
                 if (response.ok) {
                     const data = await response.json();
                     activeSpyUsers = data.couple.users;
+                    activeSpyRooms = data.rooms || [];
+                    activeSpyMessages = data.messages || [];
                     
                     const names = activeSpyUsers.map(u => u.name).join(' & ');
                     document.getElementById('spyModalTitle').innerText = `Spyglass: ${names || 'Unpaired Couple'}`;
 
+                    // Update Sender selection
                     const senderSelect = document.getElementById('spySenderSelect');
                     senderSelect.innerHTML = '<option value="0">System Announcement</option>';
                     activeSpyUsers.forEach(u => {
@@ -1836,7 +1938,27 @@
                         senderSelect.appendChild(opt);
                     });
 
-                    renderSpyMessages(data.messages);
+                    // Update Room selection dropdown
+                    const roomSelect = document.getElementById('spyRoomSelect');
+                    const currentSelection = selectedSpyRoomId;
+                    roomSelect.innerHTML = '<option value="main">💬 General Chat (Main Room)</option>';
+                    activeSpyRooms.forEach(r => {
+                        const opt = document.createElement('option');
+                        opt.value = r.id;
+                        opt.innerText = `🔒 ${r.name} (Room ID ${r.id})`;
+                        roomSelect.appendChild(opt);
+                    });
+
+                    if (keepRoomSelected) {
+                        // Restore selection if it exists, otherwise fallback to main
+                        const exists = Array.from(roomSelect.options).some(o => o.value == currentSelection);
+                        selectedSpyRoomId = exists ? currentSelection : 'main';
+                    } else {
+                        selectedSpyRoomId = 'main';
+                    }
+                    roomSelect.value = selectedSpyRoomId;
+
+                    renderSpyMessages();
                 } else {
                     const data = await response.json().catch(() => ({}));
                     stream.innerHTML = `<div class="p-8 text-center text-rose-400">Failed to establish spy tunnel connection: ${data.error || 'Server error'}</div>`;
@@ -1847,16 +1969,30 @@
             }
         }
 
-        function renderSpyMessages(messages) {
+        function changeSpyRoom() {
+            selectedSpyRoomId = document.getElementById('spyRoomSelect').value;
+            renderSpyMessages();
+        }
+
+        function renderSpyMessages() {
             const stream = document.getElementById('spyChatStream');
             stream.innerHTML = '';
 
-            if (messages.length === 0) {
-                stream.innerHTML = '<div class="p-12 text-center text-white/30 text-xs italic">Conversation is currently silent. No messages found.</div>';
+            // Filter messages based on active spy room
+            const filteredMessages = activeSpyMessages.filter(m => {
+                if (selectedSpyRoomId === 'main') {
+                    return !m.room_id || m.room_id === 0;
+                } else {
+                    return m.room_id == selectedSpyRoomId;
+                }
+            });
+
+            if (filteredMessages.length === 0) {
+                stream.innerHTML = '<div class="p-12 text-center text-white/30 text-xs italic">Conversation in this room is currently silent. No messages found.</div>';
                 return;
             }
 
-            messages.forEach(m => {
+            filteredMessages.forEach(m => {
                 const bubble = document.createElement('div');
                 
                 // System message (sender_id = 0 or starts/contains system announcement marker)
@@ -1903,6 +2039,9 @@
             document.getElementById('chatSpyModal').classList.add('hidden');
             activeSpyCoupleId = null;
             activeSpyUsers = [];
+            activeSpyRooms = [];
+            activeSpyMessages = [];
+            selectedSpyRoomId = 'main';
         }
 
         async function injectSpyMessage() {
@@ -1928,14 +2067,15 @@
                         action: 'inject_spy_message',
                         couple_id: activeSpyCoupleId,
                         sender_id: senderId,
-                        message: message
+                        message: message,
+                        room_id: selectedSpyRoomId === 'main' ? null : parseInt(selectedSpyRoomId)
                     })
                 });
 
                 const data = await response.json();
                 if (response.ok) {
                     input.value = '';
-                    openChatSpy(activeSpyCoupleId); // Refresh history stream
+                    openChatSpy(activeSpyCoupleId, true); // Refresh history stream keeping room selected
                 } else {
                     alert(`Injection failed: ${data.error || 'Server error'}`);
                 }

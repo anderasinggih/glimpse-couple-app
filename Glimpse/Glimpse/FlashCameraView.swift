@@ -131,7 +131,10 @@ struct FlashCameraView: View {
                     } else {
                         HStack(spacing: 36) {
                             // Flash Toggle
-                            Button { model.toggleFlash() } label: {
+                            Button {
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                model.toggleFlash()
+                            } label: {
                                 Image(systemName: model.flashMode == .on ? "bolt.fill" : "bolt.slash.fill")
                                     .font(.system(size: 20, weight: .bold))
                                     .foregroundColor(model.flashMode == .on ? .yellow : .white)
@@ -146,7 +149,10 @@ struct FlashCameraView: View {
                             captureButton
                             
                             // Camera Switch
-                            Button { model.switchCamera() } label: {
+                            Button {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                model.switchCamera()
+                            } label: {
                                 Image(systemName: "camera.rotate")
                                     .font(.system(size: 20, weight: .bold))
                                     .foregroundColor(.white)
@@ -183,6 +189,8 @@ struct FlashCameraView: View {
                             
                             // Retake Photo Button placed high up for superb keyboard safety
                             Button {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                isInputFocused = false
                                 capturedImage = nil
                                 statusNote = ""
                                 model.startSession()
