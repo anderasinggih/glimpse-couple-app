@@ -154,6 +154,15 @@ struct FullPartnerMapView: View {
                 }
                 // Automatically move map camera smoothly when partner's live coordinates change
                 .onChange(of: partner.last_updated) { _, _ in
+                    if isTrackingEnabled && currentlyFocusedTarget == .partner {
+                        withAnimation(.easeInOut(duration: 3.5)) {
+                            position = .region(MKCoordinateRegion(
+                                center: partner.coordinate,
+                                span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
+                            ))
+                        }
+                    }
+                    
                     if let lat = partner.latitude, let lon = partner.longitude, lat != 0.0, lon != 0.0 {
                         if animatedPartnerLatitude == 0.0 {
                             animatedPartnerLatitude = lat
@@ -165,13 +174,6 @@ struct FullPartnerMapView: View {
                             }
                         }
                     }
-                }
-                .onChange(of: animatedPartnerLatitude) { _, newLat in
-                    guard isTrackingEnabled && currentlyFocusedTarget == .partner else { return }
-                    position = .region(MKCoordinateRegion(
-                        center: CLLocationCoordinate2D(latitude: newLat, longitude: animatedPartnerLongitude),
-                        span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
-                    ))
                 }
                 .onChange(of: auth.currentUser?.latitude) { _, _ in
                     guard isTrackingEnabled && currentlyFocusedTarget == .me else { return }
