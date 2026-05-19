@@ -75,7 +75,7 @@ struct ChatView: View {
     }
     
     struct GlobalSearchResult: Identifiable {
-        let id = UUID()
+        var id: String { "\(room.id)_\(message.id)" }
         let room: GlimpseChatRoom
         let message: ChatMessage
     }
