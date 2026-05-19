@@ -132,17 +132,17 @@ struct FullPartnerMapView: View {
                     MapScaleView()
                 }
                 .ignoresSafeArea()
-                .onMapCameraChange(update: { context in
+                .onMapCameraChange { context in
                     guard !isFlying else { return } // Ignore updates during cinematic flight transitions!
                     
-                    if context.isUserInitiated {
+                    if position.positionedByUser {
                         isTrackingEnabled = false
                     }
                     
-                    currentCameraCenter = context.camera.centerCoordinate
+                    currentCameraCenter = context.region.center
                     
                     guard let currentUser = auth.currentUser else { return }
-                    let centerLoc = CLLocation(latitude: context.camera.centerCoordinate.latitude, longitude: context.camera.centerCoordinate.longitude)
+                    let centerLoc = CLLocation(latitude: context.region.center.latitude, longitude: context.region.center.longitude)
                     let myLoc = CLLocation(latitude: currentUser.coordinate.latitude, longitude: currentUser.coordinate.longitude)
                     let partnerLoc = CLLocation(latitude: partner.coordinate.latitude, longitude: partner.coordinate.longitude)
                     
@@ -151,7 +151,7 @@ struct FullPartnerMapView: View {
                     } else {
                         currentlyFocusedTarget = .partner
                     }
-                })
+                }
                 // Automatically move map camera smoothly when partner's live coordinates change
                 .onChange(of: partner.last_updated) { _, _ in
                     if isTrackingEnabled && currentlyFocusedTarget == .partner {
