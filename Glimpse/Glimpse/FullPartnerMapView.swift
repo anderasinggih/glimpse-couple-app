@@ -132,7 +132,7 @@ struct FullPartnerMapView: View {
                     MapScaleView()
                 }
                 .ignoresSafeArea()
-                .onMapCameraChange(frequency: .onEnd) { context in
+                .onMapCameraChange { context in
                     guard !isFlying else { return } // Ignore updates during cinematic flight transitions!
                     
                     if context.isUserInitiated {
