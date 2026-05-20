@@ -58,7 +58,7 @@ struct FullPartnerMapView: View {
     init(user: GlimpseUser) {
         _position = State(initialValue: .region(MKCoordinateRegion(
             center: user.coordinate,
-            span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
+            span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
         )))
         _currentCameraCenter = State(initialValue: user.coordinate)
         _currentlyFocusedTarget = State(initialValue: .partner)
@@ -183,7 +183,7 @@ struct FullPartnerMapView: View {
                     if isTrackingEnabled && currentlyFocusedTarget == .partner {
                         position = .region(MKCoordinateRegion(
                             center: animatedPartnerCoordinate,
-                            span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
+                            span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
                         ))
                     }
                 }
@@ -191,7 +191,7 @@ struct FullPartnerMapView: View {
                     if isTrackingEnabled && currentlyFocusedTarget == .me {
                         position = .region(MKCoordinateRegion(
                             center: animatedMyCoordinate,
-                            span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
+                            span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
                         ))
                     }
                 }
@@ -268,9 +268,31 @@ struct FullPartnerMapView: View {
                         if let currentUser = auth.currentUser, currentlyFocusedTarget == .me {
                             PartnerOverlayCard(user: currentUser, locationOverride: nil, isMinimal: false)
                                 .id("me_card")
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    UISelectionFeedbackGenerator().selectionChanged()
+                                    isTrackingEnabled = true
+                                    withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                                        position = .region(MKCoordinateRegion(
+                                            center: animatedMyCoordinate,
+                                            span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
+                                        ))
+                                    }
+                                }
                         } else {
                             PartnerOverlayCard(user: partner, locationOverride: nil, isMinimal: false)
                                 .id("partner_card")
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    UISelectionFeedbackGenerator().selectionChanged()
+                                    isTrackingEnabled = true
+                                    withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                                        position = .region(MKCoordinateRegion(
+                                            center: animatedPartnerCoordinate,
+                                            span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
+                                        ))
+                                    }
+                                }
                         }
                     }
                     .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
@@ -412,7 +434,7 @@ struct FullPartnerMapView: View {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                 position = .region(MKCoordinateRegion(
                     center: animatedPartnerCoordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
+                    span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
                 ))
             }
         }
@@ -460,7 +482,7 @@ struct FullPartnerMapView: View {
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                     position = .region(MKCoordinateRegion(
                         center: animatedMyCoordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
+                        span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
                     ))
                 }
             }
@@ -485,7 +507,7 @@ struct FullPartnerMapView: View {
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                     position = .region(MKCoordinateRegion(
                         center: animatedPartnerCoordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
+                        span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
                     ))
                 }
             }
@@ -505,7 +527,7 @@ struct FullPartnerMapView: View {
                     withAnimation(.spring()) {
                         position = .region(MKCoordinateRegion(
                             center: partner.coordinate,
-                            span: MKCoordinateSpan(latitudeDelta: 0.0015, longitudeDelta: 0.0015)
+                            span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
                         ))
                     }
                 }
@@ -560,7 +582,7 @@ struct FullPartnerMapView: View {
                 withAnimation(.spring(response: 1.6, dampingFraction: 0.86)) {
                     position = .camera(MapCamera(
                         centerCoordinate: end,
-                        distance: 150.0,
+                        distance: 250.0,
                         heading: 0.0,
                         pitch: 0.0
                     ))

@@ -624,7 +624,7 @@ struct PartnerOverlayCard: View {
                 // FULL GLASSMORPHIC CONTAINER CARD
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(user.name)
+                        Text(isMe ? "Me" : user.name)
                             .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.white)
                         
