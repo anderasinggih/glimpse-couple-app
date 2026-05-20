@@ -90,12 +90,13 @@
                     <button onclick="switchTab('users')" id="tab-users" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-white/60 hover:text-white">User Management</button>
                     <button onclick="switchTab('couples')" id="tab-couples" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-white/60 hover:text-white">Couple Pairs</button>
                     <button onclick="switchTab('control')" id="tab-control" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-white/60 hover:text-white">Control Center</button>
-                    <button onclick="switchTab('diagnostics')" id="tab-diagnostics" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-white/60 hover:text-white flex items-center space-x-1.5"><span class="w-1.5 h-1.5 rounded-full bg-activeCyan animate-pulse"></span><span>Live Debugger</span></button>
+                    <button onclick="switchTab('diagnostics')" id="tab-diagnostics" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-white/60 hover:text-white flex items-center space-x-1.5">
+                        <span>Live Debugger</span>
+                    </button>
                 </nav>
 
                 <div class="flex items-center space-x-3">
                     <div class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
-                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
                         <span>API Live</span>
                     </div>
                     <button onclick="handleLogout()" class="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-rose-500/20 hover:border-rose-500/30 text-white/60 hover:text-rose-400 transition-all">
@@ -455,7 +456,7 @@
                             
                             <!-- Presets -->
                             <div class="space-y-2">
-                                <span class="block text-[10px] font-bold uppercase text-white/40 tracking-wider">⚡ Quick Presets</span>
+                                <span class="block text-[10px] font-bold uppercase text-white/40 tracking-wider">Quick Presets</span>
                                 <div class="grid grid-cols-2 gap-2.5">
                                     <button onclick="triggerSimulatedUpdate('battery_low')" class="py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 font-semibold text-[11px] transition-all">
                                         Low Battery (12%)
@@ -474,7 +475,7 @@
 
                             <!-- Custom Injector Form -->
                             <div class="pt-4 border-t border-white/5 space-y-3">
-                                <span class="block text-[10px] font-bold uppercase text-white/40 tracking-wider">🛠️ Custom State Injector</span>
+                                <span class="block text-[10px] font-bold uppercase text-white/40 tracking-wider">Custom State Injector</span>
                                 
                                 <div class="grid grid-cols-2 gap-3">
                                     <div>
@@ -544,22 +545,85 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Dynamic Movement & Traffic Burst Simulator -->
+                    <div class="p-6 rounded-2xl border border-white/10 bg-white/5 space-y-4">
+                        <h4 class="text-lg font-bold flex items-center space-x-2">
+                            <span class="w-1.5 h-6 rounded bg-emerald-500"></span>
+                            <span>Dynamic Movement & Concurrency Burst Simulator</span>
+                        </h4>
+                        <p class="text-sm text-white/60">Simulate high-frequency coordinate movement routes (Glimpse Slide test) and multi-packet chat bursts.</p>
+                        
+                        <div class="space-y-3 pt-2">
+                            <!-- Movement Route Simulation -->
+                            <div class="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl space-y-3">
+                                <span class="block font-bold text-emerald-400 text-sm">Glimpse Route Path Simulator</span>
+                                <span class="block text-xs text-white/50">Simulates user driving, walking, or riding, updating coords continuously every 1-2 seconds.</span>
+                                
+                                <div class="mt-2">
+                                    <label class="block text-[10px] text-white/45 mb-1">Target User</label>
+                                    <select id="simTargetUserSelect" class="w-full px-3 py-1.5 rounded-lg border border-white/10 bg-slate-900 text-white text-xs focus:outline-none">
+                                        <!-- Dynamic populated options -->
+                                    </select>
+                                </div>
+                                
+                                <div class="grid grid-cols-2 gap-2 mt-2">
+                                    <div>
+                                        <label class="block text-[10px] text-white/45 mb-1">Velocity Speed</label>
+                                        <select id="simSpeed" class="w-full px-3 py-1.5 rounded-lg border border-white/10 bg-slate-900 text-white text-xs focus:outline-none">
+                                            <option value="walk">Walking (Slow)</option>
+                                            <option value="moto" selected>Motorcycle (Medium)</option>
+                                            <option value="auto">Automotive / Driving (Fast)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-white/45 mb-1">Route Pattern</label>
+                                        <select id="simPattern" class="w-full px-3 py-1.5 rounded-lg border border-white/10 bg-slate-900 text-white text-xs focus:outline-none">
+                                            <option value="random">Random Cruise 🚗</option>
+                                            <option value="cloverleaf">Semanggi Loop (Bends) 🔄</option>
+                                            <option value="zigzag">Residential Grid (90° Turns) 🗺️</option>
+                                            <option value="highway">Toll Highway (Straight Cruise) 🛣️</option>
+                                            <option value="trafficjam">Traffic Jam (Stop & Go) 🚗⚠️</option>
+                                            <option value="speedchase">Speeding Chase (130 km/h) 🏎️💨</option>
+                                            <option value="trainride">Commuter Train (Station Stops) 🚄</option>
+                                            <option value="jogging">Jogging in Park 🏃‍♂️🌳</option>
+                                            <option value="gpsglitch">GPS Signal Jitter/Glitch 📡❌</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="mt-2">
+                                    <button id="btnStartSim" onclick="toggleDriverSimulation()" class="w-full py-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold text-xs transition-all border border-emerald-500/20">
+                                        Start Route Sim
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Chat Concurrency Burst Simulation -->
+                            <div class="p-4 bg-royalPurple/10 border border-royalPurple/20 rounded-xl space-y-2">
+                                <span class="block font-bold text-royalPurple text-sm">WebSocket Concurrency Burst Test</span>
+                                <span class="block text-xs text-white/50">Sends 10 consecutive simulated payload state triggers to evaluate sequence delivery stability.</span>
+                                <button id="btnStartBurst" onclick="runBurstSimulation()" class="w-full py-2 rounded-lg bg-royalPurple hover:bg-royalPurple/80 text-white font-bold text-xs transition-all mt-2">
+                                    Trigger Concurrency Burst
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- ================= DEWA (GOD MODE) CONTROL PANEL ================= -->
+                <!-- ================= SYSTEM MANAGEMENT CONTROL PANEL ================= -->
                 <div class="p-6 rounded-2xl border border-white/10 bg-white/5 space-y-6">
                     <div class="flex items-center justify-between border-b border-white/10 pb-4">
                         <h4 class="text-xl font-bold flex items-center space-x-2 text-activeCyan">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" class="w-6 h-6 text-activeCyan animate-pulse" viewBox="0 0 24 24">
                                 <path d="M12 2L2 22h20L12 2zm0 3.99L19.53 19H4.47L12 5.99zM13 16h-2v2h2v-2zm0-6h-2v4h2v-4z"/>
                             </svg>
-                            <span>Dewa God Mode Command Center</span>
+                            <span>System Management Command Center</span>
                         </h4>
-                        <span class="text-[10px] uppercase font-bold tracking-widest text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-1 rounded">God Level Access</span>
+                        <span class="text-[10px] uppercase font-bold tracking-widest text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-1 rounded">System Administrator Level</span>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- God Command 1: Glimpse Flash Exterminator -->
+                        <!-- System Command 1: Glimpse Flash Exterminator -->
                         <div class="p-4 bg-slate-950/40 border border-white/5 rounded-xl space-y-4">
                             <div>
                                 <span class="block font-bold text-white text-sm">Glimpse Flash Exterminator</span>
@@ -590,7 +654,7 @@
                             </div>
                         </div>
 
-                        <!-- God Command 2: Forced Couple Linker -->
+                        <!-- System Command 2: Forced Couple Linker -->
                         <div class="p-4 bg-slate-950/40 border border-white/5 rounded-xl space-y-4">
                             <div>
                                 <span class="block font-bold text-white text-sm">Forced Couple Linker</span>
@@ -612,13 +676,13 @@
                                         </select>
                                     </div>
                                 </div>
-                                <button onclick="executeGodLink()" class="w-full py-2 rounded-lg bg-activeCyan/10 hover:bg-activeCyan text-activeCyan hover:text-slate-950 border border-activeCyan/30 font-bold text-xs transition-all flex items-center justify-center space-x-2">
-                                    <span>Establish God-Link Connection</span>
+                                <button onclick="executeForcedLink()" class="w-full py-2 rounded-lg bg-activeCyan/10 hover:bg-activeCyan text-activeCyan hover:text-slate-950 border border-activeCyan/30 font-bold text-xs transition-all flex items-center justify-center space-x-2">
+                                    <span>Establish Direct Connection</span>
                                 </button>
                             </div>
                         </div>
 
-                        <!-- God Command 3: Global System Live Broadcast -->
+                        <!-- System Command 3: Global System Live Broadcast -->
                         <div class="p-4 bg-slate-950/40 border border-white/5 rounded-xl space-y-4">
                             <div>
                                 <span class="block font-bold text-white text-sm">Global System Broadcast</span>
@@ -636,7 +700,7 @@
                             </div>
                         </div>
 
-                        <!-- God Command 4: System Optimizer & Orphan Sweeper -->
+                        <!-- System Command 4: System Optimizer & Orphan Sweeper -->
                         <div class="p-4 bg-slate-950/40 border border-white/5 rounded-xl space-y-4 flex flex-col justify-between">
                             <div>
                                 <span class="block font-bold text-white text-sm">System Engine Optimizer</span>
@@ -653,7 +717,7 @@
                             </div>
                         </div>
 
-                        <!-- God Command 5: Secure Token Changer -->
+                        <!-- System Command 5: Secure Token Changer -->
                         <div class="p-4 bg-slate-950/40 border border-white/5 rounded-xl space-y-4 flex flex-col justify-between">
                             <div>
                                 <span class="block font-bold text-white text-sm">Secure Admin Token Changer</span>
@@ -698,8 +762,8 @@
                     <div class="xl:col-span-2 p-6 rounded-2xl border border-white/10 bg-white/5 space-y-4 flex flex-col min-h-[600px]">
                         <div class="flex items-center justify-between border-b border-white/5 pb-3">
                             <h4 class="text-lg font-bold flex items-center space-x-2">
-                                <span class="w-2.5 h-2.5 rounded-full bg-electricPurple animate-ping"></span>
-                                <span>Real-time WebSocket Broadcast Inspector</span>
+                                <span class="px-2 py-0.5 rounded bg-electricPurple/20 text-electricPurple text-[10px] font-bold border border-electricPurple/30">Live</span>
+                                <span>WebSocket Broadcast Inspector</span>
                             </h4>
                             <div class="flex items-center space-x-3">
                                 <button onclick="clearDiagWSLogs()" class="text-xs text-white/50 hover:text-white transition-all underline">Clear Term</button>
@@ -762,7 +826,6 @@
                                     <input type="text" id="diagMessageText" placeholder="Enter message text..." class="w-full px-3 py-2 rounded-lg border border-white/10 bg-slate-900 text-white focus:outline-none focus:border-activeCyan">
                                 </div>
                                 <button onclick="sendHTTPProtobufRequest()" class="w-full py-2.5 rounded-xl bg-activeCyan/10 hover:bg-activeCyan text-activeCyan hover:text-slate-950 border border-activeCyan/30 font-bold transition-all flex items-center justify-center space-x-2">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-activeCyan animate-ping"></span>
                                     <span>POST Binary Protobuf</span>
                                 </button>
                             </div>
@@ -816,12 +879,12 @@
 
                                 <div>
                                     <label class="block text-[10px] text-white/50 uppercase font-semibold mb-1">Location Name</label>
-                                    <input type="text" id="flashLocName" value="Dewa Diagnostic Lab" class="w-full px-3 py-2 rounded-lg border border-white/10 bg-slate-900 text-white focus:outline-none focus:border-orange-500">
+                                    <input type="text" id="flashLocName" value="System Diagnostic Lab" class="w-full px-3 py-2 rounded-lg border border-white/10 bg-slate-900 text-white focus:outline-none focus:border-orange-500">
                                 </div>
 
                                 <div>
                                     <label class="block text-[10px] text-white/50 uppercase font-semibold mb-1">Status Note</label>
-                                    <input type="text" id="flashStatus" value="Testing Glimpse Flash 📸" class="w-full px-3 py-2 rounded-lg border border-white/10 bg-slate-900 text-white focus:outline-none focus:border-orange-500">
+                                    <input type="text" id="flashStatus" value="Testing Glimpse Flash" class="w-full px-3 py-2 rounded-lg border border-white/10 bg-slate-900 text-white focus:outline-none focus:border-orange-500">
                                 </div>
 
                                 <div class="p-3 bg-slate-900/60 border border-white/5 rounded-xl space-y-3">
@@ -840,7 +903,6 @@
                                 </div>
 
                                 <button onclick="sendSimulatedFlash()" class="w-full py-2.5 rounded-xl bg-orange-500/10 hover:bg-orange-500 text-orange-500 hover:text-slate-950 border border-orange-500/30 font-bold transition-all flex items-center justify-center space-x-2">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-orange-500 animate-ping"></span>
                                     <span>POST Simulated Glimpse Flash</span>
                                 </button>
                             </div>
@@ -968,7 +1030,7 @@
         </div>
     </div>
 
-    <!-- ================= DEWA CHAT SPYGLASS MODAL ================= -->
+    <!-- ================= SYSTEM CHAT MONITOR MODAL ================= -->
     <div id="chatSpyModal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/80 backdrop-blur-md">
         <div class="w-full max-w-lg p-6 rounded-2xl border border-white/10 bg-slate-900 shadow-2xl space-y-4 flex flex-col h-[80vh]">
             <!-- Header -->
@@ -979,8 +1041,8 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                     <div>
-                        <h4 class="text-lg font-bold text-white" id="spyModalTitle">Live Chat Spyglass</h4>
-                        <span class="text-[10px] uppercase font-bold text-activeCyan tracking-wider">God Spy Mode</span>
+                        <h4 class="text-lg font-bold text-white" id="spyModalTitle">Live Chat Monitor</h4>
+                        <span class="text-[10px] uppercase font-bold text-activeCyan tracking-wider">System Monitor Mode</span>
                     </div>
                 </div>
                 <button onclick="closeChatSpy()" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-all">
@@ -1033,6 +1095,11 @@
                 fetchData();
                 startWebSocketDiagnostics();
                 startBandwidthMonitor();
+                
+                const activeTab = localStorage.getItem('glimpse_active_tab');
+                if (activeTab) {
+                    switchTab(activeTab);
+                }
             } else {
                 localStorage.removeItem('glimpse_admin_token');
                 window.location.href = '/admin/login';
@@ -1106,6 +1173,7 @@
         function populateSelects(data) {
             const selects = [
                 'simulatorUserSelect', 
+                'simTargetUserSelect',
                 'clearChatCoupleSelect', 
                 'dewaPruneUserSelect', 
                 'dewaLinkUser1Select', 
@@ -1269,6 +1337,7 @@
 
         // TABS NAVIGATION
         function switchTab(tabId) {
+            localStorage.setItem('glimpse_active_tab', tabId);
             document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
             
             document.querySelectorAll('.tab-btn').forEach(b => {
@@ -1409,6 +1478,233 @@
             if (confirmation) {
                 adminApiCall('clear_chat', { couple_id: coupleId });
             }
+        }
+
+        async function adminApiCallSilent(action, payload) {
+            const token = localStorage.getItem('glimpse_admin_token');
+            try {
+                const response = await fetch(`/admin/api?token=${encodeURIComponent(token)}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Admin-Token': token
+                    },
+                    body: JSON.stringify({ action: action, ...payload })
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    console.error(`Silent API error: ${data.error || 'Request failed'}`);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        let simIntervalId = null;
+        let simDurationLeft = 0;
+        let baseLat = -6.2088;
+        let baseLon = 106.8456;
+
+        function toggleDriverSimulation() {
+            const userId = document.getElementById('simTargetUserSelect').value;
+            if (!userId) {
+                alert("Please select a target user in the Route Path Simulator first!");
+                return;
+            }
+
+            if (simIntervalId) {
+                stopDriverSimulation();
+                return;
+            }
+
+            const selectedUser = appData.users.find(u => u.id == userId);
+            if (selectedUser && selectedUser.latitude) {
+                baseLat = parseFloat(selectedUser.latitude);
+                baseLon = parseFloat(selectedUser.longitude);
+            } else {
+                baseLat = -6.2088;
+                baseLon = 106.8456;
+            }
+
+            const speedSelect = document.getElementById('simSpeed').value;
+            const patternSelect = document.getElementById('simPattern').value;
+            let stepSize = 0.0001; 
+            let intervalMs = 2000;
+
+            if (speedSelect === 'moto') {
+                stepSize = 0.0003; 
+                intervalMs = 1500;
+            } else if (speedSelect === 'auto') {
+                stepSize = 0.0006; 
+                intervalMs = 1000;
+            }
+
+            simDurationLeft = 120; // 2 minutes simulation
+            document.getElementById('btnStartSim').innerText = `Stop Sim (${simDurationLeft}s)`;
+            document.getElementById('btnStartSim').classList.remove('bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/20');
+            document.getElementById('btnStartSim').classList.add('bg-rose-500/20', 'text-rose-400', 'border-rose-500/20');
+
+            let heading = Math.random() * Math.PI * 2;
+            let tick = 0;
+
+            simIntervalId = setInterval(async () => {
+                simDurationLeft -= (intervalMs / 1000);
+                if (simDurationLeft <= 0) {
+                    stopDriverSimulation();
+                    return;
+                }
+                document.getElementById('btnStartSim').innerText = `Stop Sim (${Math.ceil(simDurationLeft)}s)`;
+                tick++;
+
+                let locName = "Simulated Route";
+
+                if (patternSelect === 'cloverleaf') {
+                    // Semanggi Cloverleaf Loop (Curve/Bends)
+                    locName = "Driving: Semanggi Loop 🔄";
+                    const radius = 0.0018; 
+                    const angle = tick * 0.35;
+                    // Circle path that slowly drifts over time
+                    baseLat = parseFloat(selectedUser.latitude) + Math.sin(angle) * radius + (tick * 0.00003);
+                    baseLon = parseFloat(selectedUser.longitude) + Math.cos(angle) * radius + (tick * 0.00003);
+                } else if (patternSelect === 'zigzag') {
+                    // Residential Grid (90 deg sharp bends)
+                    locName = "Driving: Residential Grid 🗺️";
+                    if (tick % 4 === 0) {
+                        heading += Math.PI / 2 * (Math.random() > 0.5 ? 1 : -1);
+                    }
+                    baseLat += Math.sin(heading) * stepSize;
+                    baseLon += Math.cos(heading) * stepSize;
+                } else if (patternSelect === 'highway') {
+                    // Toll Highway Cruise
+                    locName = "Driving: Toll Highway 🛣️";
+                    heading += (Math.random() - 0.5) * 0.08;
+                    baseLat += Math.sin(heading) * (stepSize * 1.5);
+                    baseLon += Math.cos(heading) * (stepSize * 1.5);
+                } else if (patternSelect === 'trafficjam') {
+                    // Traffic Jam (Stop & Go)
+                    let isStopped = (tick % 6 === 0 || tick % 6 === 1);
+                    if (!isStopped) {
+                        locName = "Traffic: Stuck in Gridlock 🚗⚠️";
+                        heading += (Math.random() - 0.5) * 0.2;
+                        baseLat += Math.sin(heading) * (stepSize * 0.15);
+                        baseLon += Math.cos(heading) * (stepSize * 0.15);
+                    } else {
+                        locName = "Traffic: Stationary Gridlock 🛑";
+                    }
+                } else if (patternSelect === 'speedchase') {
+                    // Speeding Chase
+                    locName = "Driving: Highway Speeding 🏎️💨";
+                    heading += (Math.random() - 0.5) * 0.15;
+                    baseLat += Math.sin(heading) * (stepSize * 2.5);
+                    baseLon += Math.cos(heading) * (stepSize * 2.5);
+                } else if (patternSelect === 'trainride') {
+                    // Commuter Train (Station Stops)
+                    let isAtStation = (tick % 20 >= 15);
+                    if (isAtStation) {
+                        locName = "Train: Station Stop 🚉";
+                    } else {
+                        locName = "Train: Riding Commuter Line 🚄";
+                        baseLat += Math.sin(heading) * (stepSize * 1.8);
+                        baseLon += Math.cos(heading) * (stepSize * 1.8);
+                    }
+                } else if (patternSelect === 'jogging') {
+                    // Jogging
+                    locName = "Jogging: Central Park 🏃‍♂️🌳";
+                    const jogHeading = tick * 0.15;
+                    baseLat += Math.sin(jogHeading) * (stepSize * 0.3);
+                    baseLon += Math.cos(jogHeading) * (stepSize * 0.3);
+                } else if (patternSelect === 'gpsglitch') {
+                    // GPS Jitter/Glitch
+                    locName = "Walking: Bad GPS Reception 📡❌";
+                    heading += (Math.random() - 0.5) * 0.25;
+                    baseLat += Math.sin(heading) * (stepSize * 0.4);
+                    baseLon += Math.cos(heading) * (stepSize * 0.4);
+                    
+                    let noiseLat = (Math.random() - 0.5) * 0.0006;
+                    let noiseLon = (Math.random() - 0.5) * 0.0006;
+                    
+                    await adminApiCallSilent('update_location', {
+                        user_id: userId,
+                        latitude: baseLat + noiseLat,
+                        longitude: baseLon + noiseLon,
+                        location_name: locName
+                    });
+                    return; // Skip standard update_location at the bottom
+                } else {
+                    // Random Cruise
+                    locName = "Driving: Random Cruise 🚗";
+                    heading += (Math.random() - 0.5) * 0.4;
+                    baseLat += Math.sin(heading) * stepSize;
+                    baseLon += Math.cos(heading) * stepSize;
+                }
+
+                await adminApiCallSilent('update_location', {
+                    user_id: userId,
+                    latitude: baseLat,
+                    longitude: baseLon,
+                    location_name: locName
+                });
+            }, intervalMs);
+        }
+
+        function stopDriverSimulation() {
+            if (simIntervalId) {
+                clearInterval(simIntervalId);
+                simIntervalId = null;
+            }
+            document.getElementById('btnStartSim').innerText = "Start Route Sim";
+            document.getElementById('btnStartSim').classList.remove('bg-rose-500/20', 'text-rose-400', 'border-rose-500/20');
+            document.getElementById('btnStartSim').classList.add('bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/20');
+        }
+
+        async function runBurstSimulation() {
+            const userId = document.getElementById('simulatorUserSelect').value;
+            if (!userId) {
+                alert("Please select a user first!");
+                return;
+            }
+
+            const selectedUser = appData.users.find(u => u.id == userId);
+            if (!selectedUser || !selectedUser.couple_id) {
+                alert("This user is not paired! Pair them first to test chats.");
+                return;
+            }
+
+            const couple = appData.couples.find(c => c.id == selectedUser.couple_id);
+            if (!couple || !couple.rooms || couple.rooms.length === 0) {
+                alert("No active chat room found for this couple.");
+                return;
+            }
+
+            const messages = [
+                "Testing burst transmission...",
+                "Packet #1 dispatched.",
+                "Packet #2 dispatched.",
+                "Packet #3 dispatched.",
+                "WebSocket concurrency lock check.",
+                "Sending atomic payload.",
+                "Simulating high-speed chat input.",
+                "Are you receiving this smoothly?",
+                "Sequence verification complete.",
+                "End of burst test suite."
+            ];
+
+            document.getElementById('btnStartBurst').innerText = "Bursting...";
+            document.getElementById('btnStartBurst').disabled = true;
+
+            for (let i = 0; i < messages.length; i++) {
+                await adminApiCallSilent('push_diagnostics', {
+                    user_id: userId,
+                    type: 'custom',
+                    status_note: `Burst Msg ${i+1}: ${messages[i]}`
+                });
+                await new Promise(r => setTimeout(r, 300));
+            }
+
+            document.getElementById('btnStartBurst').innerText = "Trigger Concurrency Burst";
+            document.getElementById('btnStartBurst').disabled = false;
+            alert("Burst test successfully dispatched! Inspect the websocket terminal logs for sequence verification.");
         }
 
         // --- WEBSOCKET DIAGNOSTICS MONITOR ---
@@ -1619,8 +1915,8 @@
                         <div class="absolute -right-8 -bottom-8 w-16 h-16 rounded-full bg-activeCyan/5 blur-md group-hover:scale-150 transition-all"></div>
                         <div class="flex items-center justify-between">
                             <span class="text-activeCyan font-extrabold flex items-center space-x-1.5">
-                                <span class="w-1.5 h-1.5 rounded-full bg-activeCyan animate-ping"></span>
-                                <span>⚡️ PROTOBUF BINARY DECODED</span>
+                                <span class="px-1.5 py-0.5 rounded bg-activeCyan/20 text-activeCyan text-[9px] font-bold border border-activeCyan/30">Live</span>
+                                <span>PROTOBUF BINARY DECODED</span>
                             </span>
                             <span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold text-[9px] border border-emerald-500/20">-${saving}% Size Saved</span>
                         </div>
@@ -1629,7 +1925,6 @@
                             <!-- PURE WHATSAPP-STYLE TAGS -->
                             <div class="p-2.5 bg-slate-950 rounded border border-emerald-500/30 col-span-2 font-mono text-[9px] space-y-1 bg-gradient-to-r from-slate-950 to-slate-900 shadow-inner">
                                 <span class="block text-emerald-400 text-[8px] uppercase font-bold tracking-wider mb-1.5 flex items-center space-x-1">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                                     <span>WhatsApp-Style Wire Tag View (No JSON)</span>
                                 </span>
                                 <div class="text-[8.5px] text-white/90 space-y-0.5">
@@ -1788,7 +2083,7 @@
             }
         }
 
-        // --- DEWA (GOD MODE) UTILITIES ---
+        // --- SYSTEM MANAGEMENT UTILITIES ---
         async function dewaApiCall(action, payload) {
             const token = localStorage.getItem('glimpse_admin_token');
             try {
@@ -1804,34 +2099,34 @@
 
                 const data = await response.json();
                 if (response.ok) {
-                    alert(`Dewa Success: ${data.message}`);
+                    alert(`Success: ${data.message}`);
                     fetchData(); // Sync dashboard
                 } else {
-                    alert(`Dewa Error: ${data.error || 'Request failed'}`);
+                    alert(`Error: ${data.error || 'Request failed'}`);
                 }
             } catch (err) {
                 console.error(err);
-                alert(`Network failure during Dewa command execution.`);
+                alert(`Network failure during command execution.`);
             }
         }
 
         function executeFlashPrune() {
             const userId = document.getElementById('dewaPruneUserSelect').value;
             const daysAgo = document.getElementById('dewaPruneDaysSelect').value;
-            const confirmation = confirm(`DEWA COMMAND WARNING\n\nAre you sure you want to exterminate Glimpse Flash records for this selection? This will physically and permanently erase flash files from the server's disk!`);
+            const confirmation = confirm(`SYSTEM COMMAND WARNING\n\nAre you sure you want to exterminate Glimpse Flash records for this selection? This will physically and permanently erase flash files from the server's disk!`);
             if (confirmation) {
                 dewaApiCall('delete_flashes', { user_id: userId, days_ago: daysAgo });
             }
         }
 
-        function executeGodLink() {
+        function executeForcedLink() {
             const user1 = document.getElementById('dewaLinkUser1Select').value;
             const user2 = document.getElementById('dewaLinkUser2Select').value;
             if (user1 === user2) {
                 alert("Cannot establish link between the same user!");
                 return;
             }
-            const confirmation = confirm(`Establish direct God-Link between User ID ${user1} and User ID ${user2} instantly?`);
+            const confirmation = confirm(`Establish direct connection between User ID ${user1} and User ID ${user2} instantly?`);
             if (confirmation) {
                 dewaApiCall('forced_couple_link', { user_1_id: user1, user_2_id: user2 });
             }
@@ -1863,7 +2158,7 @@
                 alert("Please enter a new access token!");
                 return;
             }
-            const confirmation = confirm(`DEWA COMMAND: Change Master Admin Token?\n\nYou will be logged out and must log in again with the new token.`);
+            const confirmation = confirm(`SYSTEM COMMAND: Change Master Admin Token?\n\nYou will be logged out and must log in again with the new token.`);
             if (confirmation) {
                 const token = localStorage.getItem('glimpse_admin_token');
                 try {
@@ -1879,19 +2174,19 @@
 
                     const data = await response.json();
                     if (response.ok) {
-                        alert(`Dewa Success: ${data.message}`);
+                        alert(`Success: ${data.message}`);
                         handleLogout(); // Automatically log out
                     } else {
-                        alert(`Dewa Error: ${data.error || 'Request failed'}`);
+                        alert(`Error: ${data.error || 'Request failed'}`);
                     }
                 } catch (err) {
                     console.error(err);
-                    alert(`Network failure during Dewa command execution.`);
+                    alert(`Network failure during command execution.`);
                 }
             }
         }
 
-        // --- DEWA SPYGLASS HANDLERS ---
+        // --- SYSTEM CHAT MONITOR HANDLERS ---
         let activeSpyCoupleId = null;
         let activeSpyUsers = [];
         let activeSpyRooms = [];
@@ -1941,11 +2236,11 @@
                     // Update Room selection dropdown
                     const roomSelect = document.getElementById('spyRoomSelect');
                     const currentSelection = selectedSpyRoomId;
-                    roomSelect.innerHTML = '<option value="main">💬 General Chat (Main Room)</option>';
+                    roomSelect.innerHTML = '<option value="main">General Chat (Main Room)</option>';
                     activeSpyRooms.forEach(r => {
                         const opt = document.createElement('option');
                         opt.value = r.id;
-                        opt.innerText = `🔒 ${r.name} (Room ID ${r.id})`;
+                        opt.innerText = `Room: ${r.name} (Room ID ${r.id})`;
                         roomSelect.appendChild(opt);
                     });
 
@@ -2349,7 +2644,7 @@
                     const decoded = decodeProtobufJS(base64);
 
                     const duration = (performance.now() - startTime).toFixed(2);
-                    const waStyle = `⚡️ WhatsApp-Style Wire Tag View (No JSON):
+                    const waStyle = `WhatsApp-Style Wire Tag View (No JSON):
 1 = ${decoded.id || '-'} (Message ID)
 2 = ${decoded.room_id || '0'} (Room ID)
 3 = ${decoded.sender_id || '-'} (Sender ID)
@@ -2519,7 +2814,7 @@
                 }
 
                 if (response.ok && result && result.success) {
-                    traceSpan.innerHTML += `<span class="text-emerald-400">⚡️ SUCCESS: Glimpse Flash record created and broadcasted!</span>\n\n`;
+                    traceSpan.innerHTML += `<span class="text-emerald-400">SUCCESS: Glimpse Flash record created and broadcasted!</span>\n\n`;
                     traceSpan.innerHTML += `<span class="text-orange-400">Database Record:</span>\n` + JSON.stringify(result.flash, null, 4) + `\n\n`;
                     traceSpan.innerHTML += `<span class="text-orange-400">Public Storage URL:</span>\n<a href="${result.public_storage_url}" target="_blank" class="text-activeCyan underline break-all">${result.public_storage_url}</a>\n\n`;
                     traceSpan.innerHTML += `<span class="text-orange-400">Physical Path on Disk:</span>\n<span class="text-white/60">${result.real_path_on_disk}</span>`;
@@ -2535,7 +2830,7 @@
                     const httpStatus = `HTTP ${response.status}`;
                     if (result && result.error) {
                         // Our PHP try-catch returned a structured error
-                        traceSpan.innerHTML += `<span class="text-rose-400">❌ UPLOAD FAILED (${httpStatus}):</span>\n`;
+                        traceSpan.innerHTML += `<span class="text-rose-400">UPLOAD FAILED (${httpStatus}):</span>\n`;
                         traceSpan.innerHTML += `<span class="text-amber-400">Exception:</span> ${result.error}\n`;
                         traceSpan.innerHTML += `<span class="text-amber-400">Class:</span> ${result.exception_class || '?'}\n`;
                         traceSpan.innerHTML += `<span class="text-amber-400">File:</span> ${result.file || '?'}\n`;
@@ -2544,18 +2839,18 @@
                         }
                     } else if (result && result.message) {
                         // Laravel's own error response (e.g. {"message": "Server Error"})
-                        traceSpan.innerHTML += `<span class="text-rose-400">❌ SERVER ERROR (${httpStatus}):</span> ${result.message}\n\n`;
-                        traceSpan.innerHTML += `<span class="text-white/40">💡 Tip: git pull belum dijalankan di server, atau ada PHP parse error.</span>\n`;
+                        traceSpan.innerHTML += `<span class="text-rose-400">SERVER ERROR (${httpStatus}):</span> ${result.message}\n\n`;
+                        traceSpan.innerHTML += `<span class="text-white/40">Tip: git pull belum dijalankan di server, atau ada PHP parse error.</span>\n`;
                         traceSpan.innerHTML += `<span class="text-white/40">Check laravel.log: </span><a href="/view-logs" target="_blank" class="text-activeCyan underline">/view-logs</a>`;
                     } else {
                         // HTML error page - show first 500 chars for clues
-                        traceSpan.innerHTML += `<span class="text-rose-400">❌ NON-JSON ERROR (${httpStatus}):</span>\n`;
+                        traceSpan.innerHTML += `<span class="text-rose-400">NON-JSON ERROR (${httpStatus}):</span>\n`;
                         traceSpan.innerHTML += `<span class="text-white/60">${rawText.substring(0, 600).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>`;
                     }
                 }
             } catch (err) {
                 console.error(err);
-                traceSpan.innerHTML += `<span class="text-rose-400">❌ JS EXCEPTION:</span> ${err.message}`;
+                traceSpan.innerHTML += `<span class="text-rose-400">JS EXCEPTION:</span> ${err.message}`;
             }
         }
 
@@ -2673,12 +2968,12 @@
 
                 const decoded = decodeProtobufJS(base64);
                 if (decoded && Object.keys(decoded).length > 0) {
-                    output.innerText = "⚡️ SUCCESS: Pure Protobuf Decoded Fields:\n\n" + JSON.stringify(decoded, null, 4);
+                    output.innerText = "SUCCESS: Pure Protobuf Decoded Fields:\n\n" + JSON.stringify(decoded, null, 4);
                 } else {
-                    output.innerText = "⚠️ WARNING: Decoded empty object. Ensure the payload matches the Glimpse v3 Protobuf field definitions.";
+                    output.innerText = "WARNING: Decoded empty object. Ensure the payload matches the Glimpse v3 Protobuf field definitions.";
                 }
             } catch (err) {
-                output.innerText = "❌ ERROR: Failed to parse input. Ensure formatting is correct.\n\nDetails: " + err.message;
+                output.innerText = "ERROR: Failed to parse input. Ensure formatting is correct.\n\nDetails: " + err.message;
             }
         }
 
