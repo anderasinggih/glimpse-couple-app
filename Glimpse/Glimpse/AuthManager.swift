@@ -311,6 +311,7 @@ class AuthManager {
             loadCachedSession()
             loadCachedMessages()
             loadCachedChatRooms()
+            loadCachedFlashes()
             
             Task {
                 try? await self.fetchState()
@@ -680,10 +681,86 @@ class AuthManager {
         }
         
         let decoded = try JSONDecoder().decode([GlimpseFlash].self, from: data)
+        let currentUserId = currentUser?.id ?? 0
+        
+        var newFlashes: [GlimpseFlash] = []
         await MainActor.run {
-            self.flashes = decoded
+            for flash in decoded {
+                if !self.flashes.contains(where: { $0.id == flash.id }) {
+                    newFlashes.append(flash)
+                }
+            }
+        }
+        
+        for flash in newFlashes {
+            let flashUrlStr = flash.photo_url
+            let finalUrlStr = flashUrlStr.hasPrefix("http") ? flashUrlStr : {
+                let cleanPath = flashUrlStr.hasPrefix("/") ? String(flashUrlStr.dropFirst()) : flashUrlStr
+                let base = baseURL.replacingOccurrences(of: "/api", with: "")
+                return cleanPath.contains("storage/") ? "\(base)/\(cleanPath)" : "\(base)/storage/\(cleanPath)"
+            }()
+            
+            if let downloadUrl = URL(string: finalUrlStr) {
+                do {
+                    let (imgData, _) = try await URLSession.shared.data(from: downloadUrl)
+                    let cleanName = finalUrlStr.components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
+                    let filename = "img_cache_\(cleanName).jpg"
+                    let fileManager = FileManager.default
+                    
+                    var targetURL: URL? = nil
+                    if let groupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+                        targetURL = groupURL.appendingPathComponent(filename)
+                    } else if let cachesURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first {
+                        targetURL = cachesURL.appendingPathComponent(filename)
+                    }
+                    
+                    if let targetURL = targetURL {
+                        try imgData.write(to: targetURL)
+                        print("💾 Proactively downloaded and cached flash image locally: \(filename)")
+                    }
+                } catch {
+                    print("⚠️ Failed to proactively download and cache flash image: \(error)")
+                }
+            }
+            
+            if flash.sender_id != currentUserId {
+                await sendFlashAcknowledgement(flashId: flash.id)
+            }
+        }
+        
+        await MainActor.run {
+            var merged = self.flashes
+            for flash in decoded {
+                if !merged.contains(where: { $0.id == flash.id }) {
+                    merged.append(flash)
+                }
+            }
+            merged.sort(by: { $0.createdDate > $1.createdDate })
+            self.flashes = merged
+            self.saveFlashesCache()
         }
         return decoded
+    }
+    
+    func sendFlashAcknowledgement(flashId: Int) async {
+        guard let url = URL(string: "\(baseURL)/glimpse/flashes/\(flashId)/ack") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+                print("👍 Acknowledged flash \(flashId) to server. File deleted from server SSD!")
+            } else {
+                print("⚠️ Failed to acknowledge flash \(flashId)")
+            }
+        } catch {
+            print("❌ Error acknowledging flash \(flashId): \(error)")
+        }
     }
     
     func updateUnreadCount() {
@@ -1934,6 +2011,19 @@ class AuthManager {
         if let data = UserDefaults.standard.data(forKey: "glimpse_cached_chat_rooms"),
            let rooms = try? JSONDecoder().decode([GlimpseChatRoom].self, from: data) {
             self.chatRooms = rooms
+        }
+    }
+    
+    func saveFlashesCache() {
+        if let encoded = try? JSONEncoder().encode(flashes) {
+            UserDefaults.standard.set(encoded, forKey: "glimpse_cached_flashes")
+        }
+    }
+    
+    func loadCachedFlashes() {
+        if let data = UserDefaults.standard.data(forKey: "glimpse_cached_flashes"),
+           let decoded = try? JSONDecoder().decode([GlimpseFlash].self, from: data) {
+            self.flashes = decoded
         }
     }
     
