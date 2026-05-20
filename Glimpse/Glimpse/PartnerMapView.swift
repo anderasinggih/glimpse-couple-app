@@ -569,33 +569,83 @@ struct PartnerMarker: View {
     var isSleeping: Bool? = false
     var speed: Double? = nil
 
+    @State private var zzzPhase: Double = 0
+    @State private var pulsePhase: Double = 0
+    @State private var trailPhase: Double = 0
     
     var body: some View {
+        let isPanic = (batteryLevel ?? 100) <= 10 && (isCharging != true)
+        let isSpeeding = (speed ?? 0) > 60.0
+        
         ZStack {
+            // 🔥 Lightweight Speed Trails (Only active when speed > 60)
+            if isSpeeding {
+                ZStack {
+                    Capsule()
+                        .fill(LinearGradient(colors: [.orange, .red.opacity(0.0)], startPoint: .top, endPoint: .bottom))
+                        .frame(width: 16, height: 50)
+                        .offset(y: 35 + (trailPhase * 15))
+                        .opacity(1.0 - trailPhase)
+                        .blur(radius: 2)
+                    
+                    Capsule()
+                        .fill(LinearGradient(colors: [.yellow, .orange.opacity(0.0)], startPoint: .top, endPoint: .bottom))
+                        .frame(width: 8, height: 30)
+                        .offset(y: 30 + (trailPhase * 8))
+                        .opacity(1.0 - trailPhase)
+                        .blur(radius: 1)
+                }
+            }
+            
             if !isOffline {
-                // Static Orbit Ring
+                // Orbit Ring (Red pulse if panic, Normal gradient otherwise)
                 Circle()
                     .stroke(
-                        AngularGradient(colors: [.electricPurple, .activeCyan, .electricPurple], center: .center),
-                        lineWidth: 2
+                        isPanic ? AngularGradient(colors: [.red, .black, .red], center: .center) : AngularGradient(colors: [.electricPurple, .activeCyan, .electricPurple], center: .center),
+                        lineWidth: isPanic ? 3 : 2
                     )
                     .frame(width: 58, height: 58)
-                    .opacity(0.8)
+                    .scaleEffect(isPanic ? 1.0 + (pulsePhase * 0.15) : 1.0)
+                    .opacity(isPanic ? 1.0 - (pulsePhase * 0.5) : 0.8)
             }
             
             CachedImageView(urlString: photoUrl)
                 .frame(width: 48, height: 48)
                 .clipShape(Circle())
-                .overlay(Circle().stroke(isOffline ? Color.gray : .white.opacity(0.8), lineWidth: 1.5))
-                .shadow(color: isOffline ? .clear : .electricPurple.opacity(0.4), radius: 8)
+                .overlay(Circle().stroke(isOffline ? Color.gray : (isPanic ? Color.red : .white.opacity(0.8)), lineWidth: 1.5))
+                .shadow(color: isOffline ? .clear : (isPanic ? .red.opacity(0.6) : .electricPurple.opacity(0.4)), radius: 8)
                 .saturation(isOffline ? 0.2 : 1.0)
             
-            // 💤 Static Sleeping Badge
-            if isSleeping == true {
-                Text("💤")
+            // 🚨 Battery Panic Badge
+            if isPanic {
+                Text("🪫")
                     .font(.system(size: 14))
-                    .offset(x: -20, y: -20) // Top-left corner of the avatar circle
-                    .shadow(color: .black.opacity(0.5), radius: 2)
+                    .offset(x: 20, y: 20)
+                    .shadow(color: .red, radius: 4)
+            }
+            
+            // 💤 Animated Sleeping Badge
+            if isSleeping == true {
+                ZStack {
+                    Text("z")
+                        .font(.system(size: 10, weight: .bold))
+                        .offset(x: -18 - (zzzPhase * 4), y: -18 - (zzzPhase * 12))
+                        .opacity(1.0 - zzzPhase)
+                        .animation(.linear(duration: 1.5).repeatForever(autoreverses: false).delay(0.0), value: zzzPhase)
+                        
+                    Text("Z")
+                        .font(.system(size: 14, weight: .bold))
+                        .offset(x: -15 + (zzzPhase * 3), y: -22 - (zzzPhase * 18))
+                        .opacity(1.0 - zzzPhase)
+                        .animation(.linear(duration: 1.5).repeatForever(autoreverses: false).delay(0.5), value: zzzPhase)
+                        
+                    Text("Z")
+                        .font(.system(size: 18, weight: .bold))
+                        .offset(x: -22 - (zzzPhase * 2), y: -26 - (zzzPhase * 24))
+                        .opacity(1.0 - zzzPhase)
+                        .animation(.linear(duration: 1.5).repeatForever(autoreverses: false).delay(1.0), value: zzzPhase)
+                }
+                .shadow(color: .black.opacity(0.5), radius: 2)
             }
             
             // 🏡/💼/🎓 Smart Cozy Anchor Icon Badge
@@ -653,8 +703,8 @@ struct PartnerMarker: View {
                 .offset(y: -28) // Floats perfectly right above the avatar circle
             }
             
-            // ⚡ Speed Pill floating below the avatar (Only when moving > 1 km/h)
-            if let spd = speed, spd >= 1.0 {
+            // ⚡ Speed Pill floating below the avatar (Only when moving >= 0 km/h)
+            if let spd = speed, spd >= 0.0 {
                 Text(String(format: "%.0f km/h", spd))
                     .font(.system(size: 8, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
@@ -670,6 +720,16 @@ struct PartnerMarker: View {
                     .offset(y: 28) // Floats perfectly below the avatar circle
             }
         }
+        .onAppear {
+            withAnimation(.linear(duration: 1.0).repeatForever(autoreverses: false)) {
+                trailPhase = 1.0
+            }
+            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                pulsePhase = 1.0
+            }
+            // zzzPhase is animated directly on the Text elements via .animation modifier
+            zzzPhase = 1.0
+        }
     }
 }
 
@@ -677,6 +737,8 @@ struct PartnerOverlayCard: View {
     let user: GlimpseUser
     let locationOverride: String?
     let isMinimal: Bool
+    
+    private let auth = AuthManager.shared
     
     private var isMe: Bool {
         user.id == AuthManager.shared.currentUser?.id
@@ -733,9 +795,18 @@ struct PartnerOverlayCard: View {
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundColor(.white)
                             
-                            if let speed = currentSpeed, let avgSpeed = averageSpeed {
+                            if let speed = currentSpeed {
                                 HStack(spacing: 3) {
-                                    Image(systemName: avgSpeed >= 20.0 ? "car.fill" : (avgSpeed >= 10.0 ? "bicycle" : "figure.walk"))
+                                    let mode = isMe ? auth.myActivityMode : auth.partnerActivityMode
+                                    let icon: String = {
+                                        switch mode {
+                                        case .car: return "car.fill"
+                                        case .cycling: return "bicycle"
+                                        case .walking: return "figure.walk"
+                                        default: return "figure.walk"
+                                        }
+                                    }()
+                                    Image(systemName: icon)
                                         .font(.system(size: 10, weight: .semibold))
                                     Text(String(format: "%.0f km/h", speed))
                                         .font(.system(size: 10, weight: .bold, design: .rounded))
