@@ -32,6 +32,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     private var lastGeocodeTime: Date? = nil
     private var lastGeocodedLocation: CLLocation? = nil
     private var pendingForceSyncUpload = false
+    private var lastForceSyncTime: Date? = nil
     
     override init() {
         super.init()
@@ -70,7 +71,13 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     }
     
     // Web / Partner triggered Force Sync
-    func forceWakeGPSAndSync() {
+    func forceWakeGPSAndSync(bypassCooldown: Bool = false) -> Bool {
+        if !bypassCooldown, let lastSync = lastForceSyncTime, Date().timeIntervalSince(lastSync) < 300 {
+            self.log("⚠️ Force Sync diabaikan (Cooldown 5 menit belum selesai).")
+            return false
+        }
+        
+        lastForceSyncTime = Date()
         self.log("🔔 Permintaan Sinkronisasi Web/Partner Diterima! Memaksa GPS bangun dan menghapus cache Wi-Fi...")
         
         // CLEAR CACHE: If the user was stuck in a simulated/fake location lock, this completely wipes it!
@@ -95,6 +102,8 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         if let currentLoc = locationManager.location {
             processAndUploadLocation(currentLoc, forceUpload: true)
         }
+        
+        return true
     }
     
     // MARK: - Stationary Geofencing for Zenly-Style Background Wake

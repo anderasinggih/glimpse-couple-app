@@ -828,15 +828,20 @@ struct FullPartnerMapView: View {
     private func triggerLocalSync() {
         UISelectionFeedbackGenerator().selectionChanged()
         triggerMeGlow()
-        LiveLocationManager.shared.forceWakeGPSAndSync()
+        
+        let success = LiveLocationManager.shared.forceWakeGPSAndSync()
         
         withAnimation(.spring()) {
-            syncToastMessage = "📡 GPS Wake & Sync Triggered!"
+            if success {
+                syncToastMessage = "📡 GPS Wake & Sync Triggered!"
+            } else {
+                syncToastMessage = "⏳ Please wait 5 mins to refresh again"
+            }
         }
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
             withAnimation(.easeOut(duration: 0.5)) {
-                if syncToastMessage == "📡 GPS Wake & Sync Triggered!" {
+                if syncToastMessage == "📡 GPS Wake & Sync Triggered!" || syncToastMessage == "⏳ Please wait 5 mins to refresh again" {
                     syncToastMessage = nil
                 }
             }

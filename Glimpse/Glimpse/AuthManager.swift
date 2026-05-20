@@ -174,6 +174,10 @@ class GlimpseDatabase {
     }
 }
 
+enum ActivityMode: String, Codable {
+    case unknown, walking, cycling, car
+}
+
 @Observable
 class AuthManager {
     static let shared = AuthManager()
@@ -187,29 +191,166 @@ class AuthManager {
     var partnerSpeedHistory: [Double] = []
     var mySpeedHistory: [Double] = []
     
+    // Speed zero persistence & Activity Mode State Machine
+    var partnerActivityMode: ActivityMode = .unknown
+    var partnerLockedActivityMode: ActivityMode = .unknown
+    var partnerSpeedRangeSince: Date? = nil
+    var partnerLastSpeedRange: ActivityMode = .unknown
+    var partnerZeroSpeedStart: Date? = nil
+    
+    var myActivityMode: ActivityMode = .unknown
+    var myLockedActivityMode: ActivityMode = .unknown
+    var mySpeedRangeSince: Date? = nil
+    var myLastSpeedRange: ActivityMode = .unknown
+    var myZeroSpeedStart: Date? = nil
+    
     func updatePartnerSpeed(_ speed: Double?) {
-        guard let speed = speed else {
-            partnerSpeedKmH = nil
-            partnerSpeedHistory.removeAll()
-            return
+        let now = Date()
+        
+        // 1. Handle Speed Value & 2-Minute 0 km/h Persistence
+        var effectiveSpeed: Double? = speed
+        if speed == nil || speed! < 3.0 {
+            if partnerZeroSpeedStart == nil {
+                partnerZeroSpeedStart = now
+            }
+            
+            let elapsedZero = now.timeIntervalSince(partnerZeroSpeedStart!)
+            if elapsedZero < 120.0 { // 2 minutes persistence
+                effectiveSpeed = 0.0
+            } else {
+                effectiveSpeed = nil
+            }
+        } else {
+            partnerZeroSpeedStart = nil
         }
-        partnerSpeedKmH = speed
-        partnerSpeedHistory.append(speed)
-        if partnerSpeedHistory.count > 12 {
-            partnerSpeedHistory.removeFirst()
+        
+        self.partnerSpeedKmH = effectiveSpeed
+        
+        if let spd = effectiveSpeed {
+            partnerSpeedHistory.append(spd)
+            if partnerSpeedHistory.count > 12 {
+                partnerSpeedHistory.removeFirst()
+            }
+        }
+        
+        // 2. Determine Current Speed Range / Mode
+        let currentRange: ActivityMode
+        if effectiveSpeed == nil || effectiveSpeed! < 3.0 {
+            currentRange = .unknown
+        } else if effectiveSpeed! < 10.0 {
+            currentRange = .walking
+        } else if effectiveSpeed! <= 20.0 {
+            currentRange = .cycling
+        } else {
+            currentRange = .car
+        }
+        
+        // 3. Process Activity Mode State Machine (3-Minute Lock & Unlock)
+        if currentRange != partnerLastSpeedRange {
+            partnerLastSpeedRange = currentRange
+            partnerSpeedRangeSince = now
+        }
+        
+        let rangeDuration = now.timeIntervalSince(partnerSpeedRangeSince ?? now)
+        
+        if currentRange != .unknown {
+            if rangeDuration >= 180.0 {
+                partnerLockedActivityMode = currentRange
+                partnerActivityMode = currentRange
+            } else if partnerLockedActivityMode != .unknown {
+                partnerActivityMode = partnerLockedActivityMode
+            } else {
+                partnerActivityMode = currentRange
+            }
+        } else {
+            if partnerLockedActivityMode != .unknown {
+                partnerActivityMode = partnerLockedActivityMode
+                
+                if let zeroStart = partnerZeroSpeedStart {
+                    let elapsedZero = now.timeIntervalSince(zeroStart)
+                    if elapsedZero >= 180.0 {
+                        partnerLockedActivityMode = .unknown
+                        partnerActivityMode = .unknown
+                    }
+                }
+            } else {
+                partnerActivityMode = .unknown
+            }
         }
     }
     
     func updateMySpeed(_ speed: Double?) {
-        guard let speed = speed else {
-            mySpeedKmH = nil
-            mySpeedHistory.removeAll()
-            return
+        let now = Date()
+        
+        // 1. Handle Speed Value & 2-Minute 0 km/h Persistence
+        var effectiveSpeed: Double? = speed
+        if speed == nil || speed! < 3.0 {
+            if myZeroSpeedStart == nil {
+                myZeroSpeedStart = now
+            }
+            
+            let elapsedZero = now.timeIntervalSince(myZeroSpeedStart!)
+            if elapsedZero < 120.0 { // 2 minutes persistence
+                effectiveSpeed = 0.0
+            } else {
+                effectiveSpeed = nil
+            }
+        } else {
+            myZeroSpeedStart = nil
         }
-        mySpeedKmH = speed
-        mySpeedHistory.append(speed)
-        if mySpeedHistory.count > 12 {
-            mySpeedHistory.removeFirst()
+        
+        self.mySpeedKmH = effectiveSpeed
+        
+        if let spd = effectiveSpeed {
+            mySpeedHistory.append(spd)
+            if mySpeedHistory.count > 12 {
+                mySpeedHistory.removeFirst()
+            }
+        }
+        
+        // 2. Determine Current Speed Range / Mode
+        let currentRange: ActivityMode
+        if effectiveSpeed == nil || effectiveSpeed! < 3.0 {
+            currentRange = .unknown
+        } else if effectiveSpeed! < 10.0 {
+            currentRange = .walking
+        } else if effectiveSpeed! <= 20.0 {
+            currentRange = .cycling
+        } else {
+            currentRange = .car
+        }
+        
+        // 3. Process Activity Mode State Machine (3-Minute Lock & Unlock)
+        if currentRange != myLastSpeedRange {
+            myLastSpeedRange = currentRange
+            mySpeedRangeSince = now
+        }
+        
+        let rangeDuration = now.timeIntervalSince(mySpeedRangeSince ?? now)
+        
+        if currentRange != .unknown {
+            if rangeDuration >= 180.0 {
+                myLockedActivityMode = currentRange
+                myActivityMode = currentRange
+            } else if myLockedActivityMode != .unknown {
+                myActivityMode = myLockedActivityMode
+            } else {
+                myActivityMode = currentRange
+            }
+        } else {
+            if myLockedActivityMode != .unknown {
+                myActivityMode = myLockedActivityMode
+                
+                if let zeroStart = myZeroSpeedStart {
+                    let elapsedZero = now.timeIntervalSince(zeroStart)
+                    if elapsedZero >= 180.0 {
+                        myLockedActivityMode = .unknown
+                        myActivityMode = .unknown
+                    }
+                }
+            } else {
+                myActivityMode = .unknown
+            }
         }
     }
     
@@ -221,6 +362,42 @@ class AuthManager {
     var myAverageSpeedKmH: Double? {
         guard !mySpeedHistory.isEmpty else { return mySpeedKmH }
         return mySpeedHistory.reduce(0.0, +) / Double(mySpeedHistory.count)
+    }
+    
+    func checkStationarySpeedTimeouts() {
+        let now = Date()
+        
+        // 1. Partner Check
+        if let zeroStart = partnerZeroSpeedStart {
+            let elapsedZero = now.timeIntervalSince(zeroStart)
+            
+            if elapsedZero >= 120.0 && partnerSpeedKmH != nil {
+                partnerSpeedKmH = nil
+                print("⏱️ Partner stationary 2m: speed set to nil")
+            }
+            
+            if elapsedZero >= 180.0 && partnerLockedActivityMode != .unknown {
+                partnerLockedActivityMode = .unknown
+                partnerActivityMode = .unknown
+                print("⏱️ Partner stationary 3m: activity lock released")
+            }
+        }
+        
+        // 2. My Check
+        if let zeroStart = myZeroSpeedStart {
+            let elapsedZero = now.timeIntervalSince(zeroStart)
+            
+            if elapsedZero >= 120.0 && mySpeedKmH != nil {
+                mySpeedKmH = nil
+                print("⏱️ My stationary 2m: speed set to nil")
+            }
+            
+            if elapsedZero >= 180.0 && myLockedActivityMode != .unknown {
+                myLockedActivityMode = .unknown
+                myActivityMode = .unknown
+                print("⏱️ My stationary 3m: activity lock released")
+            }
+        }
     }
     var anniversaryDate: Date?
     var pairedDate: Date?
@@ -339,6 +516,14 @@ class AuthManager {
             print("📱 App entered background. Disconnecting WebSockets gracefully...")
             self.disconnectWebSocket()
         }
+        
+        // Start a 1-second timer to check and update stationary speed and activity lock timeout
+        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            Task { @MainActor in
+                self.checkStationarySpeedTimeouts()
+            }
+        }
     }
     
     func fetchState() async throws {
@@ -391,7 +576,7 @@ class AuthManager {
                     sharedDefaults?.set(encoded, forKey: "latest_partner_data")
                 }
                 
-                // Main App men-download foto untuk Widget agar menghindari error ATS dan menghemat baterai Widget
+                // Main App men-sync/download foto untuk Widget agar menghindari error ATS dan menghemat baterai Widget
                 Task {
                     var urlString = partner.latest_photo_url ?? partner.profile_photo_url
                     
@@ -401,12 +586,41 @@ class AuthManager {
                         urlString = cleanPath.contains("storage/") ? "\(base)/\(cleanPath)" : "\(base)/storage/\(cleanPath)"
                     }
                     
-                    if let url = URL(string: urlString) {
+                    let cleanName = urlString.components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
+                    let filename = "img_cache_\(cleanName).jpg"
+                    let fileManager = FileManager.default
+                    
+                    var cachedData: Data? = nil
+                    if let groupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+                        let cachedURL = groupURL.appendingPathComponent(filename)
+                        cachedData = try? Data(contentsOf: cachedURL)
+                    }
+                    if cachedData == nil, let cachesURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first {
+                        let cachedURL = cachesURL.appendingPathComponent(filename)
+                        cachedData = try? Data(contentsOf: cachedURL)
+                    }
+                    
+                    var syncSuccessful = false
+                    if let data = cachedData {
+                        if let groupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+                            let fileURL = groupURL.appendingPathComponent("widget_photo.jpg")
+                            do {
+                                try data.write(to: fileURL)
+                                print("💾 Synced widget_photo.jpg from local cache.")
+                                syncSuccessful = true
+                            } catch {
+                                print("⚠️ Failed to write cached data to widget_photo.jpg: \(error)")
+                            }
+                        }
+                    }
+                    
+                    if !syncSuccessful, let url = URL(string: urlString) {
                         do {
                             let (data, _) = try await URLSession.shared.data(from: url)
-                            if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+                            if let groupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
                                 let fileURL = groupURL.appendingPathComponent("widget_photo.jpg")
                                 try data.write(to: fileURL)
+                                print("💾 Downloaded and wrote widget_photo.jpg from server.")
                             }
                         } catch {
                             print("Widget Photo Download Error: \(error)")
@@ -733,6 +947,13 @@ class AuthManager {
                                 try imgData.write(to: primaryURL)
                                 print("💾 Cached image to primary App Group path: \(filename)")
                                 successWrite = true
+                                
+                                // Sync to widget_photo.jpg for Widget filesystem access
+                                if let groupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+                                    let widgetURL = groupURL.appendingPathComponent("widget_photo.jpg")
+                                    try? imgData.write(to: widgetURL)
+                                    print("💾 Also synced image to widget_photo.jpg for Widget access.")
+                                }
                             } catch {
                                 print("⚠️ Failed to write to primary App Group path: \(error)")
                             }
@@ -743,6 +964,13 @@ class AuthManager {
                                 try imgData.write(to: fallbackURL)
                                 print("💾 Cached image to local fallback path: \(filename)")
                                 successWrite = true
+                                
+                                // Sync to widget_photo.jpg for Widget access
+                                if let groupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+                                    let widgetURL = groupURL.appendingPathComponent("widget_photo.jpg")
+                                    try? imgData.write(to: widgetURL)
+                                    print("💾 Also synced image to widget_photo.jpg for Widget access.")
+                                }
                             } catch {
                                 print("⚠️ Failed to write to local fallback path: \(error)")
                             }
@@ -780,6 +1008,16 @@ class AuthManager {
             }
             merged.sort(by: { $0.createdDate > $1.createdDate })
             self.flashes = merged
+            
+            // If the latest flash is from our partner, update the partner's latest_photo_url!
+            if let latestFlash = merged.first(where: { $0.sender_id != currentUserId }) {
+                if var p = self.partner, p.id == latestFlash.sender_id {
+                    p.latest_photo_url = latestFlash.photo_url
+                    self.partner = p
+                    print("🔄 Updated partner.latest_photo_url to: \(latestFlash.photo_url)")
+                }
+            }
+            
             self.saveFlashesCache()
             print("💾 Merged flashes cache updated. Total count: \(self.flashes.count)")
         }
@@ -941,6 +1179,66 @@ class AuthManager {
         }
     }
 
+    func clearChatRoom(roomId: Int) async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/chat-rooms/\(roomId)/clear") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to clear chat room"])
+        }
+    }
+
+    func requestDeleteChatRoom(roomId: Int) async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/chat-rooms/\(roomId)/request-delete") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to request room deletion"])
+        }
+    }
+
+    func declineDeleteChatRoom(roomId: Int) async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/chat-rooms/\(roomId)/decline-delete") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to decline room deletion"])
+        }
+    }
+
+    func confirmDeleteChatRoom(roomId: Int) async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/chat-rooms/\(roomId)/confirm-delete") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to confirm room deletion"])
+        }
+    }
+
     func renameChatRoom(roomId: Int, newName: String) async throws {
         guard let url = URL(string: "\(baseURL)/glimpse/chat-rooms/\(roomId)/rename") else { return }
         guard let token = userToken else { return }
@@ -957,6 +1255,27 @@ class AuthManager {
         let (_, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to rename room"])
+        }
+    }
+
+    func updateChatRoomTheme(roomId: Int, themeColor: String?, backgroundColor: String?) async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/chat-rooms/\(roomId)/theme") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        var body: [String: Any] = [:]
+        body["theme_color"] = themeColor as Any
+        body["background_color"] = backgroundColor as Any
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to update room theme"])
         }
     }
 
@@ -997,7 +1316,7 @@ class AuthManager {
             body.append("\(gender)\r\n".data(using: .utf8)!)
         }
         
-        if let photo = photo, let imageData = photo.compressedForApp(maxDimension: 400, targetBytes: 100_000) {
+        if let photo = photo, let imageData = photo.cropAndCompressAvatar(targetBytes: 10_000) {
             let isWebP = imageData.isWebP
             let filename = isWebP ? "avatar.webp" : "avatar.jpg"
             let contentType = isWebP ? "image/webp" : "image/jpeg"
@@ -1121,6 +1440,25 @@ class AuthManager {
         }
         
         return try JSONDecoder().decode([GlimpseSchedule].self, from: data)
+    }
+    
+    func deleteSchedule(id: Int) async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/schedule/\(id)") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let bodyStr = String(data: data, encoding: .utf8) ?? ""
+            print("❌ deleteSchedule failed: \(bodyStr)")
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to delete schedule: \(bodyStr)"])
+        }
+        
+        try await fetchState()
     }
     
     func login(email: String, password: String) async throws {
@@ -1813,6 +2151,25 @@ class AuthManager {
                     }
                 }
                 
+            case "App\\Events\\SyncLocationRequested":
+                print("🔄 Sync Location Requested received from Pusher!")
+                if let eventDataString = pusherEvent.data,
+                   let eventData = eventDataString.data(using: .utf8) {
+                    struct SyncPayload: Codable {
+                        let targetUserId: Int
+                    }
+                    if let payload = try? JSONDecoder().decode(SyncPayload.self, from: eventData) {
+                        // Only force sync if the target user ID matches my current user ID
+                        if payload.targetUserId == self.currentUser?.id {
+                            print("🛰️ Forcing GPS Location Sync as requested by Web/Partner!")
+                            DispatchQueue.main.async {
+                                // Wake up GPS immediately to get fresh satellite coordinates
+                                LiveLocationManager.shared.forceWakeGPSAndSync(bypassCooldown: true)
+                            }
+                        }
+                    }
+                }
+                
             case "App\\Events\\ChatRoomCreated":
                 print("🆕 Chat room created broadcast received!")
                 if let eventDataString = pusherEvent.data,
@@ -1855,6 +2212,49 @@ class AuthManager {
                                 name: Notification.Name("GlimpseChatRoomUpdated"),
                                 object: nil,
                                 userInfo: ["room_id": payload.room_id, "name": payload.name]
+                            )
+                        }
+                    }
+                }
+
+            case "App\\Events\\ChatRoomThemeUpdated":
+                print("🎨 Chat room theme updated broadcast received!")
+                if let eventDataString = pusherEvent.data,
+                   let eventData = eventDataString.data(using: .utf8) {
+                    struct ThemeUpdatePayload: Codable {
+                        let room_id: Int
+                        let theme_color: String?
+                        let background_color: String?
+                    }
+                    if let payload = try? JSONDecoder().decode(ThemeUpdatePayload.self, from: eventData) {
+                        DispatchQueue.main.async {
+                            NotificationCenter.default.post(
+                                name: Notification.Name("GlimpseChatRoomThemeUpdated"),
+                                object: nil,
+                                userInfo: [
+                                    "room_id": payload.room_id,
+                                    "theme_color": payload.theme_color as Any,
+                                    "background_color": payload.background_color as Any
+                                ]
+                            )
+                        }
+                    }
+                }
+
+            case "App\\Events\\ChatRoomDeleteStatusChanged":
+                print("⚠️ Chat room delete status changed broadcast received!")
+                if let eventDataString = pusherEvent.data,
+                   let eventData = eventDataString.data(using: .utf8) {
+                    struct StatusPayload: Codable {
+                        let room_id: Int
+                        let delete_requested_by: Int?
+                    }
+                    if let payload = try? JSONDecoder().decode(StatusPayload.self, from: eventData) {
+                        DispatchQueue.main.async {
+                            NotificationCenter.default.post(
+                                name: Notification.Name("GlimpseChatRoomDeleteStatusChanged"),
+                                object: nil,
+                                userInfo: ["room_id": payload.room_id, "delete_requested_by": payload.delete_requested_by as Any]
                             )
                         }
                     }
@@ -1942,7 +2342,7 @@ class AuthManager {
                             
                             // Global sound & haptic alert for incoming messages from partner!
                             if finalMsg.sender_id != self.currentUser?.id {
-                                AudioServicesPlaySystemSound(1103) // Soft ting
+                                AudioServicesPlaySystemSound(1103) // Soft ting/ping sound as requested by user
                                 UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                             }
                         }
@@ -2257,6 +2657,65 @@ extension UIImage {
                     low = mid  // try higher quality
                 } else {
                     high = mid // too big, compress more
+                }
+            } else if let data = resizedImage.jpegData(compressionQuality: mid) {
+                if data.count <= targetBytes {
+                    best = data
+                    low = mid
+                } else {
+                    high = mid
+                }
+            } else {
+                break
+            }
+        }
+        
+        return best
+    }
+    
+    func cropAndCompressAvatar(targetSize: CGSize = CGSize(width: 200, height: 200), targetBytes: Int = 10_000) -> Data? {
+        let w = self.size.width
+        let h = self.size.height
+        let side = min(w, h)
+        let cropRect = CGRect(
+            x: (w - side) / 2.0,
+            y: (h - side) / 2.0,
+            width: side,
+            height: side
+        )
+        
+        guard let cgImage = self.cgImage?.cropping(to: cropRect) else { return nil }
+        let croppedImage = UIImage(cgImage: cgImage, scale: self.scale, orientation: self.imageOrientation)
+        
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0
+        let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
+        let resizedImage = renderer.image { _ in
+            croppedImage.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+        
+        // Try WebP first
+        if let webpData = resizedImage.webpData(quality: 0.5), webpData.count <= targetBytes {
+            return webpData
+        }
+        // Try JPEG fallback
+        if let jpegData = resizedImage.jpegData(compressionQuality: 0.5), jpegData.count <= targetBytes {
+            return jpegData
+        }
+        
+        // Binary search quality
+        var low: CGFloat = 0.05
+        var high: CGFloat = 0.5
+        var best: Data? = resizedImage.webpData(quality: 0.05) ?? resizedImage.jpegData(compressionQuality: 0.05)
+        
+        for _ in 0..<8 {
+            let mid = (low + high) / 2.0
+            if let data = resizedImage.webpData(quality: mid) {
+                if data.count <= targetBytes {
+                    best = data
+                    low = mid
+                } else {
+                    high = mid
                 }
             } else if let data = resizedImage.jpegData(compressionQuality: mid) {
                 if data.count <= targetBytes {
