@@ -21,6 +21,14 @@ struct FullPartnerMapView: View {
     @State private var isFlying = false
     @State private var isTrackingEnabled = true
     
+    // Glow/Pulse Animation states
+    @State private var meGlowScale: CGFloat = 1.0
+    @State private var meGlowOpacity: Double = 0.0
+    @State private var meAvatarScale: CGFloat = 1.0
+    @State private var partnerGlowScale: CGFloat = 1.0
+    @State private var partnerGlowOpacity: Double = 0.0
+    @State private var partnerAvatarScale: CGFloat = 1.0
+    
     @State private var animatedPartnerLatitude: Double = 0.0
     @State private var animatedPartnerLongitude: Double = 0.0
     @State private var animatedMyLatitude: Double = 0.0
@@ -280,6 +288,7 @@ struct FullPartnerMapView: View {
                                             span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
                                         ))
                                     }
+                                    triggerMeGlow()
                                 }
                         } else {
                             PartnerOverlayCard(user: partner, locationOverride: nil, isMinimal: false)
@@ -294,6 +303,7 @@ struct FullPartnerMapView: View {
                                             span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
                                         ))
                                     }
+                                    triggerPartnerGlow()
                                 }
                         }
                     }
@@ -494,12 +504,20 @@ struct FullPartnerMapView: View {
     private func meAnnotation(currentUser: GlimpseUser) -> some MapContent {
         Annotation("Me", coordinate: animatedMyCoordinate) {
             ZStack {
+                // Expanding neon glow ring
+                Circle()
+                    .stroke(Color.electricPurple, lineWidth: 3)
+                    .scaleEffect(meGlowScale)
+                    .opacity(meGlowOpacity)
+                    .frame(width: 60, height: 60)
+                
                 Circle()
                     .fill(Color.electricPurple.opacity(0.2))
                     .frame(width: 60, height: 60)
                     .blur(radius: 10)
                 
                 PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name, isSleeping: currentUser.is_sleeping)
+                    .scaleEffect(meAvatarScale)
             }
             .onTapGesture {
                 currentlyFocusedTarget = .me
@@ -510,6 +528,7 @@ struct FullPartnerMapView: View {
                         span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
                     ))
                 }
+                triggerMeGlow()
             }
             .id("me_marker")
         }
@@ -519,12 +538,20 @@ struct FullPartnerMapView: View {
     private func partnerAnnotation(partner: GlimpseUser) -> some MapContent {
         Annotation(partner.name, coordinate: animatedPartnerCoordinate) {
             ZStack {
+                // Expanding neon glow ring
+                Circle()
+                    .stroke(Color.activeCyan, lineWidth: 3)
+                    .scaleEffect(partnerGlowScale)
+                    .opacity(partnerGlowOpacity)
+                    .frame(width: 60, height: 60)
+                
                 Circle()
                     .fill(Color.activeCyan.opacity(0.2))
                     .frame(width: 60, height: 60)
                     .blur(radius: 10)
                 
                 PartnerMarker(photoUrl: partner.profile_photo_url, isOffline: partner.isOffline, batteryLevel: partner.battery_level, isCharging: partner.is_charging, locationName: partner.location_name, isSleeping: partner.is_sleeping)
+                    .scaleEffect(partnerAvatarScale)
             }
             .onTapGesture {
                 currentlyFocusedTarget = .partner
@@ -535,6 +562,7 @@ struct FullPartnerMapView: View {
                         span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
                     ))
                 }
+                triggerPartnerGlow()
             }
             .id("partner_marker")
         }
@@ -712,6 +740,40 @@ struct FullPartnerMapView: View {
         
         
         return coordinates
+    }
+    
+    private func triggerMeGlow() {
+        meGlowScale = 1.0
+        meGlowOpacity = 1.0
+        
+        withAnimation(.easeOut(duration: 0.8)) {
+            meGlowScale = 1.6
+            meGlowOpacity = 0.0
+            meAvatarScale = 1.15
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+                meAvatarScale = 1.0
+            }
+        }
+    }
+    
+    private func triggerPartnerGlow() {
+        partnerGlowScale = 1.0
+        partnerGlowOpacity = 1.0
+        
+        withAnimation(.easeOut(duration: 0.8)) {
+            partnerGlowScale = 1.6
+            partnerGlowOpacity = 0.0
+            partnerAvatarScale = 1.15
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+                partnerAvatarScale = 1.0
+            }
+        }
     }
 }
 
