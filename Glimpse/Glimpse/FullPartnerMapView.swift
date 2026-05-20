@@ -34,9 +34,14 @@ struct FullPartnerMapView: View {
     @State private var animatedMyLatitude: Double = 0.0
     @State private var animatedMyLongitude: Double = 0.0
     
-    // Asynchronous interpolation tasks for frame-by-frame glide
+    // Asynchronous interpolation tasks and queues for frame-by-frame glide
     @State private var partnerInterpolationTask: Task<Void, Never>? = nil
+    @State private var partnerCoordinateQueue: [CLLocationCoordinate2D] = []
+    @State private var isInterpolatingPartner = false
+    
     @State private var myInterpolationTask: Task<Void, Never>? = nil
+    @State private var myCoordinateQueue: [CLLocationCoordinate2D] = []
+    @State private var isInterpolatingMy = false
     
     @State private var previousPartnerDate: Date? = nil
     @State private var previousMyDate: Date? = nil
@@ -145,97 +150,22 @@ struct FullPartnerMapView: View {
                 // Automatically move map camera smoothly when partner's live coordinates change
                 .onChange(of: partner.last_updated) { _, _ in
                     if let lat = partner.latitude, let lon = partner.longitude, lat != 0.0, lon != 0.0 {
-                        let now = Date()
-                        let duration: Double = {
-                            if let prev = previousPartnerDate {
-                                let diff = now.timeIntervalSince(prev)
-                                return max(0.5, min(diff, 5.0))
-                            }
-                            return 1.5 // Default fallback
-                        }()
-                        previousPartnerDate = now
+                        let newCoord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                        partnerCoordinateQueue.append(newCoord)
                         
-                        partnerInterpolationTask?.cancel()
-                        
-                        let startLat = animatedPartnerLatitude == 0.0 ? lat : animatedPartnerLatitude
-                        let startLon = animatedPartnerLongitude == 0.0 ? lon : animatedPartnerLongitude
-                        let targetLat = lat
-                        let targetLon = lon
-                        
-                        let fps: Double = 60.0
-                        let stepInterval = 1.0 / fps
-                        
-                        partnerInterpolationTask = Task {
-                            let startTime = Date()
-                            while true {
-                                if Task.isCancelled { break }
-                                
-                                let elapsed = Date().timeIntervalSince(startTime)
-                                let progress = min(1.0, elapsed / duration)
-                                
-                                // Quadratic easeOut: t * (2 - t)
-                                let t = progress * (2.0 - progress)
-                                
-                                let currentLat = startLat + (targetLat - startLat) * t
-                                let currentLon = startLon + (targetLon - startLon) * t
-                                
-                                await MainActor.run {
-                                    animatedPartnerLatitude = currentLat
-                                    animatedPartnerLongitude = currentLon
-                                }
-                                
-                                if progress >= 1.0 { break }
-                                try? await Task.sleep(nanoseconds: UInt64(stepInterval * 1_000_000_000))
-                            }
+                        if !isInterpolatingPartner {
+                            startPartnerQueueInterpolator()
                         }
                     }
                 }
                 .onChange(of: auth.currentUser?.last_updated) { _, _ in
                     guard let currentUser = auth.currentUser else { return }
-                    
                     if let lat = currentUser.latitude, let lon = currentUser.longitude, lat != 0.0, lon != 0.0 {
-                        let now = Date()
-                        let duration: Double = {
-                            if let prev = previousMyDate {
-                                let diff = now.timeIntervalSince(prev)
-                                return max(0.5, min(diff, 5.0))
-                            }
-                            return 1.5 // Default fallback
-                        }()
-                        previousMyDate = now
+                        let newCoord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                        myCoordinateQueue.append(newCoord)
                         
-                        myInterpolationTask?.cancel()
-                        
-                        let startLat = animatedMyLatitude == 0.0 ? lat : animatedMyLatitude
-                        let startLon = animatedMyLongitude == 0.0 ? lon : animatedMyLongitude
-                        let targetLat = lat
-                        let targetLon = lon
-                        
-                        let fps: Double = 60.0
-                        let stepInterval = 1.0 / fps
-                        
-                        myInterpolationTask = Task {
-                            let startTime = Date()
-                            while true {
-                                if Task.isCancelled { break }
-                                
-                                let elapsed = Date().timeIntervalSince(startTime)
-                                let progress = min(1.0, elapsed / duration)
-                                
-                                // Quadratic easeOut: t * (2 - t)
-                                let t = progress * (2.0 - progress)
-                                
-                                let currentLat = startLat + (targetLat - startLat) * t
-                                let currentLon = startLon + (targetLon - startLon) * t
-                                
-                                await MainActor.run {
-                                    animatedMyLatitude = currentLat
-                                    animatedMyLongitude = currentLon
-                                }
-                                
-                                if progress >= 1.0 { break }
-                                try? await Task.sleep(nanoseconds: UInt64(stepInterval * 1_000_000_000))
-                            }
+                        if !isInterpolatingMy {
+                            startMyQueueInterpolator()
                         }
                     }
                 }
@@ -825,6 +755,91 @@ struct FullPartnerMapView: View {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
                 partnerAvatarScale = 1.0
             }
+        }
+    }
+    
+    private func startPartnerQueueInterpolator() {
+        isInterpolatingPartner = true
+        partnerInterpolationTask?.cancel()
+        
+        partnerInterpolationTask = Task {
+            while !partnerCoordinateQueue.isEmpty {
+                if Task.isCancelled { break }
+                
+                let target = partnerCoordinateQueue.removeFirst()
+                let startLat = animatedPartnerLatitude == 0.0 ? target.latitude : animatedPartnerLatitude
+                let startLon = animatedPartnerLongitude == 0.0 ? target.longitude : animatedPartnerLongitude
+                
+                // Segments will take 1.2s if we have a backlog of coordinates, and 2.5s (3-second buffer lag) under normal flow
+                let duration: TimeInterval = partnerCoordinateQueue.count > 1 ? 1.2 : 2.5
+                
+                let fps: Double = 60.0
+                let stepInterval = 1.0 / fps
+                let startTime = Date()
+                
+                while true {
+                    if Task.isCancelled { break }
+                    let elapsed = Date().timeIntervalSince(startTime)
+                    let progress = min(1.0, elapsed / duration)
+                    
+                    // Smoothstep easing
+                    let t = progress * progress * (3.0 - 2.0 * progress)
+                    
+                    let currentLat = startLat + (target.latitude - startLat) * t
+                    let currentLon = startLon + (target.longitude - startLon) * t
+                    
+                    await MainActor.run {
+                        animatedPartnerLatitude = currentLat
+                        animatedPartnerLongitude = currentLon
+                    }
+                    
+                    if progress >= 1.0 { break }
+                    try? await Task.sleep(nanoseconds: UInt64(stepInterval * 1_000_000_000))
+                }
+            }
+            isInterpolatingPartner = false
+        }
+    }
+    
+    private func startMyQueueInterpolator() {
+        isInterpolatingMy = true
+        myInterpolationTask?.cancel()
+        
+        myInterpolationTask = Task {
+            while !myCoordinateQueue.isEmpty {
+                if Task.isCancelled { break }
+                
+                let target = myCoordinateQueue.removeFirst()
+                let startLat = animatedMyLatitude == 0.0 ? target.latitude : animatedMyLatitude
+                let startLon = animatedMyLongitude == 0.0 ? target.longitude : animatedMyLongitude
+                
+                let duration: TimeInterval = myCoordinateQueue.count > 1 ? 1.2 : 2.5
+                
+                let fps: Double = 60.0
+                let stepInterval = 1.0 / fps
+                let startTime = Date()
+                
+                while true {
+                    if Task.isCancelled { break }
+                    let elapsed = Date().timeIntervalSince(startTime)
+                    let progress = min(1.0, elapsed / duration)
+                    
+                    // Smoothstep easing
+                    let t = progress * progress * (3.0 - 2.0 * progress)
+                    
+                    let currentLat = startLat + (target.latitude - startLat) * t
+                    let currentLon = startLon + (target.longitude - startLon) * t
+                    
+                    await MainActor.run {
+                        animatedMyLatitude = currentLat
+                        animatedMyLongitude = currentLon
+                    }
+                    
+                    if progress >= 1.0 { break }
+                    try? await Task.sleep(nanoseconds: UInt64(stepInterval * 1_000_000_000))
+                }
+            }
+            isInterpolatingMy = false
         }
     }
 }
