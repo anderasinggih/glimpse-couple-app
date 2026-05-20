@@ -572,20 +572,6 @@ struct FullPartnerMapView: View {
     
     private func triggerCinematicFlight(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D, targetFocus: MapFocusTarget) {
         isTrackingEnabled = true
-        let startLoc = CLLocation(latitude: start.latitude, longitude: start.longitude)
-        let endLoc = CLLocation(latitude: end.latitude, longitude: end.longitude)
-        let distance = startLoc.distance(from: endLoc)
-        
-        let dLat = end.latitude - start.latitude
-        let dLon = end.longitude - start.longitude
-        
-        // Calculate perpendicular offset for curved arc midpoint
-        let pLat = -dLon
-        let pLon = dLat
-        let arcStrength = 0.2
-        let midLat = (start.latitude + end.latitude) / 2.0 + pLat * arcStrength
-        let midLon = (start.longitude + end.longitude) / 2.0 + pLon * arcStrength
-        let midpoint = CLLocationCoordinate2D(latitude: midLat, longitude: midLon)
         
         // Update bottom overlay info card instantly at start for zero latency!
         withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
@@ -593,28 +579,8 @@ struct FullPartnerMapView: View {
         }
         
         Task {
-            // --- STAGE 1: SMOOTH 3D ARC TO MIDPOINT (UPWARD GLIDE) ---
-            // Swoop up to midpoint with a beautiful 3D tilt and rotating angle
-            let targetZoom = min(8_000_000.0, max(1500.0, distance * 2.2))
-            
             await MainActor.run {
-                withAnimation(.spring(response: 1.5, dampingFraction: 0.82)) {
-                    position = .camera(MapCamera(
-                        centerCoordinate: midpoint,
-                        distance: targetZoom,
-                        heading: 25.0, // Swoop rotation
-                        pitch: 28.0 // 3D Tilt perspective
-                    ))
-                }
-            }
-            
-            // Allow tiles to load and map to glide gracefully (1.0 seconds)
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-            
-            // --- STAGE 2: CUSHIONED LANDING ON TARGET ---
-            // Settle smoothly on the destination coordinate, flattening back out
-            await MainActor.run {
-                withAnimation(.spring(response: 1.6, dampingFraction: 0.86)) {
+                withAnimation(.easeInOut(duration: 0.6)) {
                     position = .camera(MapCamera(
                         centerCoordinate: end,
                         distance: 250.0,
@@ -624,8 +590,8 @@ struct FullPartnerMapView: View {
                 }
             }
             
-            // Wait for landing to fully settle before releasing flight lock (1.5 seconds)
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            // Wait for slide to settle (0.6 seconds)
+            try? await Task.sleep(nanoseconds: 600_000_000)
             
             await MainActor.run {
                 isFlying = false
