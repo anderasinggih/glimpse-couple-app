@@ -354,6 +354,26 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
         
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        let batteryLevel = UIDevice.current.batteryLevel
+        let isCharging = UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full
+        
+        // 🚨 BATTERY PANIC MODE 🚨
+        // Jika baterai <= 10% dan tidak sedang di-charge, matikan GPS secara brutal untuk menyelamatkan HP user!
+        // Zenly melakukan ini agar HP user tidak mati di jalan.
+        if batteryLevel > 0.0 && batteryLevel <= 0.10 && !isCharging {
+            if !isStationary {
+                self.log("🚨 BATTERY PANIC MODE! Baterai sisa \(Int(batteryLevel * 100))%. Mematikan pelacakan GPS secara paksa.")
+                locationManager.stopUpdatingLocation()
+                isStationary = true
+                
+                // Paksa upload 1 kali sebagai pesan terakhir (Ping Sekarat)
+                processAndUploadLocation(location, forceUpload: true)
+            }
+            return // Tolak semua perhitungan GPS lanjutan
+        }
+        
+        
         // Detect and set status if simulated
         if #available(iOS 15.0, *) {
             if location.sourceInformation?.isSimulatedBySoftware == true {
