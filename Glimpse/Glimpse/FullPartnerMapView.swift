@@ -23,6 +23,7 @@ struct FullPartnerMapView: View {
     @State private var insertionEdge: Edge = .bottom
     @State private var removalEdge: Edge = .top
     @State private var currentCameraSpan: Double = 0.0022
+    @State private var syncToastMessage: String? = nil
     
     // Glow/Pulse Animation states
     @State private var meGlowScale: CGFloat = 1.0
@@ -51,6 +52,11 @@ struct FullPartnerMapView: View {
     
     // Dead reckoning: check every 1 second if extrapolation is needed
     private let deadReckoningTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+    
+    @State private var speedAbove70Start: Date? = nil
+    @State private var speedBelow70Start: Date? = nil
+    @State private var targetCameraSpan: Double = 0.0022
+    private let zoomTimer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
     
     private var animatedPartnerCoordinate: CLLocationCoordinate2D {
         if let partner = auth.partner {
@@ -173,6 +179,24 @@ struct FullPartnerMapView: View {
                     }
                 }
                 
+                if let toast = syncToastMessage {
+                    Text(toast)
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(20)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.electricPurple.opacity(0.4), lineWidth: 0.8)
+                        )
+                        .shadow(color: Color.black.opacity(0.3), radius: 10, y: 5)
+                        .padding(.top, 70) // Float nicely below safe area / header
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .zIndex(100)
+                }
+                
                 // Overlay HUD
                 VStack(spacing: 0) {
                     Spacer(minLength: 50) // Space under master header
@@ -257,7 +281,7 @@ struct FullPartnerMapView: View {
                                             span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
                                         ))
                                     }
-                                    triggerMeGlow()
+                                    triggerLocalSync()
                                 }
                         } else {
                             PartnerOverlayCard(user: partner, locationOverride: nil, isMinimal: false)
@@ -378,25 +402,45 @@ struct FullPartnerMapView: View {
         }
         .onChange(of: auth.mySpeedKmH) { _, newSpeed in
             if currentlyFocusedTarget == .me {
-                let targetSpan = cameraSpanDelta(for: newSpeed)
-                withAnimation(.easeInOut(duration: 4.0)) {
-                    currentCameraSpan = targetSpan
-                }
+                updateZoomLevel(for: newSpeed)
             }
         }
         .onChange(of: auth.partnerSpeedKmH) { _, newSpeed in
             if currentlyFocusedTarget == .partner {
-                let targetSpan = cameraSpanDelta(for: newSpeed)
-                withAnimation(.easeInOut(duration: 4.0)) {
-                    currentCameraSpan = targetSpan
-                }
+                updateZoomLevel(for: newSpeed)
             }
         }
         .onChange(of: currentlyFocusedTarget) { _, newTarget in
             let speed = (newTarget == .me) ? auth.mySpeedKmH : auth.partnerSpeedKmH
-            let targetSpan = cameraSpanDelta(for: speed)
-            withAnimation(.easeInOut(duration: 0.3)) {
-                currentCameraSpan = targetSpan
+            speedAbove70Start = nil
+            speedBelow70Start = nil
+            targetCameraSpan = cameraSpanDelta(for: speed)
+            currentCameraSpan = targetCameraSpan
+            
+            if isTrackingEnabled && !isFlying {
+                let center = (newTarget == .me) ? animatedMyCoordinate : animatedPartnerCoordinate
+                position = .region(MKCoordinateRegion(
+                    center: center,
+                    span: MKCoordinateSpan(latitudeDelta: targetCameraSpan, longitudeDelta: targetCameraSpan)
+                ))
+            }
+        }
+        .onReceive(zoomTimer) { _ in
+            let activeSpeed = (currentlyFocusedTarget == .me) ? auth.mySpeedKmH : auth.partnerSpeedKmH
+            updateZoomLevel(for: activeSpeed)
+            
+            let spanDiff = targetCameraSpan - currentCameraSpan
+            if abs(spanDiff) > 0.00001 {
+                currentCameraSpan += spanDiff * 0.05
+                
+                let isInterpolating = (currentlyFocusedTarget == .me) ? isInterpolatingMy : isInterpolatingPartner
+                if !isInterpolating && isTrackingEnabled && !isFlying {
+                    let center = (currentlyFocusedTarget == .me) ? animatedMyCoordinate : animatedPartnerCoordinate
+                    position = .region(MKCoordinateRegion(
+                        center: center,
+                        span: MKCoordinateSpan(latitudeDelta: currentCameraSpan, longitudeDelta: currentCameraSpan)
+                    ))
+                }
             }
         }
     }
@@ -582,7 +626,7 @@ struct FullPartnerMapView: View {
                         span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
                     ))
                 }
-                triggerMeGlow()
+                triggerLocalSync()
             }
             .id("me_marker")
         }
@@ -781,6 +825,24 @@ struct FullPartnerMapView: View {
         }
     }
     
+    private func triggerLocalSync() {
+        UISelectionFeedbackGenerator().selectionChanged()
+        triggerMeGlow()
+        LiveLocationManager.shared.forceWakeGPSAndSync()
+        
+        withAnimation(.spring()) {
+            syncToastMessage = "📡 GPS Wake & Sync Triggered!"
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            withAnimation(.easeOut(duration: 0.5)) {
+                if syncToastMessage == "📡 GPS Wake & Sync Triggered!" {
+                    syncToastMessage = nil
+                }
+            }
+        }
+    }
+    
     private func triggerPartnerGlow() {
         partnerGlowScale = 1.0
         partnerGlowOpacity = 1.0
@@ -930,6 +992,38 @@ struct FullPartnerMapView: View {
                 auth.updateMySpeed(nil)
             }
             isInterpolatingMy = false
+        }
+    }
+    
+    private func updateZoomLevel(for speed: Double?) {
+        let now = Date()
+        guard let spd = speed else {
+            speedAbove70Start = nil
+            if speedBelow70Start == nil {
+                speedBelow70Start = now
+            }
+            if let start = speedBelow70Start, now.timeIntervalSince(start) >= 5.0 {
+                targetCameraSpan = 0.0022
+            }
+            return
+        }
+        
+        if spd >= 70.0 {
+            speedBelow70Start = nil
+            if speedAbove70Start == nil {
+                speedAbove70Start = now
+            }
+            if let start = speedAbove70Start, now.timeIntervalSince(start) >= 5.0 {
+                targetCameraSpan = 0.012
+            }
+        } else {
+            speedAbove70Start = nil
+            if speedBelow70Start == nil {
+                speedBelow70Start = now
+            }
+            if let start = speedBelow70Start, now.timeIntervalSince(start) >= 5.0 {
+                targetCameraSpan = 0.0022
+            }
         }
     }
     
