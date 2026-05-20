@@ -748,9 +748,9 @@ struct FullPartnerMapView: View {
                 
                 await MainActor.run {
                     if speedKmH >= 3.0 {
-                        auth.partnerSpeedKmH = speedKmH
+                        auth.updatePartnerSpeed(speedKmH)
                     } else {
-                        auth.partnerSpeedKmH = nil
+                        auth.updatePartnerSpeed(nil)
                     }
                 }
                 
@@ -779,7 +779,7 @@ struct FullPartnerMapView: View {
                 }
             }
             await MainActor.run {
-                auth.partnerSpeedKmH = nil
+                auth.updatePartnerSpeed(nil)
             }
             isInterpolatingPartner = false
         }
@@ -808,9 +808,9 @@ struct FullPartnerMapView: View {
                 
                 await MainActor.run {
                     if speedKmH >= 3.0 {
-                        auth.mySpeedKmH = speedKmH
+                        auth.updateMySpeed(speedKmH)
                     } else {
-                        auth.mySpeedKmH = nil
+                        auth.updateMySpeed(nil)
                     }
                 }
                 
@@ -839,7 +839,7 @@ struct FullPartnerMapView: View {
                 }
             }
             await MainActor.run {
-                auth.mySpeedKmH = nil
+                auth.updateMySpeed(nil)
             }
             isInterpolatingMy = false
         }

@@ -324,9 +324,9 @@ struct PartnerMapView: View {
                 
                 await MainActor.run {
                     if speedKmH >= 3.0 {
-                        auth.partnerSpeedKmH = speedKmH
+                        auth.updatePartnerSpeed(speedKmH)
                     } else {
-                        auth.partnerSpeedKmH = nil
+                        auth.updatePartnerSpeed(nil)
                     }
                 }
                 
@@ -355,7 +355,7 @@ struct PartnerMapView: View {
                 }
             }
             await MainActor.run {
-                auth.partnerSpeedKmH = nil
+                auth.updatePartnerSpeed(nil)
             }
             isInterpolating = false
         }
@@ -653,6 +653,14 @@ struct PartnerOverlayCard: View {
         }
     }
     
+    private var averageSpeed: Double? {
+        if isMe {
+            return AuthManager.shared.myAverageSpeedKmH
+        } else {
+            return AuthManager.shared.partnerAverageSpeedKmH
+        }
+    }
+    
     private var distanceText: String? {
         guard let currentUser = AuthManager.shared.currentUser,
               currentUser.id != user.id,
@@ -688,9 +696,9 @@ struct PartnerOverlayCard: View {
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundColor(.white)
                             
-                            if let speed = currentSpeed {
+                            if let speed = currentSpeed, let avgSpeed = averageSpeed {
                                 HStack(spacing: 3) {
-                                    Image(systemName: speed >= 20.0 ? "car.fill" : (speed >= 8.0 ? "bicycle" : "figure.walk"))
+                                    Image(systemName: avgSpeed >= 20.0 ? "car.fill" : (avgSpeed >= 10.0 ? "bicycle" : "figure.walk"))
                                         .font(.system(size: 10, weight: .semibold))
                                     Text(String(format: "%.0f km/h", speed))
                                         .font(.system(size: 10, weight: .bold, design: .rounded))

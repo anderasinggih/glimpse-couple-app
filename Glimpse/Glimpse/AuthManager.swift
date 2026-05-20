@@ -184,6 +184,44 @@ class AuthManager {
     var partner: GlimpseUser?
     var partnerSpeedKmH: Double? = nil
     var mySpeedKmH: Double? = nil
+    var partnerSpeedHistory: [Double] = []
+    var mySpeedHistory: [Double] = []
+    
+    func updatePartnerSpeed(_ speed: Double?) {
+        guard let speed = speed else {
+            partnerSpeedKmH = nil
+            partnerSpeedHistory.removeAll()
+            return
+        }
+        partnerSpeedKmH = speed
+        partnerSpeedHistory.append(speed)
+        if partnerSpeedHistory.count > 12 {
+            partnerSpeedHistory.removeFirst()
+        }
+    }
+    
+    func updateMySpeed(_ speed: Double?) {
+        guard let speed = speed else {
+            mySpeedKmH = nil
+            mySpeedHistory.removeAll()
+            return
+        }
+        mySpeedKmH = speed
+        mySpeedHistory.append(speed)
+        if mySpeedHistory.count > 12 {
+            mySpeedHistory.removeFirst()
+        }
+    }
+    
+    var partnerAverageSpeedKmH: Double? {
+        guard !partnerSpeedHistory.isEmpty else { return partnerSpeedKmH }
+        return partnerSpeedHistory.reduce(0.0, +) / Double(partnerSpeedHistory.count)
+    }
+    
+    var myAverageSpeedKmH: Double? {
+        guard !mySpeedHistory.isEmpty else { return mySpeedKmH }
+        return mySpeedHistory.reduce(0.0, +) / Double(mySpeedHistory.count)
+    }
     var anniversaryDate: Date?
     var pairedDate: Date?
     var disconnectRequestedBy: Int?
