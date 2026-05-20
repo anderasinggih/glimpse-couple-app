@@ -573,38 +573,11 @@ struct PartnerMarker: View {
     @State private var zzzPhase2: Double = 0
     @State private var zzzPhase3: Double = 0
     @State private var pulsePhase: Double = 0
-    @State private var trailPhase: Double = 0
     
     var body: some View {
         let isPanic = (batteryLevel ?? 100) <= 10 && (isCharging != true)
-        let isSpeeding = (speed ?? 0) > 15.0
         
         ZStack {
-            // 🔥 Lightweight Speed Trails (Only active when speed > 15)
-            if isSpeeding {
-                ZStack {
-                    Capsule()
-                        .fill(LinearGradient(colors: [.orange, .red.opacity(0.0)], startPoint: .top, endPoint: .bottom))
-                        .frame(width: 16, height: 50)
-                        .offset(y: 35 + (trailPhase * 15))
-                        .opacity(1.0 - trailPhase)
-                        .blur(radius: 2)
-                    
-                    Capsule()
-                        .fill(LinearGradient(colors: [.yellow, .orange.opacity(0.0)], startPoint: .top, endPoint: .bottom))
-                        .frame(width: 8, height: 30)
-                        .offset(y: 30 + (trailPhase * 8))
-                        .opacity(1.0 - trailPhase)
-                        .blur(radius: 1)
-                }
-                .onAppear {
-                    trailPhase = 0.0
-                    withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
-                        trailPhase = 1.0
-                    }
-                }
-            }
-            
             if !isOffline {
                 // Orbit Ring (Red pulse if panic, Normal gradient otherwise)
                 Circle()
