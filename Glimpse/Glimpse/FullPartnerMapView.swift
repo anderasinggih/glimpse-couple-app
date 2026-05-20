@@ -22,6 +22,7 @@ struct FullPartnerMapView: View {
     @State private var isTrackingEnabled = true
     @State private var insertionEdge: Edge = .bottom
     @State private var removalEdge: Edge = .top
+    @State private var currentCameraSpan: Double = 0.0022
     
     // Glow/Pulse Animation states
     @State private var meGlowScale: CGFloat = 1.0
@@ -249,7 +250,8 @@ struct FullPartnerMapView: View {
                                     UISelectionFeedbackGenerator().selectionChanged()
                                     isTrackingEnabled = true
                                     let spanDelta = cameraSpanDelta(for: auth.mySpeedKmH)
-                                    withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        currentCameraSpan = spanDelta
                                         position = .region(MKCoordinateRegion(
                                             center: animatedMyCoordinate,
                                             span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
@@ -265,7 +267,8 @@ struct FullPartnerMapView: View {
                                     UISelectionFeedbackGenerator().selectionChanged()
                                     isTrackingEnabled = true
                                     let spanDelta = cameraSpanDelta(for: auth.partnerSpeedKmH)
-                                    withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        currentCameraSpan = spanDelta
                                         position = .region(MKCoordinateRegion(
                                             center: animatedPartnerCoordinate,
                                             span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
@@ -366,10 +369,35 @@ struct FullPartnerMapView: View {
                 animatedPartnerLatitude = lat
                 animatedPartnerLongitude = lon
             }
+            let initialSpeed = (currentlyFocusedTarget == .me) ? auth.mySpeedKmH : auth.partnerSpeedKmH
+            currentCameraSpan = cameraSpanDelta(for: initialSpeed)
             triggerImmediateSync()
         }
         .onReceive(deadReckoningTimer) { _ in
             extrapolateDeadReckoning()
+        }
+        .onChange(of: auth.mySpeedKmH) { _, newSpeed in
+            if currentlyFocusedTarget == .me {
+                let targetSpan = cameraSpanDelta(for: newSpeed)
+                withAnimation(.easeInOut(duration: 4.0)) {
+                    currentCameraSpan = targetSpan
+                }
+            }
+        }
+        .onChange(of: auth.partnerSpeedKmH) { _, newSpeed in
+            if currentlyFocusedTarget == .partner {
+                let targetSpan = cameraSpanDelta(for: newSpeed)
+                withAnimation(.easeInOut(duration: 4.0)) {
+                    currentCameraSpan = targetSpan
+                }
+            }
+        }
+        .onChange(of: currentlyFocusedTarget) { _, newTarget in
+            let speed = (newTarget == .me) ? auth.mySpeedKmH : auth.partnerSpeedKmH
+            let targetSpan = cameraSpanDelta(for: speed)
+            withAnimation(.easeInOut(duration: 0.3)) {
+                currentCameraSpan = targetSpan
+            }
         }
     }
     
@@ -468,7 +496,8 @@ struct FullPartnerMapView: View {
         }
         .onTapGesture {
             let spanDelta = cameraSpanDelta(for: auth.partnerSpeedKmH)
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                currentCameraSpan = spanDelta
                 position = .region(MKCoordinateRegion(
                     center: animatedPartnerCoordinate,
                     span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
@@ -546,7 +575,8 @@ struct FullPartnerMapView: View {
                 currentlyFocusedTarget = .me
                 isTrackingEnabled = true
                 let spanDelta = cameraSpanDelta(for: auth.mySpeedKmH)
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    currentCameraSpan = spanDelta
                     position = .region(MKCoordinateRegion(
                         center: animatedMyCoordinate,
                         span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
@@ -581,7 +611,8 @@ struct FullPartnerMapView: View {
                 currentlyFocusedTarget = .partner
                 isTrackingEnabled = true
                 let spanDelta = cameraSpanDelta(for: auth.partnerSpeedKmH)
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    currentCameraSpan = spanDelta
                     position = .region(MKCoordinateRegion(
                         center: animatedPartnerCoordinate,
                         span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
@@ -795,16 +826,6 @@ struct FullPartnerMapView: View {
                     } else {
                         auth.updatePartnerSpeed(nil)
                     }
-                    
-                    if isTrackingEnabled && currentlyFocusedTarget == .partner && !isFlying {
-                        let spanDelta = cameraSpanDelta(for: speedKmH)
-                        withAnimation(.easeInOut(duration: duration)) {
-                            position = .region(MKCoordinateRegion(
-                                center: target,
-                                span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
-                            ))
-                        }
-                    }
                 }
                 
                 let fps: Double = 60.0
@@ -825,6 +846,13 @@ struct FullPartnerMapView: View {
                     await MainActor.run {
                         animatedPartnerLatitude = currentLat
                         animatedPartnerLongitude = currentLon
+                        
+                        if isTrackingEnabled && currentlyFocusedTarget == .partner && !isFlying {
+                            position = .region(MKCoordinateRegion(
+                                center: CLLocationCoordinate2D(latitude: currentLat, longitude: currentLon),
+                                span: MKCoordinateSpan(latitudeDelta: currentCameraSpan, longitudeDelta: currentCameraSpan)
+                            ))
+                        }
                     }
                     
                     if progress >= 1.0 { break }
@@ -865,16 +893,6 @@ struct FullPartnerMapView: View {
                     } else {
                         auth.updateMySpeed(nil)
                     }
-                    
-                    if isTrackingEnabled && currentlyFocusedTarget == .me && !isFlying {
-                        let spanDelta = cameraSpanDelta(for: speedKmH)
-                        withAnimation(.easeInOut(duration: duration)) {
-                            position = .region(MKCoordinateRegion(
-                                center: target,
-                                span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
-                            ))
-                        }
-                    }
                 }
                 
                 let fps: Double = 60.0
@@ -895,6 +913,13 @@ struct FullPartnerMapView: View {
                     await MainActor.run {
                         animatedMyLatitude = currentLat
                         animatedMyLongitude = currentLon
+                        
+                        if isTrackingEnabled && currentlyFocusedTarget == .me && !isFlying {
+                            position = .region(MKCoordinateRegion(
+                                center: CLLocationCoordinate2D(latitude: currentLat, longitude: currentLon),
+                                span: MKCoordinateSpan(latitudeDelta: currentCameraSpan, longitudeDelta: currentCameraSpan)
+                            ))
+                        }
                     }
                     
                     if progress >= 1.0 { break }
