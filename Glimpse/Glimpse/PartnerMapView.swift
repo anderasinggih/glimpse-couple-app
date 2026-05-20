@@ -177,7 +177,7 @@ struct PartnerMapView: View {
                                             .frame(width: 60, height: 60)
                                             .blur(radius: 10)
                                         
-                                        PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name, isSleeping: currentUser.is_sleeping)
+                                        PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name, isSleeping: currentUser.is_sleeping, speed: auth.mySpeedKmH)
                                     }
                                     .onTapGesture {
                                         withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
@@ -199,7 +199,7 @@ struct PartnerMapView: View {
                                             .frame(width: 80, height: 80)
                                             .blur(radius: 20)
                                         
-                                        PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline, batteryLevel: user.battery_level, isCharging: user.is_charging, locationName: user.location_name, isSleeping: user.is_sleeping)
+                                        PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline, batteryLevel: user.battery_level, isCharging: user.is_charging, locationName: user.location_name, isSleeping: user.is_sleeping, speed: auth.partnerSpeedKmH)
                                     }
                                     .onTapGesture {
                                         withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
@@ -567,6 +567,7 @@ struct PartnerMarker: View {
     var isCharging: Bool? = nil
     var locationName: String? = nil
     var isSleeping: Bool? = false
+    var speed: Double? = nil
 
     
     var body: some View {
@@ -650,6 +651,23 @@ struct PartnerMarker: View {
                 )
                 .shadow(color: color.opacity(0.3), radius: 4, x: 0, y: 2)
                 .offset(y: -28) // Floats perfectly right above the avatar circle
+            }
+            
+            // ⚡ Speed Pill floating below the avatar (Only when moving > 1 km/h)
+            if let spd = speed, spd >= 1.0 {
+                Text(String(format: "%.0f km/h", spd))
+                    .font(.system(size: 8, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 3)
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(10)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(.white.opacity(0.3), lineWidth: 0.5)
+                    )
+                    .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
+                    .offset(y: 28) // Floats perfectly below the avatar circle
             }
         }
     }

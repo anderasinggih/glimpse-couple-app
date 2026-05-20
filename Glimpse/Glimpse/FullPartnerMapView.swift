@@ -20,6 +20,8 @@ struct FullPartnerMapView: View {
     @State private var currentlyFocusedTarget: MapFocusTarget = .partner
     @State private var isFlying = false
     @State private var isTrackingEnabled = true
+    @State private var insertionEdge: Edge = .bottom
+    @State private var removalEdge: Edge = .top
     
     // Glow/Pulse Animation states
     @State private var meGlowScale: CGFloat = 1.0
@@ -273,32 +275,65 @@ struct FullPartnerMapView: View {
                                 }
                         }
                     }
-                    .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
-                    .animation(.spring(response: 0.45, dampingFraction: 0.8), value: currentlyFocusedTarget)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: insertionEdge).combined(with: .opacity),
+                        removal: .move(edge: removalEdge).combined(with: .opacity)
+                    ))
+                    .animation(.spring(response: 0.35, dampingFraction: 0.85), value: currentlyFocusedTarget)
                     .padding(.horizontal, 12)
                     .padding(.bottom, 8)
                     .shadow(color: Color.black.opacity(0.25), radius: 10, y: 5)
                     .gesture(
-                        DragGesture(minimumDistance: 20)
+                        DragGesture(minimumDistance: 15)
                             .onEnded { value in
+                                guard !isFlying else { return }
+                                guard let currentUser = auth.currentUser else { return }
+                                
                                 let threshold: CGFloat = 30
-                                if abs(value.translation.height) > threshold || abs(value.translation.width) > threshold {
-                                    guard !isFlying else { return }
-                                    guard let currentUser = auth.currentUser else { return }
-                                    
-                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                    
-                                    let nextTarget: MapFocusTarget = (currentlyFocusedTarget == .me) ? .partner : .me
-                                    let myCoord = currentUser.coordinate
-                                    let partnerCoord = partner.coordinate
-                                    
-                                    isFlying = true
-                                    
-                                    let targetCoord = (nextTarget == .me) ? myCoord : partnerCoord
-                                    let startCoord = (nextTarget == .me) ? partnerCoord : myCoord
-                                    
-                                    triggerCinematicFlight(from: startCoord, to: targetCoord, targetFocus: nextTarget)
+                                let dx = value.translation.width
+                                let dy = value.translation.height
+                                
+                                // Determine primary swipe direction and assign transitions accordingly
+                                if abs(dx) > abs(dy) {
+                                    // Horizontal swipe
+                                    if dx < -threshold {
+                                        // Swipe left -> next enters from trailing (right), old exits to leading (left)
+                                        insertionEdge = .trailing
+                                        removalEdge = .leading
+                                    } else if dx > threshold {
+                                        // Swipe right -> next enters from leading (left), old exits to trailing (right)
+                                        insertionEdge = .leading
+                                        removalEdge = .trailing
+                                    } else {
+                                        return
+                                    }
+                                } else {
+                                    // Vertical swipe
+                                    if dy < -threshold {
+                                        // Swipe up -> next enters from bottom, old exits to top
+                                        insertionEdge = .bottom
+                                        removalEdge = .top
+                                    } else if dy > threshold {
+                                        // Swipe down -> next enters from top, old exits to bottom
+                                        insertionEdge = .top
+                                        removalEdge = .bottom
+                                    } else {
+                                        return
+                                    }
                                 }
+                                
+                                UISelectionFeedbackGenerator().selectionChanged()
+                                
+                                let nextTarget: MapFocusTarget = (currentlyFocusedTarget == .me) ? .partner : .me
+                                let myCoord = currentUser.coordinate
+                                let partnerCoord = partner.coordinate
+                                
+                                isFlying = true
+                                
+                                let targetCoord = (nextTarget == .me) ? myCoord : partnerCoord
+                                let startCoord = (nextTarget == .me) ? partnerCoord : myCoord
+                                
+                                triggerCinematicFlight(from: startCoord, to: targetCoord, targetFocus: nextTarget)
                             }
                     )
                 }
@@ -504,7 +539,7 @@ struct FullPartnerMapView: View {
                     .frame(width: 60, height: 60)
                     .blur(radius: 10)
                 
-                PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name, isSleeping: currentUser.is_sleeping)
+                PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name, isSleeping: currentUser.is_sleeping, speed: auth.mySpeedKmH)
                     .scaleEffect(meAvatarScale)
             }
             .onTapGesture {
@@ -539,7 +574,7 @@ struct FullPartnerMapView: View {
                     .frame(width: 60, height: 60)
                     .blur(radius: 10)
                 
-                PartnerMarker(photoUrl: partner.profile_photo_url, isOffline: partner.isOffline, batteryLevel: partner.battery_level, isCharging: partner.is_charging, locationName: partner.location_name, isSleeping: partner.is_sleeping)
+                PartnerMarker(photoUrl: partner.profile_photo_url, isOffline: partner.isOffline, batteryLevel: partner.battery_level, isCharging: partner.is_charging, locationName: partner.location_name, isSleeping: partner.is_sleeping, speed: auth.partnerSpeedKmH)
                     .scaleEffect(partnerAvatarScale)
             }
             .onTapGesture {
