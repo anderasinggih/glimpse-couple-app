@@ -1,8 +1,178 @@
+#if !WIDGET
 import Foundation
 import SwiftUI
 import WidgetKit
 import AudioToolbox
 import Combine
+import ImageIO
+import UniformTypeIdentifiers
+import SQLite3
+
+// MARK: - SQLite Database Manager
+class GlimpseDatabase {
+    static let shared = GlimpseDatabase()
+    private var db: OpaquePointer?
+    
+    private init() {
+        openDatabase()
+        createTable()
+    }
+    
+    private func openDatabase() {
+        let fileManager = FileManager.default
+        guard let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            print("❌ SQLite: Failed to find documents directory")
+            return
+        }
+        let fileURL = documentsDirectory.appendingPathComponent("glimpse_chat.sqlite")
+        
+        if sqlite3_open(fileURL.path, &db) != SQLITE_OK {
+            print("❌ SQLite: Error opening database")
+        } else {
+            print("✅ SQLite: Opened connection to database at \(fileURL.path)")
+        }
+    }
+    
+    private func createTable() {
+        let createTableString = """
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id INTEGER PRIMARY KEY,
+            couple_id INTEGER,
+            sender_id INTEGER,
+            message TEXT,
+            room_id INTEGER,
+            created_at TEXT,
+            updated_at TEXT
+        );
+        """
+        
+        var createTableStatement: OpaquePointer?
+        if sqlite3_prepare_v2(db, createTableString, -1, &createTableStatement, nil) == SQLITE_OK {
+            if sqlite3_step(createTableStatement) == SQLITE_DONE {
+                print("✅ SQLite: chat_messages table created or verified.")
+            } else {
+                print("❌ SQLite: chat_messages table could not be created.")
+            }
+        } else {
+            print("❌ SQLite: CREATE TABLE statement could not be prepared.")
+        }
+        sqlite3_finalize(createTableStatement)
+    }
+    
+    func saveMessage(_ msg: ChatMessage) {
+        let insertStatementString = """
+        INSERT OR REPLACE INTO chat_messages (id, couple_id, sender_id, message, room_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?);
+        """
+        
+        var insertStatement: OpaquePointer?
+        if sqlite3_prepare_v2(db, insertStatementString, -1, &insertStatement, nil) == SQLITE_OK {
+            sqlite3_bind_int(insertStatement, 1, Int32(msg.id))
+            sqlite3_bind_int(insertStatement, 2, Int32(msg.couple_id))
+            sqlite3_bind_int(insertStatement, 3, Int32(msg.sender_id))
+            sqlite3_bind_text(insertStatement, 4, (msg.message as NSString).utf8String, -1, nil)
+            
+            if let roomId = msg.room_id {
+                sqlite3_bind_int(insertStatement, 5, Int32(roomId))
+            } else {
+                sqlite3_bind_null(insertStatement, 5)
+            }
+            
+            sqlite3_bind_text(insertStatement, 6, (msg.created_at as NSString? ?? "" as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(insertStatement, 7, (msg.updated_at as NSString? ?? "" as NSString).utf8String, -1, nil)
+            
+            if sqlite3_step(insertStatement) == SQLITE_DONE {
+                // Successfully inserted or updated
+            } else {
+                print("❌ SQLite: Could not insert row.")
+            }
+        } else {
+            print("❌ SQLite: INSERT statement could not be prepared.")
+        }
+        sqlite3_finalize(insertStatement)
+    }
+    
+    func saveMessages(_ messages: [ChatMessage]) {
+        // Run in transaction for high performance bulk inserts
+        sqlite3_exec(db, "BEGIN TRANSACTION", nil, nil, nil)
+        for msg in messages {
+            saveMessage(msg)
+        }
+        sqlite3_exec(db, "COMMIT TRANSACTION", nil, nil, nil)
+    }
+    
+    func getMessages(forRoomId roomId: Int?) -> [ChatMessage] {
+        let queryStatementString: String
+        if let rId = roomId {
+            queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id = ? ORDER BY id ASC;"
+        } else {
+            queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id IS NULL ORDER BY id ASC;"
+        }
+        
+        var queryStatement: OpaquePointer?
+        var messages: [ChatMessage] = []
+        
+        if sqlite3_prepare_v2(db, queryStatementString, -1, &queryStatement, nil) == SQLITE_OK {
+            if let rId = roomId {
+                sqlite3_bind_int(queryStatement, 1, Int32(rId))
+            }
+            
+            while sqlite3_step(queryStatement) == SQLITE_ROW {
+                let id = Int(sqlite3_column_int(queryStatement, 0))
+                let coupleId = Int(sqlite3_column_int(queryStatement, 1))
+                let senderId = Int(sqlite3_column_int(queryStatement, 2))
+                
+                guard let messageTextBytes = sqlite3_column_text(queryStatement, 3) else { continue }
+                let message = String(cString: messageTextBytes)
+                
+                var roomId: Int? = nil
+                if sqlite3_column_type(queryStatement, 4) != SQLITE_NULL {
+                    roomId = Int(sqlite3_column_int(queryStatement, 4))
+                }
+                
+                let createdAt: String?
+                if let createdAtBytes = sqlite3_column_text(queryStatement, 5) {
+                    createdAt = String(cString: createdAtBytes)
+                } else {
+                    createdAt = nil
+                }
+                
+                let updatedAt: String?
+                if let updatedAtBytes = sqlite3_column_text(queryStatement, 6) {
+                    updatedAt = String(cString: updatedAtBytes)
+                } else {
+                    updatedAt = nil
+                }
+                
+                let chatMessage = ChatMessage(
+                    id: id,
+                    couple_id: coupleId,
+                    sender_id: senderId,
+                    message: message,
+                    room_id: roomId,
+                    created_at: createdAt,
+                    updated_at: updatedAt
+                )
+                messages.append(chatMessage)
+            }
+        } else {
+            print("❌ SQLite: SELECT statement could not be prepared.")
+        }
+        sqlite3_finalize(queryStatement)
+        return messages
+    }
+    
+    func clearAllMessages() {
+        let deleteString = "DELETE FROM chat_messages;"
+        var deleteStatement: OpaquePointer?
+        if sqlite3_prepare_v2(db, deleteString, -1, &deleteStatement, nil) == SQLITE_OK {
+            if sqlite3_step(deleteStatement) == SQLITE_DONE {
+                print("✅ SQLite: All messages cleared.")
+            }
+        }
+        sqlite3_finalize(deleteStatement)
+    }
+}
 
 @Observable
 class AuthManager {
@@ -58,7 +228,11 @@ class AuthManager {
     var initialLastReadId = 0
     var latestFetchedMessages: [ChatMessage] = []
     var flashes: [GlimpseFlash] = []
-    var chatRooms: [GlimpseChatRoom] = []
+    var chatRooms: [GlimpseChatRoom] = [] {
+        didSet {
+            saveChatRoomsCache()
+        }
+    }
     var activeRoomId: Int? = nil
     /// Persistent cache for room-specific messages — survives tab switching and view recreation
     var roomMessagesCache: [Int: [ChatMessage]] = [:]
@@ -66,6 +240,11 @@ class AuthManager {
     // UPLOAD PROGRESS
     var isUploadingFlash: Bool = false
     var uploadProgress: Double = 0.0
+    var uploadFailed: Bool = false
+    var uploadSuccess: Bool = false
+    var uploadTask: Task<Void, Never>? = nil
+    var uploadQueueTotal: Int = 0
+    var uploadQueueCurrent: Int = 0
     
     // WEBSOCKET PROPERTIES
     private var webSocketTask: URLSessionWebSocketTask?
@@ -73,6 +252,8 @@ class AuthManager {
     var isPartnerTyping = false
     private var shouldReconnect = true
     private var reconnectInterval: TimeInterval = 2.0
+    private var pingTimer: Timer?
+    private var isConnecting = false
     
     var userToken: String? {
         UserDefaults.standard.string(forKey: "auth_token")
@@ -89,12 +270,33 @@ class AuthManager {
             // 1. Instantly load cached session for offline resilience
             loadCachedSession()
             loadCachedMessages()
+            loadCachedChatRooms()
             
             Task {
                 try? await self.fetchState()
                 self.connectWebSocket()
                 self.processPendingFlashes()
             }
+        }
+        
+        // Reconnect WebSocket and sync state immediately when returning to foreground
+        NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self else { return }
+            print("📱 App entered foreground. Reconnecting WebSockets...")
+            if self.isAuthenticated {
+                self.connectWebSocket()
+                Task {
+                    try? await self.fetchState()
+                    _ = try? await self.fetchFlashes()
+                }
+            }
+        }
+        
+        // Gracefully disconnect WebSocket on background to prevent socket leaks and waste of battery
+        NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self else { return }
+            print("📱 App entered background. Disconnecting WebSockets gracefully...")
+            self.disconnectWebSocket()
         }
     }
     
@@ -140,9 +342,13 @@ class AuthManager {
             
             // SAVE DATA FOR WIDGET
             let sharedDefaults = UserDefaults(suiteName: "group.glimpse.app")
-            if let partner = responseData.partner_data,
-               let encoded = try? JSONEncoder().encode(partner) {
-                sharedDefaults?.set(encoded, forKey: "latest_partner_data")
+            if var partner = responseData.partner_data {
+                // Strip large data not needed by widget
+                partner.location_history = nil
+                
+                if let encoded = try? JSONEncoder().encode(partner) {
+                    sharedDefaults?.set(encoded, forKey: "latest_partner_data")
+                }
                 
                 // Main App men-download foto untuk Widget agar menghindari error ATS dan menghemat baterai Widget
                 Task {
@@ -341,6 +547,19 @@ class AuthManager {
         let isCharging = UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full
         let wifi = LiveLocationManager.shared.currentWiFiBSSID
         
+        // Update local currentUser state immediately so the map renders "Me" in real-time
+        Task { @MainActor in
+            if let lat = latitude, let lon = longitude {
+                self.currentUser?.latitude = lat
+                self.currentUser?.longitude = lon
+                if let name = locationName {
+                    self.currentUser?.location_name = name
+                }
+                self.currentUser?.battery_level = batteryLevel
+                self.currentUser?.is_charging = isCharging
+            }
+        }
+        
         Task {
             guard let url = URL(string: "\(baseURL)/glimpse/status") else { return }
             guard let token = userToken else { return }
@@ -387,13 +606,15 @@ class AuthManager {
         
         let decoded = try JSONDecoder().decode([ChatMessage].self, from: data)
         await MainActor.run {
+            // Save directly to native SQLite database
+            GlimpseDatabase.shared.saveMessages(decoded)
+            
             if let rId = roomId {
                 // Persist room-specific messages in AuthManager-level cache (survives view lifecycle)
                 self.roomMessagesCache[rId] = decoded
             } else {
                 self.latestFetchedMessages = decoded
                 self.updateUnreadCount()
-                self.saveMessagesCache()
             }
         }
         if let lastMsg = decoded.last {
@@ -609,9 +830,13 @@ class AuthManager {
         }
         
         if let photo = photo, let imageData = photo.compressedForApp(maxDimension: 400, targetBytes: 100_000) {
+            let isWebP = imageData.isWebP
+            let filename = isWebP ? "avatar.webp" : "avatar.jpg"
+            let contentType = isWebP ? "image/webp" : "image/jpeg"
+            
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"profile_photo\"; filename=\"avatar.jpg\"\r\n".data(using: .utf8)!)
-            body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"profile_photo\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+            body.append("Content-Type: \(contentType)\r\n\r\n".data(using: .utf8)!)
             body.append(imageData)
             body.append("\r\n".data(using: .utf8)!)
         }
@@ -818,6 +1043,13 @@ class AuthManager {
         }
         WidgetCenter.shared.reloadAllTimelines()
         
+        // Clear SQLite database and in-memory caches
+        GlimpseDatabase.shared.clearAllMessages()
+        UserDefaults.standard.removeObject(forKey: "glimpse_cached_chat_rooms")
+        self.latestFetchedMessages = []
+        self.roomMessagesCache = [:]
+        self.chatRooms = []
+        
         withAnimation {
             self.isAuthenticated = false
         }
@@ -836,6 +1068,13 @@ class AuthManager {
             try? FileManager.default.removeItem(at: fileURL)
         }
         WidgetCenter.shared.reloadAllTimelines()
+        
+        // Clear SQLite database and in-memory caches
+        GlimpseDatabase.shared.clearAllMessages()
+        UserDefaults.standard.removeObject(forKey: "glimpse_cached_chat_rooms")
+        self.latestFetchedMessages = []
+        self.roomMessagesCache = [:]
+        self.chatRooms = []
         
         withAnimation {
             self.isAuthenticated = false
@@ -865,9 +1104,11 @@ class AuthManager {
     }
     
     func savePendingFlash(image: UIImage, latitude: Double?, longitude: Double?, battery: Int?, note: String?, locationName: String?) {
-        guard let finalData = image.compressedForApp(maxDimension: 800, targetBytes: 100_000) else { return }
+        guard let finalData = image.compressedForApp(maxDimension: 600, targetBytes: 50_000) else { return }
         
-        let fileName = "pending_flash_\(UUID().uuidString).jpg"
+        let isWebP = finalData.isWebP
+        let fileExtension = isWebP ? "webp" : "jpg"
+        let fileName = "pending_flash_\(UUID().uuidString).\(fileExtension)"
         let fileManager = FileManager.default
         guard let cachesDir = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
         let fileURL = cachesDir.appendingPathComponent(fileName)
@@ -901,15 +1142,45 @@ class AuthManager {
         return (try? JSONDecoder().decode([PendingFlash].self, from: data)) ?? []
     }
     
+    func cancelFlashUpload() {
+        uploadTask?.cancel()
+        uploadTask = nil
+        
+        // Truly clear the Outbox: Delete all pending files from caches directory
+        let list = getPendingFlashes()
+        let fileManager = FileManager.default
+        if let cachesDir = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first {
+            for pending in list {
+                let fileURL = cachesDir.appendingPathComponent(pending.photoFileName)
+                try? fileManager.removeItem(at: fileURL)
+            }
+        }
+        
+        // Remove the queue from UserDefaults
+        UserDefaults.standard.removeObject(forKey: "glimpse_pending_flashes")
+        
+        isUploadingFlash = false
+        uploadProgress = 0.0
+        uploadFailed = false
+        uploadSuccess = false
+        uploadQueueTotal = 0
+        uploadQueueCurrent = 0
+        print("🗑️ Pending flash queue cancelled and deleted from Outbox successfully!")
+    }
+    
     func processPendingFlashes() {
         let list = getPendingFlashes()
         guard !list.isEmpty else { return }
         guard !isUploadingFlash else { return }
         
-        Task {
+        uploadTask = Task {
             await MainActor.run {
                 self.isUploadingFlash = true
+                self.uploadFailed = false
+                self.uploadSuccess = false
                 self.uploadProgress = 0.0
+                self.uploadQueueTotal = list.count
+                self.uploadQueueCurrent = 0
             }
             
             let fileManager = FileManager.default
@@ -919,10 +1190,17 @@ class AuthManager {
             }
             
             var remainingFlashes: [PendingFlash] = []
+            var completedCount = 0
             
             for pending in list {
+                if Task.isCancelled { break }
                 let fileURL = cachesDir.appendingPathComponent(pending.photoFileName)
                 guard fileManager.fileExists(atPath: fileURL.path) else { continue }
+                
+                await MainActor.run {
+                    self.uploadQueueCurrent = completedCount + 1
+                    self.uploadProgress = 0.0
+                }
                 
                 do {
                     guard let imageData = try? Data(contentsOf: fileURL) else {
@@ -940,10 +1218,14 @@ class AuthManager {
                     )
                     
                     try? fileManager.removeItem(at: fileURL)
-                    print("✅ Outbox Flash uploaded successfully!")
+                    completedCount += 1
+                    print("✅ Outbox Flash \(completedCount)/\(list.count) uploaded successfully!")
                 } catch {
                     print("❌ Failed to upload outbox flash: \(error)")
                     remainingFlashes.append(pending)
+                    await MainActor.run {
+                        self.uploadFailed = true
+                    }
                 }
             }
             
@@ -951,8 +1233,33 @@ class AuthManager {
                 if let encoded = try? JSONEncoder().encode(remainingFlashes) {
                     UserDefaults.standard.set(encoded, forKey: "glimpse_pending_flashes")
                 }
-                self.isUploadingFlash = false
-                self.uploadProgress = 1.0
+                
+                if !self.uploadFailed {
+                    self.uploadSuccess = true
+                    self.uploadProgress = 1.0
+                    self.uploadQueueTotal = 0
+                    self.uploadQueueCurrent = 0
+                    
+                    // Keep success banner visible for 1.8 seconds showing checkmark/success
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            self.isUploadingFlash = false
+                            self.uploadSuccess = false
+                            self.uploadProgress = 0.0
+                        }
+                    }
+                } else {
+                    self.isUploadingFlash = false
+                    self.uploadQueueTotal = 0
+                    self.uploadQueueCurrent = 0
+                    // Auto-clear failed banner after 4 seconds
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            self.uploadFailed = false
+                            self.uploadProgress = 0.0
+                        }
+                    }
+                }
             }
         }
     }
@@ -1005,10 +1312,14 @@ class AuthManager {
             self.uploadProgress = 0.3
         }
         
+        let isWebP = photoData.isWebP
+        let filename = isWebP ? "flash.webp" : "flash.jpg"
+        let contentType = isWebP ? "image/webp" : "image/jpeg"
+        
         var body = Data()
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"photo\"; filename=\"flash.jpg\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"photo\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: \(contentType)\r\n\r\n".data(using: .utf8)!)
         body.append(photoData)
         body.append("\r\n".data(using: .utf8)!)
         
@@ -1063,9 +1374,23 @@ class AuthManager {
             self.uploadProgress = 0.9
         }
         
-        _ = try? await sendChatMessage(text: "📷 Sent a Flash! [FLASH_ATTACHMENT]")
-        try? await fetchState()
-        _ = try? await fetchFlashes()
+        // Fire off companion requests asynchronously in parallel without blocking the main upload completion
+        Task {
+            if let sentMsg = try? await sendChatMessage(text: "📷 Sent a Flash! [FLASH_ATTACHMENT]") {
+                // Immediately mark as read from sender's side to prevent self-unread badge
+                await markMessagesAsRead(messageId: sentMsg.id)
+                
+                // Update local unread count to 0 for the main room
+                await MainActor.run {
+                    if let mainRoomIndex = self.chatRooms.firstIndex(where: { $0.is_main }) {
+                        self.chatRooms[mainRoomIndex].unread_count = 0
+                        self.updateUnreadCount()
+                    }
+                }
+            }
+            try? await fetchState()
+            _ = try? await fetchFlashes()
+        }
         
         await MainActor.run {
             self.uploadProgress = 1.0
@@ -1115,14 +1440,36 @@ class AuthManager {
     
     // MARK: - WEBSOCKET INTEGRATION
     func connectWebSocket() {
+        // If already connected, do nothing
+        if isWebSocketConnected && webSocketTask != nil && webSocketTask?.state == .running {
+            print("🔌 WebSocket already connected, ignoring connect request.")
+            return
+        }
+        
+        // If already in the process of connecting, do nothing
+        if isConnecting {
+            print("🔌 WebSocket is currently connecting, ignoring duplicate request.")
+            return
+        }
+        
         // Close any existing connection first
         disconnectWebSocket()
         
-        guard let _ = currentUser?.couple_id, coupleActive else { return }
+        // Restore shouldReconnect to true since disconnectWebSocket sets it to false
+        shouldReconnect = true
+        isConnecting = true
+        
+        guard let _ = currentUser?.couple_id, coupleActive else {
+            isConnecting = false
+            return
+        }
         
         // Parse host from baseURL
         guard let urlComponents = URLComponents(string: baseURL),
-              let host = urlComponents.host else { return }
+              let host = urlComponents.host else {
+            isConnecting = false
+            return
+        }
         
         let appKey = "u1eadho8wbhzv2mcnlfy"
         let isLocal = host.contains("localhost") || host.contains("127.0.0.1") || host.contains("192.168.")
@@ -1131,25 +1478,80 @@ class AuthManager {
         let wsUrlString = isLocal ?
             "\(wsScheme)://\(host):8080/app/\(appKey)?protocol=7&client=js&version=8.4.0-reverb" :
             "\(wsScheme)://\(host)/app/\(appKey)?protocol=7&client=js&version=8.4.0-reverb"
-        guard let url = URL(string: wsUrlString) else { return }
+        guard let url = URL(string: wsUrlString) else {
+            isConnecting = false
+            return
+        }
         
         print("🔌 Connecting to WebSockets at: \(wsUrlString)")
         
-        shouldReconnect = true
-        webSocketTask = URLSession.shared.webSocketTask(with: url)
+        let originScheme = wsScheme == "wss" ? "https" : "http"
+        var request = URLRequest(url: url)
+        request.setValue("\(originScheme)://\(host)", forHTTPHeaderField: "Origin")
+        request.setValue("Glimpse/1.0 (iOS; Mobile)", forHTTPHeaderField: "User-Agent")
+        
+        webSocketTask = URLSession.shared.webSocketTask(with: request)
         webSocketTask?.resume()
         
         listenWebSocketMessages()
+        startPingTimer()
     }
     
     func disconnectWebSocket() {
         shouldReconnect = false
+        isConnecting = false
+        stopPingTimer()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         DispatchQueue.main.async {
             self.isWebSocketConnected = false
         }
         print("🔌 WebSocket disconnected manually.")
+    }
+    
+    private func startPingTimer() {
+        stopPingTimer()
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.pingTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
+                self?.sendPingFrame()
+            }
+        }
+    }
+    
+    private func stopPingTimer() {
+        DispatchQueue.main.async { [weak self] in
+            self?.pingTimer?.invalidate()
+            self?.pingTimer = nil
+        }
+    }
+    
+    private func sendPingFrame() {
+        let payload = ["event": "pusher:ping", "data": [String: String]()] as [String : Any]
+        if let jsonData = try? JSONSerialization.data(withJSONObject: payload),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            webSocketTask?.send(.string(jsonString)) { error in
+                if let error = error {
+                    print("⚠️ Failed to send ping: \(error)")
+                } else {
+                    print("📤 Sent websocket ping.")
+                }
+            }
+        }
+    }
+    
+    private func sendPongFrame() {
+        let payload = ["event": "pusher:pong", "data": [String: String]()] as [String : Any]
+        if let jsonData = try? JSONSerialization.data(withJSONObject: payload),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            webSocketTask?.send(.string(jsonString)) { error in
+                if let error = error {
+                    print("⚠️ Failed to send pong: \(error)")
+                } else {
+                    print("📤 Sent websocket pong.")
+                }
+            }
+        }
     }
     
     private func listenWebSocketMessages() {
@@ -1173,6 +1575,7 @@ class AuthManager {
                 
             case .failure(let error):
                 print("❌ WebSocket connection failed/disconnected: \(error)")
+                self.isConnecting = false
                 self.handleWebSocketDisconnection()
             }
         }
@@ -1190,8 +1593,15 @@ class AuthManager {
             let pusherEvent = try JSONDecoder().decode(PusherEvent.self, from: data)
             
             switch pusherEvent.event {
+            case "pusher:ping":
+                self.sendPongFrame()
+                
+            case "pusher:pong":
+                print("📥 Received websocket pong.")
+                
             case "pusher:connection_established":
                 print("✅ WebSocket handshake established!")
+                self.isConnecting = false
                 DispatchQueue.main.async {
                     self.isWebSocketConnected = true
                 }
@@ -1222,6 +1632,7 @@ class AuthManager {
                                 p.status_note = update.statusNote
                                 p.location_name = update.locationName
                                 p.wifi_bssid = update.wifiBssid
+                                p.last_updated = ISO8601DateFormatter().string(from: Date())
                                 self.partner = p
                             }
                             
@@ -1302,10 +1713,24 @@ class AuthManager {
                     }
                     
                     if let finalMsg = decodedMessage {
+                        // Persist in local SQLite database instantly
+                        GlimpseDatabase.shared.saveMessage(finalMsg)
+                        
                         DispatchQueue.main.async {
-                            if !self.latestFetchedMessages.contains(where: { $0.id == finalMsg.id }) {
-                                self.latestFetchedMessages.append(finalMsg)
-                                self.saveMessagesCache()
+                            // If it belongs to the main chat room, append to latestFetchedMessages
+                            if finalMsg.room_id == nil {
+                                if !self.latestFetchedMessages.contains(where: { $0.id == finalMsg.id }) {
+                                    self.latestFetchedMessages.append(finalMsg)
+                                }
+                            } else {
+                                // If it belongs to a subroom, append to the in-memory roomMessagesCache
+                                if let rId = finalMsg.room_id {
+                                    var currentRoomMsgs = self.roomMessagesCache[rId] ?? []
+                                    if !currentRoomMsgs.contains(where: { $0.id == finalMsg.id }) {
+                                        currentRoomMsgs.append(finalMsg)
+                                        self.roomMessagesCache[rId] = currentRoomMsgs
+                                    }
+                                }
                             }
                             
                             // Always notify the UI view so it can render the message live
@@ -1314,8 +1739,12 @@ class AuthManager {
                             // Unified coordinated Task to sync chat rooms and read state without double-fetching race conditions
                             Task {
                                 let isCurrentActiveRoom = self.selectedTab == 3 && self.activeRoomId == finalMsg.room_id
-                                if isCurrentActiveRoom && finalMsg.sender_id != self.currentUser?.id {
-                                    await self.markMessagesAsRead(messageId: finalMsg.id)
+                                let isMyOwnMessage = finalMsg.sender_id == self.currentUser?.id
+                                
+                                if (isCurrentActiveRoom && !isMyOwnMessage) || isMyOwnMessage {
+                                    if !isMyOwnMessage {
+                                        await self.markMessagesAsRead(messageId: finalMsg.id)
+                                    }
                                     // Instantly update the local UserDefaults session for this room
                                     let currentUserId = self.currentUser?.id ?? 0
                                     let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(finalMsg.room_id ?? 0)"
@@ -1333,7 +1762,7 @@ class AuthManager {
                                             if let latestId = r.latest_message?.id, latestId > 0 && latestId <= storedId {
                                                 rooms[i].unread_count = 0
                                             }
-                                            if isCurrentActiveRoom && r.id == finalMsg.room_id {
+                                            if (isCurrentActiveRoom || isMyOwnMessage) && r.id == finalMsg.room_id {
                                                 rooms[i].unread_count = 0
                                             }
                                         }
@@ -1433,18 +1862,56 @@ class AuthManager {
     
     // MARK: - MESSAGES CACHING
     func saveMessagesCache() {
-        if let encoded = try? JSONEncoder().encode(latestFetchedMessages) {
-            UserDefaults.standard.set(encoded, forKey: "glimpse_cached_messages")
-        }
+        GlimpseDatabase.shared.saveMessages(latestFetchedMessages)
     }
     
     func loadCachedMessages() {
-        guard let cachedData = UserDefaults.standard.data(forKey: "glimpse_cached_messages") else { return }
-        do {
-            let decoded = try JSONDecoder().decode([ChatMessage].self, from: cachedData)
-            self.latestFetchedMessages = decoded
-        } catch {
-            print("❌ Failed to decode cached messages: \(error)")
+        // Clean up old legacy UserDefaults cache if present
+        if UserDefaults.standard.object(forKey: "glimpse_cached_messages") != nil {
+            UserDefaults.standard.removeObject(forKey: "glimpse_cached_messages")
+        }
+        
+        // Clean up legacy JSON cache file if present
+        let fileManager = FileManager.default
+        if let cacheDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first {
+            let jsonURL = cacheDirectory.appendingPathComponent("glimpse_messages_cache.json")
+            if fileManager.fileExists(atPath: jsonURL.path) {
+                try? fileManager.removeItem(at: jsonURL)
+            }
+        }
+        
+        // Load main room messages from native SQLite database
+        self.latestFetchedMessages = GlimpseDatabase.shared.getMessages(forRoomId: nil)
+    }
+    
+    func saveChatRoomsCache() {
+        if let encoded = try? JSONEncoder().encode(chatRooms) {
+            UserDefaults.standard.set(encoded, forKey: "glimpse_cached_chat_rooms")
+        }
+    }
+    
+    func loadCachedChatRooms() {
+        if let data = UserDefaults.standard.data(forKey: "glimpse_cached_chat_rooms"),
+           let rooms = try? JSONDecoder().decode([GlimpseChatRoom].self, from: data) {
+            self.chatRooms = rooms
+        }
+    }
+    
+    func getCachedMessages(for roomId: Int?) -> [ChatMessage] {
+        if let rId = roomId {
+            if let inMemory = roomMessagesCache[rId], !inMemory.isEmpty {
+                return inMemory
+            }
+            let fromDb = GlimpseDatabase.shared.getMessages(forRoomId: rId)
+            roomMessagesCache[rId] = fromDb
+            return fromDb
+        } else {
+            if !latestFetchedMessages.isEmpty {
+                return latestFetchedMessages
+            }
+            let fromDb = GlimpseDatabase.shared.getMessages(forRoomId: nil)
+            latestFetchedMessages = fromDb
+            return fromDb
         }
     }
     
@@ -1554,25 +2021,96 @@ class AuthManager {
     }
 }
 
+extension Data {
+    var isWebP: Bool {
+        guard self.count >= 12 else { return false }
+        let riff = self.subdata(in: 0..<4)
+        let webp = self.subdata(in: 8..<12)
+        return riff == Data([0x52, 0x49, 0x46, 0x46]) && webp == Data([0x57, 0x45, 0x42, 0x50])
+    }
+}
+
 extension UIImage {
     func compressedForApp(maxDimension: CGFloat, targetBytes: Int) -> Data? {
-        var targetSize = self.size
-        if self.size.width > maxDimension || self.size.height > maxDimension {
-            let aspectRatio = self.size.width / self.size.height
-            if aspectRatio > 1 {
-                targetSize = CGSize(width: maxDimension, height: maxDimension / aspectRatio)
-            } else {
-                targetSize = CGSize(width: maxDimension * aspectRatio, height: maxDimension)
-            }
+        // Step 1: Fast resize using integer pixel math (no float rounding loops)
+        let targetSize: CGSize
+        let w = self.size.width
+        let h = self.size.height
+        if w > maxDimension || h > maxDimension {
+            let scale = maxDimension / max(w, h)
+            targetSize = CGSize(width: (w * scale).rounded(), height: (h * scale).rounded())
+        } else {
+            targetSize = self.size
         }
         
-        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        // Render once at target size with EXACT pixel mapping (scale = 1.0)
+        // Without this, iOS renders at @3x screen scale (600px becomes 1800px!)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0
+        let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
         let resizedImage = renderer.image { _ in
             self.draw(in: CGRect(origin: .zero, size: targetSize))
         }
         
-        // Single-step high-efficiency compression. 
-        // 0.6 is visual indistinguishable from 1.0 on mobile screens, but saves ~85% bandwidth!
-        return resizedImage.jpegData(compressionQuality: 0.6)
+        // Try WebP encoding first (native support in iOS 17+)
+        if let webpData = resizedImage.webpData(quality: 0.5), webpData.count <= targetBytes {
+            return webpData
+        }
+        
+        // Fallback to JPEG if WebP is not supported or still too large
+        if let jpegData = resizedImage.jpegData(compressionQuality: 0.5), jpegData.count <= targetBytes {
+            return jpegData
+        }
+        
+        // Step 3: Binary search quality between 0.1 and 0.5 to hit target size fast (max 5 iterations)
+        var low: CGFloat = 0.1
+        var high: CGFloat = 0.5
+        // Start best at lowest quality 0.1 so if we fail to hit target, we at least return the smallest possible size
+        var best: Data? = resizedImage.webpData(quality: 0.1) ?? resizedImage.jpegData(compressionQuality: 0.1)
+        
+        for _ in 0..<5 {
+            let mid = (low + high) / 2.0
+            if let data = resizedImage.webpData(quality: mid) {
+                if data.count <= targetBytes {
+                    best = data
+                    low = mid  // try higher quality
+                } else {
+                    high = mid // too big, compress more
+                }
+            } else if let data = resizedImage.jpegData(compressionQuality: mid) {
+                if data.count <= targetBytes {
+                    best = data
+                    low = mid
+                } else {
+                    high = mid
+                }
+            } else {
+                break
+            }
+        }
+        
+        return best
+    }
+    
+    private func webpData(quality: CGFloat) -> Data? {
+        guard let cgImage = self.cgImage else { return nil }
+        let data = NSMutableData()
+        let typeID = "public.webp" as CFString
+        
+        guard let destination = CGImageDestinationCreateWithData(data as CFMutableData, typeID, 1, nil) else {
+            return nil
+        }
+        
+        let options: [CFString: Any] = [
+            kCGImageDestinationLossyCompressionQuality: quality as CFNumber
+        ]
+        
+        CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
+        
+        if CGImageDestinationFinalize(destination) {
+            return data as Data
+        }
+        return nil
     }
 }
+#endif
