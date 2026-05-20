@@ -169,24 +169,6 @@ struct FullPartnerMapView: View {
                         }
                     }
                 }
-                .onChange(of: animatedPartnerLatitude) { _, _ in
-                    guard !isFlying else { return }
-                    if isTrackingEnabled && currentlyFocusedTarget == .partner {
-                        position = .region(MKCoordinateRegion(
-                            center: animatedPartnerCoordinate,
-                            span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
-                        ))
-                    }
-                }
-                .onChange(of: animatedMyLatitude) { _, _ in
-                    guard !isFlying else { return }
-                    if isTrackingEnabled && currentlyFocusedTarget == .me {
-                        position = .region(MKCoordinateRegion(
-                            center: animatedMyCoordinate,
-                            span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
-                        ))
-                    }
-                }
                 
                 // Overlay HUD
                 VStack(spacing: 0) {
@@ -752,6 +734,15 @@ struct FullPartnerMapView: View {
                     } else {
                         auth.updatePartnerSpeed(nil)
                     }
+                    
+                    if isTrackingEnabled && currentlyFocusedTarget == .partner && !isFlying {
+                        withAnimation(.easeInOut(duration: duration)) {
+                            position = .region(MKCoordinateRegion(
+                                center: target,
+                                span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
+                            ))
+                        }
+                    }
                 }
                 
                 let fps: Double = 60.0
@@ -811,6 +802,15 @@ struct FullPartnerMapView: View {
                         auth.updateMySpeed(speedKmH)
                     } else {
                         auth.updateMySpeed(nil)
+                    }
+                    
+                    if isTrackingEnabled && currentlyFocusedTarget == .me && !isFlying {
+                        withAnimation(.easeInOut(duration: duration)) {
+                            position = .region(MKCoordinateRegion(
+                                center: target,
+                                span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
+                            ))
+                        }
                     }
                 }
                 
