@@ -246,10 +246,11 @@ struct FullPartnerMapView: View {
                                 .onTapGesture {
                                     UISelectionFeedbackGenerator().selectionChanged()
                                     isTrackingEnabled = true
+                                    let spanDelta = cameraSpanDelta(for: auth.mySpeedKmH)
                                     withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                                         position = .region(MKCoordinateRegion(
                                             center: animatedMyCoordinate,
-                                            span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
+                                            span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
                                         ))
                                     }
                                     triggerMeGlow()
@@ -261,10 +262,11 @@ struct FullPartnerMapView: View {
                                 .onTapGesture {
                                     UISelectionFeedbackGenerator().selectionChanged()
                                     isTrackingEnabled = true
+                                    let spanDelta = cameraSpanDelta(for: auth.partnerSpeedKmH)
                                     withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                                         position = .region(MKCoordinateRegion(
                                             center: animatedPartnerCoordinate,
-                                            span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
+                                            span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
                                         ))
                                     }
                                     triggerPartnerGlow()
@@ -430,10 +432,11 @@ struct FullPartnerMapView: View {
             )
         }
         .onTapGesture {
+            let spanDelta = cameraSpanDelta(for: auth.partnerSpeedKmH)
             withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                 position = .region(MKCoordinateRegion(
                     center: animatedPartnerCoordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
+                    span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
                 ))
             }
         }
@@ -507,10 +510,11 @@ struct FullPartnerMapView: View {
             .onTapGesture {
                 currentlyFocusedTarget = .me
                 isTrackingEnabled = true
+                let spanDelta = cameraSpanDelta(for: auth.mySpeedKmH)
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                     position = .region(MKCoordinateRegion(
                         center: animatedMyCoordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
+                        span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
                     ))
                 }
                 triggerMeGlow()
@@ -541,10 +545,11 @@ struct FullPartnerMapView: View {
             .onTapGesture {
                 currentlyFocusedTarget = .partner
                 isTrackingEnabled = true
+                let spanDelta = cameraSpanDelta(for: auth.partnerSpeedKmH)
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                     position = .region(MKCoordinateRegion(
                         center: animatedPartnerCoordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
+                        span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
                     ))
                 }
                 triggerPartnerGlow()
@@ -757,10 +762,11 @@ struct FullPartnerMapView: View {
                     }
                     
                     if isTrackingEnabled && currentlyFocusedTarget == .partner && !isFlying {
+                        let spanDelta = cameraSpanDelta(for: speedKmH)
                         withAnimation(.easeInOut(duration: duration)) {
                             position = .region(MKCoordinateRegion(
                                 center: target,
-                                span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
+                                span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
                             ))
                         }
                     }
@@ -826,10 +832,11 @@ struct FullPartnerMapView: View {
                     }
                     
                     if isTrackingEnabled && currentlyFocusedTarget == .me && !isFlying {
+                        let spanDelta = cameraSpanDelta(for: speedKmH)
                         withAnimation(.easeInOut(duration: duration)) {
                             position = .region(MKCoordinateRegion(
                                 center: target,
-                                span: MKCoordinateSpan(latitudeDelta: 0.0022, longitudeDelta: 0.0022)
+                                span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
                             ))
                         }
                     }
@@ -863,6 +870,18 @@ struct FullPartnerMapView: View {
                 auth.updateMySpeed(nil)
             }
             isInterpolatingMy = false
+        }
+    }
+    
+    private func cameraSpanDelta(for speedKmH: Double?) -> Double {
+        guard let speed = speedKmH else { return 0.0022 }
+        if speed <= 15.0 {
+            return 0.0022
+        } else if speed >= 80.0 {
+            return 0.012
+        } else {
+            let fraction = (speed - 15.0) / (80.0 - 15.0)
+            return 0.0022 + fraction * (0.012 - 0.0022)
         }
     }
 }
