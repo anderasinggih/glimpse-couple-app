@@ -667,6 +667,7 @@ class AuthManager {
     }
     
     func fetchFlashes() async throws -> [GlimpseFlash] {
+        print("🔍 fetchFlashes() triggered.")
         guard let url = URL(string: "\(baseURL)/glimpse/flashes") else { return [] }
         guard let token = userToken else { return [] }
         
@@ -677,20 +678,26 @@ class AuthManager {
         let (data, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            print("⚠️ fetchFlashes got non-200 response: \(String(describing: response))")
             return []
         }
         
         let decoded = try JSONDecoder().decode([GlimpseFlash].self, from: data)
         let currentUserId = currentUser?.id ?? 0
+        print("🔍 fetchFlashes: Decoded \(decoded.count) flashes. Current User ID: \(currentUserId)")
         
         var newFlashes: [GlimpseFlash] = []
         await MainActor.run {
             for flash in decoded {
-                if !self.flashes.contains(where: { $0.id == flash.id }) {
+                let alreadyCached = self.flashes.contains(where: { $0.id == flash.id })
+                print("   - Flash ID: \(flash.id), Sender: \(flash.sender_id), Already Cached locally: \(alreadyCached)")
+                if !alreadyCached {
                     newFlashes.append(flash)
                 }
             }
         }
+        
+        print("🔍 fetchFlashes: Identified \(newFlashes.count) new flashes.")
         
         for flash in newFlashes {
             let flashUrlStr = flash.photo_url
@@ -700,6 +707,7 @@ class AuthManager {
                 return cleanPath.contains("storage/") ? "\(base)/\(cleanPath)" : "\(base)/storage/\(cleanPath)"
             }()
             
+            print("🔍 fetchFlashes: Downloading image from URL: \(finalUrlStr)")
             if let downloadUrl = URL(string: finalUrlStr) {
                 do {
                     let (imgData, _) = try await URLSession.shared.data(from: downloadUrl)
@@ -724,7 +732,10 @@ class AuthManager {
             }
             
             if flash.sender_id != currentUserId {
+                print("🔍 fetchFlashes: Sender ID \(flash.sender_id) is NOT current user \(currentUserId). Triggering ACK...")
                 await sendFlashAcknowledgement(flashId: flash.id)
+            } else {
+                print("🔍 fetchFlashes: Sender ID matches current user. No ACK required.")
             }
         }
         
@@ -738,11 +749,13 @@ class AuthManager {
             merged.sort(by: { $0.createdDate > $1.createdDate })
             self.flashes = merged
             self.saveFlashesCache()
+            print("💾 Merged flashes cache updated. Total count: \(self.flashes.count)")
         }
         return decoded
     }
     
     func sendFlashAcknowledgement(flashId: Int) async {
+        print("🔍 sendFlashAcknowledgement: Sending ACK for flash ID \(flashId)...")
         guard let url = URL(string: "\(baseURL)/glimpse/flashes/\(flashId)/ack") else { return }
         guard let token = userToken else { return }
         
@@ -752,11 +765,17 @@ class AuthManager {
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                print("👍 Acknowledged flash \(flashId) to server. File deleted from server SSD!")
-            } else {
-                print("⚠️ Failed to acknowledge flash \(flashId)")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse {
+                print("🔍 sendFlashAcknowledgement: Server response status code: \(httpResponse.statusCode)")
+                if let responseStr = String(data: data, encoding: .utf8) {
+                    print("🔍 sendFlashAcknowledgement: Server body response: \(responseStr)")
+                }
+                if httpResponse.statusCode == 200 {
+                    print("👍 Acknowledged flash \(flashId) to server. File deleted from server SSD!")
+                } else {
+                    print("⚠️ Failed to acknowledge flash \(flashId)")
+                }
             }
         } catch {
             print("❌ Error acknowledging flash \(flashId): \(error)")
