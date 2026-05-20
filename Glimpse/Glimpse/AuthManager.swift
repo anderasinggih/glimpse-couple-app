@@ -708,23 +708,51 @@ class AuthManager {
             }()
             
             print("🔍 fetchFlashes: Downloading image from URL: \(finalUrlStr)")
+            var downloadSuccessful = false
             if let downloadUrl = URL(string: finalUrlStr) {
                 do {
                     let (imgData, _) = try await URLSession.shared.data(from: downloadUrl)
-                    let cleanName = finalUrlStr.components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
-                    let filename = "img_cache_\(cleanName).jpg"
-                    let fileManager = FileManager.default
-                    
-                    var targetURL: URL? = nil
-                    if let groupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
-                        targetURL = groupURL.appendingPathComponent(filename)
-                    } else if let cachesURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first {
-                        targetURL = cachesURL.appendingPathComponent(filename)
-                    }
-                    
-                    if let targetURL = targetURL {
-                        try imgData.write(to: targetURL)
-                        print("💾 Proactively downloaded and cached flash image locally: \(filename)")
+                    if UIImage(data: imgData) != nil {
+                        let cleanName = finalUrlStr.components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
+                        let filename = "img_cache_\(cleanName).jpg"
+                        let fileManager = FileManager.default
+                        
+                        var primaryURL: URL? = nil
+                        if let groupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+                            primaryURL = groupURL.appendingPathComponent(filename)
+                        }
+                        
+                        var fallbackURL: URL? = nil
+                        if let cachesURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first {
+                            fallbackURL = cachesURL.appendingPathComponent(filename)
+                        }
+                        
+                        var successWrite = false
+                        if let primaryURL = primaryURL {
+                            do {
+                                try imgData.write(to: primaryURL)
+                                print("💾 Cached image to primary App Group path: \(filename)")
+                                successWrite = true
+                            } catch {
+                                print("⚠️ Failed to write to primary App Group path: \(error)")
+                            }
+                        }
+                        
+                        if !successWrite, let fallbackURL = fallbackURL {
+                            do {
+                                try imgData.write(to: fallbackURL)
+                                print("💾 Cached image to local fallback path: \(filename)")
+                                successWrite = true
+                            } catch {
+                                print("⚠️ Failed to write to local fallback path: \(error)")
+                            }
+                        }
+                        
+                        if successWrite {
+                            downloadSuccessful = true
+                        }
+                    } else {
+                        print("⚠️ Downloaded data is not a valid image.")
                     }
                 } catch {
                     print("⚠️ Failed to proactively download and cache flash image: \(error)")
@@ -732,8 +760,12 @@ class AuthManager {
             }
             
             if flash.sender_id != currentUserId {
-                print("🔍 fetchFlashes: Sender ID \(flash.sender_id) is NOT current user \(currentUserId). Triggering ACK...")
-                await sendFlashAcknowledgement(flashId: flash.id)
+                if downloadSuccessful {
+                    print("🔍 fetchFlashes: Sender ID \(flash.sender_id) is NOT current user \(currentUserId). Triggering ACK...")
+                    await sendFlashAcknowledgement(flashId: flash.id)
+                } else {
+                    print("🔍 fetchFlashes: Download failed or could not write cache. Postponing ACK to prevent data loss.")
+                }
             } else {
                 print("🔍 fetchFlashes: Sender ID matches current user. No ACK required.")
             }
