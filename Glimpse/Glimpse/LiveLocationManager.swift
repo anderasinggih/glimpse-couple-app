@@ -28,7 +28,9 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     
     private var lastUploadedLocation: CLLocation?
     private var lastUploadTime: Date?
-    private var isGeocoding = false
+    private var cachedLocationName: String? = nil
+    private var lastGeocodeTime: Date? = nil
+    private var lastGeocodedLocation: CLLocation? = nil
     
     override init() {
         super.init()
@@ -39,7 +41,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         // Background Tracking Capabilities
         locationManager.allowsBackgroundLocationUpdates = true
         locationManager.pausesLocationUpdatesAutomatically = false
-        locationManager.showsBackgroundLocationIndicator = true
+        locationManager.showsBackgroundLocationIndicator = false
         
         setupNetworkPathMonitor()
     }
@@ -66,10 +68,36 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         LiveDebugLogger.shared.setGPSStatus("Stopped 🛑")
     }
     
+    // Web / Partner triggered Force Sync
+    func forceWakeGPSAndSync() {
+        self.log("🔔 Permintaan Sinkronisasi Web/Partner Diterima! Memaksa GPS bangun dan menghapus cache Wi-Fi...")
+        
+        // CLEAR CACHE: If the user was stuck in a simulated/fake location lock, this completely wipes it!
+        self.cachedWiFiLocations.removeAll()
+        self.cachedLocationName = nil
+        self.lastGeocodedLocation = nil
+        
+        self.isStationary = false
+        self.removeStationaryGeofence()
+        
+        // Force highest accuracy for a quick burst sync!
+        self.locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        self.locationManager.distanceFilter = kCLDistanceFilterNone
+        
+        self.locationManager.startUpdatingLocation()
+        LiveDebugLogger.shared.setGPSStatus("Active (Force Sync) 🛰️")
+        
+        // If we already have a location, send it immediately as a placeholder while waiting for fresh GPS fix
+        if let currentLoc = locationManager.location {
+            processAndUploadLocation(currentLoc, forceUpload: true)
+        }
+    }
+    
     // MARK: - Stationary Geofencing for Zenly-Style Background Wake
     private func setToStationary(at coordinate: CLLocationCoordinate2D) {
         guard !isStationary else { return }
         isStationary = true
+        // Stop active GPS hardware updates to remove blue status bar capsule and save battery!
         locationManager.stopUpdatingLocation()
         registerStationaryGeofence(at: coordinate)
     }
@@ -282,22 +310,28 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             } else {
                 // Otherwise, get current coordinate first to cache it (unless simulated!)
                 if let currentLoc = self.locationManager.location {
-                    self.cachedWiFiLocations[bssid] = currentLoc.coordinate
-                    self.log("💾 Wi-Fi Caching: Koordinat lokasi baru disimpan untuk Wi-Fi BSSID: \(bssid)")
-                    
-                    var shouldStop = true
+                    // Proteksi Murni: JANGAN PERNAH MENYIMPAN LOKASI SIMULASI KE CACHE WI-FI RUMAH!
+                    var isSimulated = false
                     if #available(iOS 15.0, *) {
                         if currentLoc.sourceInformation?.isSimulatedBySoftware == true {
-                            shouldStop = false
+                            isSimulated = true
                         }
                     }
                     
-                    if shouldStop {
+                    if isSimulated {
+                        self.log("⚠️ BSSID Caching Ditolak: Lokasi saat ini adalah SIMULASI Xcode/Web. Menolak mengikat Wi-Fi rumah ke lokasi palsu!")
+                        // Jangan sleep GPS, biarkan update jalan terus untuk simulasi.
+                        self.locationManager.startUpdatingLocation()
+                    } else {
+                        self.cachedWiFiLocations[bssid] = currentLoc.coordinate
+                        self.log("💾 Wi-Fi Caching: Koordinat lokasi baru disimpan untuk Wi-Fi BSSID: \(bssid)")
+                        
                         self.log("😴 GPS Dinonaktifkan: Titik Wi-Fi berhasil di-cache. Menidurkan GPS!")
                         self.setToStationary(at: currentLoc.coordinate)
                         LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi Cache Locked) 📶😴")
+                        
+                        self.processAndUploadLocation(currentLoc, forceUpload: true)
                     }
-                    self.processAndUploadLocation(currentLoc, forceUpload: true)
                 }
             }
         }
@@ -316,33 +350,53 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         
         // Dynamic accuracy fallback based on actual physical speed (Layer 2)
         let speed = location.speed // in meters/second
+        let speedInKmH = speed * 3.6
+        let distanceMoved = lastUploadedLocation != nil ? location.distance(from: lastUploadedLocation!) : 0.0
+        
+        // Dynamic stationary wakeup check (Layer 1.5)
+        if isStationary {
+            let isMovingSignificantly = speed > 1.5 || distanceMoved > 40.0
+            let isMovingActivity = lastKnownActivity != nil && !lastKnownActivity!.stationary
+            
+            if isMovingSignificantly || isMovingActivity {
+                self.log("🏃‍♂️ GPS: Bergerak (Speed: \(Int(speedInKmH)) km/h, Jarak: \(Int(distanceMoved))m). Membangunkan dari status stationary!")
+                removeStationaryGeofence()
+                isStationary = false
+                locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+                locationManager.distanceFilter = 30.0
+                LiveDebugLogger.shared.setGPSStatus("Active 🛰️")
+            }
+        }
+        
         if speed >= 5.0 { // Speed is >= 18 km/h (driving/cycling/etc)
             if locationManager.desiredAccuracy != kCLLocationAccuracyBest {
                 locationManager.desiredAccuracy = kCLLocationAccuracyBest
                 locationManager.distanceFilter = 5.0
-                self.log("⚡ Akurasi Dinamis (Speed): Kecepatan terdeteksi \(Int(speed * 3.6)) km/jam. Mengaktifkan GPS Akurasi Maksimal!")
+                self.log("⚡ Akurasi Dinamis (Speed): Kecepatan terdeteksi \(Int(speedInKmH)) km/jam. Mengaktifkan GPS Akurasi Maksimal!")
             }
         } else if speed > 0.5 && speed < 3.0 { // Walking speed (1.8 km/h to 10.8 km/h)
             if locationManager.desiredAccuracy != kCLLocationAccuracyNearestTenMeters {
                 locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
                 locationManager.distanceFilter = 20.0
-                self.log("⚡ Akurasi Dinamis (Speed): Kecepatan terdeteksi \(Int(speed * 3.6)) km/jam. Mengaktifkan GPS Akurasi Hemat Daya.")
+                self.log("⚡ Akurasi Dinamis (Speed): Kecepatan terdeteksi \(Int(speedInKmH)) km/jam. Mengaktifkan GPS Akurasi Hemat Daya.")
             }
         }
         
         // Cache WiFi location if we just connected (but bypass if simulated!)
         if let bssid = currentWiFiBSSID, cachedWiFiLocations[bssid] == nil {
-            cachedWiFiLocations[bssid] = location.coordinate
-            self.log("💾 Wi-Fi Caching (GPS Lock): Menyimpan koordinat Wi-Fi BSSID \(bssid) dari satelit GPS aktif.")
-            
-            var shouldStop = true
+            var isSimulated = false
             if #available(iOS 15.0, *) {
                 if location.sourceInformation?.isSimulatedBySoftware == true {
-                    shouldStop = false
+                    isSimulated = true
                 }
             }
             
-            if shouldStop {
+            if isSimulated {
+                self.log("⚠️ Caching Ditolak: Menolak menyimpan lokasi simulasi ke cache BSSID \(bssid).")
+            } else {
+                cachedWiFiLocations[bssid] = location.coordinate
+                self.log("💾 Wi-Fi Caching (GPS Lock): Menyimpan koordinat Wi-Fi BSSID \(bssid) dari satelit GPS aktif.")
+                
                 self.log("😴 GPS Dinonaktifkan: Wi-Fi terdaftar dari pembacaan satelit. Menidurkan GPS!")
                 self.setToStationary(at: location.coordinate)
                 LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi GPS Lock) 📶😴")
@@ -421,48 +475,78 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             }
         }
         
-        guard !isGeocoding else { return }
-        isGeocoding = true
-        
         // Start background task to guarantee execution time in background state
-        let bgTaskID = UIApplication.shared.beginBackgroundTask(withName: "GlimpseUploadLocationBGTask") {
-            // Task expired
+        var bgTaskID: UIBackgroundTaskIdentifier = .invalid
+        bgTaskID = UIApplication.shared.beginBackgroundTask(withName: "GlimpseUploadLocationBGTask") {
+            if bgTaskID != .invalid {
+                UIApplication.shared.endBackgroundTask(bgTaskID)
+                bgTaskID = .invalid
+            }
+        }
+        
+        // Trigger non-blocking geocoding only when stopped/stationary to conserve battery and API limits
+        let shouldGeocode: Bool = {
+            let speedInKmH = location.speed * 3.6
+            let isMoving = speedInKmH >= 5.4 // 1.5 m/s is walking speed
+            
+            // Do not geocode if we are moving fast
+            if isMoving && !isStationary {
+                return false
+            }
+            
+            // If stopped, only geocode if we moved more than 50 meters from the last geocoded spot
+            if let lastGeoLoc = lastGeocodedLocation {
+                let distance = location.distance(from: lastGeoLoc)
+                return distance >= 50.0
+            }
+            
+            return true
+        }()
+        
+        if shouldGeocode {
+            let geocodeLocation = location
+            Task {
+                if let placemarks = try? await geocoder.reverseGeocodeLocation(geocodeLocation),
+                   let placemark = placemarks.first {
+                    let street = placemark.thoroughfare ?? ""
+                    let kelurahan = placemark.subLocality ?? ""
+                    let kecamatan = placemark.subAdministrativeArea ?? ""
+                    
+                    var addressParts: [String] = []
+                    if !street.isEmpty { addressParts.append(street) }
+                    if !kelurahan.isEmpty { addressParts.append(kelurahan) }
+                    if !kecamatan.isEmpty { addressParts.append(kecamatan) }
+                    
+                    let newName = addressParts.isEmpty ? (placemark.locality ?? "Tidak Diketahui") : addressParts.joined(separator: ", ")
+                    await MainActor.run {
+                        self.cachedLocationName = newName
+                        self.lastGeocodeTime = Date()
+                        self.lastGeocodedLocation = geocodeLocation
+                    }
+                }
+            }
         }
         
         Task {
             defer {
                 if bgTaskID != .invalid {
                     UIApplication.shared.endBackgroundTask(bgTaskID)
+                    bgTaskID = .invalid
                 }
             }
-            var locationName: String? = nil
-            if let placemarks = try? await geocoder.reverseGeocodeLocation(location),
-               let placemark = placemarks.first {
-                let street = placemark.thoroughfare ?? ""
-                let kelurahan = placemark.subLocality ?? ""
-                let kecamatan = placemark.subAdministrativeArea ?? ""
-                
-                var addressParts: [String] = []
-                if !street.isEmpty { addressParts.append(street) }
-                if !kelurahan.isEmpty { addressParts.append(kelurahan) }
-                if !kecamatan.isEmpty { addressParts.append(kecamatan) }
-                
-                locationName = addressParts.isEmpty ? (placemark.locality ?? "Tidak Diketahui") : addressParts.joined(separator: ", ")
-            }
             
-            self.log("📤 GPS Uplink: Mengirim data ke server Laravel! (Lat: \(location.coordinate.latitude), Lon: \(location.coordinate.longitude), Nama: \(locationName ?? "Tidak Diketahui"), Jarak: \(Int(distanceMoved))m, Waktu: \(Int(timeElapsed))s)")
+            self.log("📤 GPS Uplink: Mengirim data ke server Laravel! (Lat: \(location.coordinate.latitude), Lon: \(location.coordinate.longitude), Nama: \(self.cachedLocationName ?? "Tidak Diketahui"), Jarak: \(Int(distanceMoved))m, Waktu: \(Int(timeElapsed))s)")
             
             // Upload dynamically to server!
             AuthManager.shared.pushLocationAndStatus(
                 latitude: location.coordinate.latitude,
                 longitude: location.coordinate.longitude,
-                locationName: locationName
+                locationName: self.cachedLocationName
             )
             
             await MainActor.run {
                 self.lastUploadedLocation = location
                 self.lastUploadTime = Date()
-                self.isGeocoding = false
             }
         }
     }
