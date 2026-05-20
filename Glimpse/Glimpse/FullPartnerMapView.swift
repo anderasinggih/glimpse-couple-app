@@ -447,21 +447,42 @@ struct FullPartnerMapView: View {
         let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
         
         let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
-        let wavyCoords = generateWavyCoordinates(from: animatedMyCoordinate, to: animatedPartnerCoordinate, distanceInKm: distanceInKm, phase: wavePhase)
         
-        // 1. Bottom Layer: Outer Neon Glow
-        MapPolyline(coordinates: wavyCoords)
-            .stroke(
-                LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
-                style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
-            )
-        
-        // 2. Top Layer: Core Saturated Line
-        MapPolyline(coordinates: wavyCoords)
-            .stroke(
-                LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
-                style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
-            )
+        if isInterpolatingPartner || isInterpolatingMy {
+            // STRAIGHT LINE when moving - super light, 0% CPU calculations!
+            let lineCoords = [animatedMyCoordinate, animatedPartnerCoordinate]
+            
+            // 1. Bottom Layer: Outer Neon Glow
+            MapPolyline(coordinates: lineCoords)
+                .stroke(
+                    LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
+                    style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
+                )
+            
+            // 2. Top Layer: Core Neon Line
+            MapPolyline(coordinates: lineCoords)
+                .stroke(
+                    LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
+                    style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+                )
+        } else {
+            // WAVY LINE when static - beautiful dynamic shape!
+            let wavyCoords = generateWavyCoordinates(from: animatedMyCoordinate, to: animatedPartnerCoordinate, distanceInKm: distanceInKm, phase: wavePhase)
+            
+            // 1. Bottom Layer: Outer Neon Glow
+            MapPolyline(coordinates: wavyCoords)
+                .stroke(
+                    LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
+                    style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
+                )
+            
+            // 2. Top Layer: Core Saturated Line
+            MapPolyline(coordinates: wavyCoords)
+                .stroke(
+                    LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
+                    style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+                )
+        }
     }
     
     @MapContentBuilder

@@ -132,22 +132,41 @@ struct PartnerMapView: View {
                                 let endLoc = CLLocation(latitude: animatedPartnerCoordinate.latitude, longitude: animatedPartnerCoordinate.longitude)
                                 let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
                                 
-                                let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: animatedPartnerCoordinate, phase: wavePhase)
                                 let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
                                 
-                                // 1. Bottom Layer: Outer Neon Glow
-                                MapPolyline(coordinates: wavyCoords)
-                                    .stroke(
-                                        LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
-                                        style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
-                                    )
-                                
-                                // 2. Top Layer: Core Saturated Line
-                                MapPolyline(coordinates: wavyCoords)
-                                    .stroke(
-                                        LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
-                                        style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
-                                    )
+                                if isInterpolating {
+                                    // STRAIGHT LINE when moving - super light, 0% CPU calculations!
+                                    let lineCoords = [currentUser.coordinate, animatedPartnerCoordinate]
+                                    
+                                    MapPolyline(coordinates: lineCoords)
+                                        .stroke(
+                                            LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
+                                            style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
+                                        )
+                                    
+                                    MapPolyline(coordinates: lineCoords)
+                                        .stroke(
+                                            LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
+                                            style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+                                        )
+                                } else {
+                                    // WAVY LINE when static - beautiful dynamic shape!
+                                    let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: animatedPartnerCoordinate, phase: wavePhase)
+                                    
+                                    // 1. Bottom Layer: Outer Neon Glow
+                                    MapPolyline(coordinates: wavyCoords)
+                                        .stroke(
+                                            LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
+                                            style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
+                                        )
+                                    
+                                    // 2. Top Layer: Core Saturated Line
+                                    MapPolyline(coordinates: wavyCoords)
+                                        .stroke(
+                                            LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
+                                            style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+                                        )
+                                }
                             }
                             
                             if let currentUser = auth.currentUser, let myLat = currentUser.latitude, myLat != 0.0 {
