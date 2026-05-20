@@ -31,10 +31,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     private var cachedLocationName: String? = nil
     private var lastGeocodeTime: Date? = nil
     private var lastGeocodedLocation: CLLocation? = nil
-    
-    // Force Sync state: prevents stale/inaccurate readings from being uploaded
-    private var isForceSyncing = false
-    private var forceSyncTimeoutTask: Task<Void, Never>? = nil
+    private var pendingForceSyncUpload = false
     
     override init() {
         super.init()
@@ -74,45 +71,29 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     
     // Web / Partner triggered Force Sync
     func forceWakeGPSAndSync() {
-        self.log("🔔 Permintaan Sinkronisasi Diterima! Memaksa GPS bangun, menghapus cache Wi-Fi, menunggu koordinat akurat...")
+        self.log("🔔 Permintaan Sinkronisasi Web/Partner Diterima! Memaksa GPS bangun dan menghapus cache Wi-Fi...")
         
-        // CLEAR CACHE: Wipes any stuck simulated/stale/WiFi-anchored location!
+        // CLEAR CACHE: If the user was stuck in a simulated/fake location lock, this completely wipes it!
         self.cachedWiFiLocations.removeAll()
         self.cachedLocationName = nil
         self.lastGeocodedLocation = nil
-        self.lastUploadedLocation = nil // Reset threshold so next reading is always uploaded
         
         self.isStationary = false
         self.removeStationaryGeofence()
         
-        // Mark as force syncing — blocks stale uploads and WiFi re-anchoring
-        self.isForceSyncing = true
-        forceSyncTimeoutTask?.cancel()
-        
-        // Force highest accuracy for a clean GPS fix
+        // Force highest accuracy for a quick burst sync!
         self.locationManager.desiredAccuracy = kCLLocationAccuracyBest
         self.locationManager.distanceFilter = kCLDistanceFilterNone
+        
         self.locationManager.startUpdatingLocation()
         LiveDebugLogger.shared.setGPSStatus("Active (Force Sync) 🛰️")
         
-        // ⚠️ DO NOT upload locationManager.location here — it's the STALE cached reading!
-        // We wait for a fresh accurate fix from didUpdateLocations instead.
+        // Flag to guarantee the next fresh GPS hit completely bypasses all throttles
+        self.pendingForceSyncUpload = true
         
-        // Safety timeout: if no accurate fix arrives within 15s, upload whatever we have
-        forceSyncTimeoutTask = Task { [weak self] in
-            guard let self else { return }
-            try? await Task.sleep(nanoseconds: 15_000_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                if self.isForceSyncing {
-                    self.log("⏱️ Force Sync Timeout: Tidak ada fix akurat setelah 15 detik. Menggunakan lokasi terbaik yang ada.")
-                    self.isForceSyncing = false
-                    if let loc = self.locationManager.location {
-                        self.processAndUploadLocation(loc, forceUpload: true)
-                    }
-                    LiveDebugLogger.shared.setGPSStatus("Active 🛰️")
-                }
-            }
+        // If we already have a location, send it immediately as a placeholder while waiting for fresh GPS fix
+        if let currentLoc = locationManager.location {
+            processAndUploadLocation(currentLoc, forceUpload: true)
         }
     }
     
@@ -405,23 +386,6 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             }
         }
         
-        // --- FORCE SYNC MODE: Only accept accurate readings ---
-        if isForceSyncing {
-            // horizontalAccuracy > 0 means valid; wait until we get a reading ≤ 50m
-            guard location.horizontalAccuracy > 0, location.horizontalAccuracy <= 50.0 else {
-                self.log("⏳ Force Sync: Akurasi belum cukup (\(Int(location.horizontalAccuracy))m), menunggu fix yang lebih baik...")
-                return
-            }
-            
-            self.log("✅ Force Sync: Fix akurat diterima! Akurasi \(Int(location.horizontalAccuracy))m. Upload sekarang.")
-            isForceSyncing = false
-            forceSyncTimeoutTask?.cancel()
-            
-            // Skip WiFi re-anchoring for this fresh reading — let the user move around first
-            processAndUploadLocation(location, forceUpload: true)
-            return
-        }
-        
         // Cache WiFi location if we just connected (but bypass if simulated!)
         if let bssid = currentWiFiBSSID, cachedWiFiLocations[bssid] == nil {
             var isSimulated = false
@@ -443,7 +407,13 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             }
         }
         
-        processAndUploadLocation(location)
+        if self.pendingForceSyncUpload {
+            self.pendingForceSyncUpload = false
+            self.log("🚀 Menerapkan Force Upload dari kordinat GPS fresh pertama setelah Sinkronisasi!")
+            processAndUploadLocation(location, forceUpload: true)
+        } else {
+            processAndUploadLocation(location)
+        }
     }
     
     func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
