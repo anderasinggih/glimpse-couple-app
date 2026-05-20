@@ -51,48 +51,7 @@ struct FullPartnerMapView: View {
         }
         return CLLocationCoordinate2D(latitude: 0.0, longitude: 0.0)
     }
-    
-    private var partnerSegments: [FootprintSegment] {
-        guard let partner = auth.partner,
-              let history = partner.location_history, history.count >= 2 else { return [] }
-        var coords = history.map { $0.coordinate }
-        
-        // Sync the tail of the footprint exactly to the moving avatar
-        if coords.count > 0 && animatedPartnerLatitude != 0.0 {
-            coords[coords.count - 1] = animatedPartnerCoordinate
-        }
-        
-        let count = coords.count
-        return (0..<count - 1).map { i in
-            FootprintSegment(
-                coordinate1: coords[i],
-                coordinate2: coords[i+1],
-                index: i,
-                totalCount: count
-            )
-        }
-    }
-    
-    private var mySegments: [FootprintSegment] {
-        guard let myUser = auth.currentUser,
-              let history = myUser.location_history, history.count >= 2 else { return [] }
-        var coords = history.map { $0.coordinate }
-        
-        // Sync the tail of the footprint exactly to the moving avatar
-        if coords.count > 0 && animatedMyLatitude != 0.0 {
-            coords[coords.count - 1] = animatedMyCoordinate
-        }
-        
-        let count = coords.count
-        return (0..<count - 1).map { i in
-            FootprintSegment(
-                coordinate1: coords[i],
-                coordinate2: coords[i+1],
-                index: i,
-                totalCount: count
-            )
-        }
-    }
+
     
     // Polling timer removed (Replaced by WebSocket real-time updates)
     
@@ -125,15 +84,6 @@ struct FullPartnerMapView: View {
             } else if let partner = auth.partner {
                 // Full Screen Map with Pulsing Partner Marker
                 Map(position: $position) {
-                    // 👣 Neon Footprints Trail for Partner (Zenly-Style) - Tapered Fading Shadow
-                    ForEach(partnerSegments) { segment in
-                        FootprintSegmentView(segment: segment, color: .activeCyan)
-                    }
-                    
-                    // 👣 Neon Footprints Trail for Me (Zenly-Style) - Tapered Fading Shadow
-                    ForEach(mySegments) { segment in
-                        FootprintSegmentView(segment: segment, color: .electricPurple)
-                    }
 
                     if auth.isTogether, let currentUser = auth.currentUser {
                         Annotation("Together", coordinate: animatedPartnerCoordinate) {
@@ -183,22 +133,21 @@ struct FullPartnerMapView: View {
                 // Automatically move map camera smoothly when partner's live coordinates change
                 .onChange(of: partner.last_updated) { _, _ in
                     if let lat = partner.latitude, let lon = partner.longitude, lat != 0.0, lon != 0.0 {
-                        let newDate = partner.lastUpdatedDate
+                        let now = Date()
                         let duration: Double = {
                             if let prev = previousPartnerDate {
-                                let diff = newDate.timeIntervalSince(prev)
-                                // Limit between 1.0s and 10.0s to avoid crazy slow or fast animations
-                                return max(1.0, min(diff, 10.0))
+                                let diff = now.timeIntervalSince(prev)
+                                return max(0.5, min(diff, 5.0))
                             }
-                            return 3.0 // Default fallback
+                            return 1.5 // Default fallback
                         }()
-                        previousPartnerDate = newDate
+                        previousPartnerDate = now
                         
                         if animatedPartnerLatitude == 0.0 {
                             animatedPartnerLatitude = lat
                             animatedPartnerLongitude = lon
                         } else {
-                            withAnimation(.linear(duration: duration)) {
+                            withAnimation(.interactiveSpring(response: duration, dampingFraction: 1.0, blendDuration: 0.5)) {
                                 animatedPartnerLatitude = lat
                                 animatedPartnerLongitude = lon
                             }
@@ -209,21 +158,21 @@ struct FullPartnerMapView: View {
                     guard let currentUser = auth.currentUser else { return }
                     
                     if let lat = currentUser.latitude, let lon = currentUser.longitude, lat != 0.0, lon != 0.0 {
-                        let newDate = currentUser.lastUpdatedDate
+                        let now = Date()
                         let duration: Double = {
                             if let prev = previousMyDate {
-                                let diff = newDate.timeIntervalSince(prev)
-                                return max(1.0, min(diff, 10.0))
+                                let diff = now.timeIntervalSince(prev)
+                                return max(0.5, min(diff, 5.0))
                             }
-                            return 3.0 // Default fallback
+                            return 1.5 // Default fallback
                         }()
-                        previousMyDate = newDate
+                        previousMyDate = now
                         
                         if animatedMyLatitude == 0.0 {
                             animatedMyLatitude = lat
                             animatedMyLongitude = lon
                         } else {
-                            withAnimation(.linear(duration: duration)) {
+                            withAnimation(.interactiveSpring(response: duration, dampingFraction: 1.0, blendDuration: 0.5)) {
                                 animatedMyLatitude = lat
                                 animatedMyLongitude = lon
                             }
@@ -467,16 +416,17 @@ struct FullPartnerMapView: View {
                 ))
             }
         }
+        .id("together_marker")
     }
     
     @MapContentBuilder
     private func wavyConnectingLine(currentUser: GlimpseUser, partner: GlimpseUser) -> some MapContent {
-        let startLoc = CLLocation(latitude: currentUser.coordinate.latitude, longitude: currentUser.coordinate.longitude)
-        let endLoc = CLLocation(latitude: partner.coordinate.latitude, longitude: partner.coordinate.longitude)
+        let startLoc = CLLocation(latitude: animatedMyCoordinate.latitude, longitude: animatedMyCoordinate.longitude)
+        let endLoc = CLLocation(latitude: animatedPartnerCoordinate.latitude, longitude: animatedPartnerCoordinate.longitude)
         let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
         
         let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
-        let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: partner.coordinate, distanceInKm: distanceInKm, phase: wavePhase)
+        let wavyCoords = generateWavyCoordinates(from: animatedMyCoordinate, to: animatedPartnerCoordinate, distanceInKm: distanceInKm, phase: wavePhase)
         
         // 1. Bottom Layer: Outer Neon Glow
         MapPolyline(coordinates: wavyCoords)
@@ -514,6 +464,7 @@ struct FullPartnerMapView: View {
                     ))
                 }
             }
+            .id("me_marker")
         }
     }
     
@@ -538,6 +489,7 @@ struct FullPartnerMapView: View {
                     ))
                 }
             }
+            .id("partner_marker")
         }
     }
     
@@ -713,48 +665,6 @@ struct FullPartnerMapView: View {
         
         
         return coordinates
-    }
-}
-
-struct FootprintSegment: Identifiable {
-    var id: String { "segment-\(index)" }
-    let coordinate1: CLLocationCoordinate2D
-    let coordinate2: CLLocationCoordinate2D
-    let index: Int
-    let totalCount: Int
-}
-
-struct FootprintSegmentView: MapContent {
-    let segment: FootprintSegment
-    let color: Color
-    
-    private var progress: Double {
-        segment.totalCount > 1 ? Double(segment.index) / Double(segment.totalCount - 1) : 1.0
-    }
-    
-    private var opacity: Double {
-        0.35 + (progress * 0.45)
-    }
-    
-    private var width: CGFloat {
-        CGFloat(1.5 + (progress * 1.5))
-    }
-    
-    @MapContentBuilder
-    var body: some MapContent {
-        // 1. Neon Glow Layer
-        MapPolyline(coordinates: [segment.coordinate1, segment.coordinate2])
-            .stroke(
-                color.opacity(opacity * 0.3),
-                style: StrokeStyle(lineWidth: width + 2.0, lineCap: .round, lineJoin: .round)
-            )
-        
-        // 2. Core Saturated Neon Layer
-        MapPolyline(coordinates: [segment.coordinate1, segment.coordinate2])
-            .stroke(
-                color.opacity(opacity),
-                style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
-            )
     }
 }
 

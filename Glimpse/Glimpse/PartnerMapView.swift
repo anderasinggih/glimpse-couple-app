@@ -118,6 +118,7 @@ struct PartnerMapView: View {
                                         ))
                                     }
                                 }
+                                .id("together_marker")
                             }
                         } else {
                             // Wavy Connecting line
@@ -125,10 +126,10 @@ struct PartnerMapView: View {
                                let userLat = user.latitude, userLat != 0.0,
                                let myLat = currentUser.latitude, myLat != 0.0 {
                                 let startLoc = CLLocation(latitude: currentUser.coordinate.latitude, longitude: currentUser.coordinate.longitude)
-                                let endLoc = CLLocation(latitude: user.coordinate.latitude, longitude: user.coordinate.longitude)
+                                let endLoc = CLLocation(latitude: animatedPartnerCoordinate.latitude, longitude: animatedPartnerCoordinate.longitude)
                                 let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
                                 
-                                let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: user.coordinate, phase: wavePhase)
+                                let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: animatedPartnerCoordinate, phase: wavePhase)
                                 let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
                                 
                                 // 1. Bottom Layer: Outer Neon Glow
@@ -164,6 +165,7 @@ struct PartnerMapView: View {
                                             ))
                                         }
                                     }
+                                    .id("me_marker")
                                 }
                             }
                             
@@ -185,6 +187,7 @@ struct PartnerMapView: View {
                                             ))
                                         }
                                     }
+                                    .id("partner_marker")
                                 }
                             }
                         }
@@ -234,15 +237,15 @@ struct PartnerMapView: View {
             updateLocalAddress()
             updateMapPosition()
             if let lat = user.latitude, let lon = user.longitude, lat != 0.0, lon != 0.0 {
-                let newDate = user.lastUpdatedDate
+                let now = Date()
                 let duration: Double = {
                     if let prev = previousUpdateDate {
-                        let diff = newDate.timeIntervalSince(prev)
-                        return max(1.0, min(diff, 10.0))
+                        let diff = now.timeIntervalSince(prev)
+                        return max(0.5, min(diff, 5.0))
                     }
-                    return 3.0 // Default
+                    return 1.5 // Default fallback
                 }()
-                previousUpdateDate = newDate
+                previousUpdateDate = now
                 
                 if animatedPartnerLatitude == 0.0 {
                     animatedPartnerLatitude = lat
@@ -779,14 +782,21 @@ struct BatteryIndicator: View {
 
 class ImageCacheManager {
     static let shared = ImageCacheManager()
-    private var memoryCache = NSCache<NSString, UIImage>()
+    private var memoryCache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 30 // Keep max 30 images in RAM
+        cache.totalCostLimit = 100 * 1024 * 1024 // Keep max 100 MB in RAM
+        return cache
+    }()
     
     func getImage(for urlString: String) -> UIImage? {
         return memoryCache.object(forKey: urlString as NSString)
     }
     
     func saveImage(_ image: UIImage, for urlString: String) {
-        memoryCache.setObject(image, forKey: urlString as NSString)
+        // Calculate raw pixel data memory cost: width * height * 4 bytes per pixel
+        let cost = Int(image.size.width * image.size.height * 4)
+        memoryCache.setObject(image, forKey: urlString as NSString, cost: cost)
     }
 }
 
