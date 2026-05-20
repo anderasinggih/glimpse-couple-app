@@ -569,16 +569,18 @@ struct PartnerMarker: View {
     var isSleeping: Bool? = false
     var speed: Double? = nil
 
-    @State private var zzzPhase: Double = 0
+    @State private var zzzPhase1: Double = 0
+    @State private var zzzPhase2: Double = 0
+    @State private var zzzPhase3: Double = 0
     @State private var pulsePhase: Double = 0
     @State private var trailPhase: Double = 0
     
     var body: some View {
         let isPanic = (batteryLevel ?? 100) <= 10 && (isCharging != true)
-        let isSpeeding = (speed ?? 0) > 60.0
+        let isSpeeding = (speed ?? 0) > 15.0
         
         ZStack {
-            // 🔥 Lightweight Speed Trails (Only active when speed > 60)
+            // 🔥 Lightweight Speed Trails (Only active when speed > 15)
             if isSpeeding {
                 ZStack {
                     Capsule()
@@ -594,6 +596,12 @@ struct PartnerMarker: View {
                         .offset(y: 30 + (trailPhase * 8))
                         .opacity(1.0 - trailPhase)
                         .blur(radius: 1)
+                }
+                .onAppear {
+                    trailPhase = 0.0
+                    withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
+                        trailPhase = 1.0
+                    }
                 }
             }
             
@@ -629,23 +637,34 @@ struct PartnerMarker: View {
                 ZStack {
                     Text("z")
                         .font(.system(size: 10, weight: .bold))
-                        .offset(x: -18 - (zzzPhase * 4), y: -18 - (zzzPhase * 12))
-                        .opacity(1.0 - zzzPhase)
-                        .animation(.linear(duration: 1.5).repeatForever(autoreverses: false).delay(0.0), value: zzzPhase)
+                        .offset(x: -18 - (zzzPhase1 * 4), y: -18 - (zzzPhase1 * 12))
+                        .opacity(1.0 - zzzPhase1)
                         
                     Text("Z")
                         .font(.system(size: 14, weight: .bold))
-                        .offset(x: -15 + (zzzPhase * 3), y: -22 - (zzzPhase * 18))
-                        .opacity(1.0 - zzzPhase)
-                        .animation(.linear(duration: 1.5).repeatForever(autoreverses: false).delay(0.5), value: zzzPhase)
+                        .offset(x: -15 + (zzzPhase2 * 3), y: -22 - (zzzPhase2 * 18))
+                        .opacity(1.0 - zzzPhase2)
                         
                     Text("Z")
                         .font(.system(size: 18, weight: .bold))
-                        .offset(x: -22 - (zzzPhase * 2), y: -26 - (zzzPhase * 24))
-                        .opacity(1.0 - zzzPhase)
-                        .animation(.linear(duration: 1.5).repeatForever(autoreverses: false).delay(1.0), value: zzzPhase)
+                        .offset(x: -22 - (zzzPhase3 * 2), y: -26 - (zzzPhase3 * 24))
+                        .opacity(1.0 - zzzPhase3)
                 }
                 .shadow(color: .black.opacity(0.5), radius: 2)
+                .onAppear {
+                    zzzPhase1 = 0
+                    zzzPhase2 = 0
+                    zzzPhase3 = 0
+                    withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                        zzzPhase1 = 1.0
+                    }
+                    withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false).delay(0.5)) {
+                        zzzPhase2 = 1.0
+                    }
+                    withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false).delay(1.0)) {
+                        zzzPhase3 = 1.0
+                    }
+                }
             }
             
             // 🏡/💼/🎓 Smart Cozy Anchor Icon Badge
@@ -721,14 +740,9 @@ struct PartnerMarker: View {
             }
         }
         .onAppear {
-            withAnimation(.linear(duration: 1.0).repeatForever(autoreverses: false)) {
-                trailPhase = 1.0
-            }
             withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
                 pulsePhase = 1.0
             }
-            // zzzPhase is animated directly on the Text elements via .animation modifier
-            zzzPhase = 1.0
         }
     }
 }
