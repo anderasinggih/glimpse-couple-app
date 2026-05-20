@@ -150,6 +150,7 @@ struct ChatView: View {
                 ZStack {
                     chatRoomsListView(partner: partner)
                     
+                    
                     if let activeRoom = selectedRoom {
                         activeChatRoomView(partner: partner, room: activeRoom)
                             .transition(.move(edge: .trailing))
@@ -268,6 +269,10 @@ struct ChatView: View {
         } message: {
             Text("No internet connection. Please connect to the internet and try again.")
         }
+        .onChange(of: searchQuery) { oldValue, newValue in
+            debouncedSearchQuery = newValue
+            updateLocalSearchMatches()
+        }
     }
     
     // --- 💬 ACTIVE CHAT ROOM SCREEN (Type-safety separated) ---
@@ -375,7 +380,7 @@ struct ChatView: View {
                             )
                         }
                         .defaultScrollAnchor(.bottom)
-                        .scrollDismissesKeyboard(.immediately)
+                        .scrollDismissesKeyboard(.interactively)
                         .onAppear {
                             if let highlightId = highlightedMessageId {
                                 // Scroll straight to targeted search result message!
@@ -608,26 +613,6 @@ struct ChatView: View {
             .presentationDetents([.height(340)])
             .presentationDragIndicator(.visible)
         }
-        .onChange(of: searchQuery) { oldValue, newValue in
-            searchTask?.cancel()
-            
-            // If the query is empty, we bypass debounce for instant UI clearing
-            if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                debouncedSearchQuery = newValue
-                updateLocalSearchMatches()
-                return
-            }
-            
-            searchTask = Task {
-                try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s debounce
-                if !Task.isCancelled {
-                    await MainActor.run {
-                        self.debouncedSearchQuery = newValue
-                        self.updateLocalSearchMatches()
-                    }
-                }
-            }
-        }
         .onChange(of: isSearchingChat) { oldValue, newValue in
             if !newValue {
                 localSearchMatchIds = []
@@ -836,7 +821,7 @@ struct ChatView: View {
                     .scrollContentBackground(.hidden)
                     .background(Color.clear)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .scrollDismissesKeyboard(.immediately)
+                    .scrollDismissesKeyboard(.interactively)
                     .simultaneousGesture(
                         TapGesture().onEnded {
                             isSearchFocused = false
@@ -1082,7 +1067,7 @@ struct ChatView: View {
                     }
                     
                     HStack(spacing: 6) {
-                        Text(partner.isOffline ? "Offline" : "Online")
+                        Text(partner.isOffline ? partner.timeAgoString : "Online")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundColor(.white.opacity(0.5))
                         
@@ -1262,7 +1247,7 @@ struct ChatView: View {
                     }
                     
                     HStack(spacing: 6) {
-                        Text(partner.isOffline ? "Offline" : "Online")
+                        Text(partner.isOffline ? partner.timeAgoString : "Online")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundColor(.white.opacity(0.5))
                         
@@ -1710,16 +1695,11 @@ struct ChatView: View {
         
         let roomId = selectedRoom?.id
         
-        // 1. Load from auth-level persistent cache first (survives tab switching)
-        if let rId = roomId, let authCached = auth.roomMessagesCache[rId], !authCached.isEmpty {
-            self.messages = authCached
-            self.messagesCache[rId] = authCached
-        } else if let cached = messagesCache[roomId ?? 0], !cached.isEmpty {
-            self.messages = cached
-        } else if roomId == nil && !auth.latestFetchedMessages.isEmpty {
-            self.messages = auth.latestFetchedMessages
-        } else {
-            self.messages = []
+        // 1. Load from SQLite database (or memory cache) transparently
+        let cached = auth.getCachedMessages(for: roomId)
+        self.messages = cached
+        if let rId = roomId {
+            self.messagesCache[rId] = cached
         }
         
         // 2. Fetch fresh from server, MERGE with local state

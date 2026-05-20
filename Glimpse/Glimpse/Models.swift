@@ -27,12 +27,13 @@ struct GlimpseUser: Codable, Identifiable {
     var is_charging: Bool?
     var is_sleeping: Bool?
     var wifi_bssid: String?
+    var activity: String?
     var latest_photo_url: String?
     var last_updated: String?
     let invite_code: String?
     let couple_id: Int?
     var last_seen_message_id: Int?
-    let location_history: [LocationHistoryEntry]?
+    var location_history: [LocationHistoryEntry]?
     
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude ?? 0, longitude: longitude ?? 0)
@@ -47,6 +48,21 @@ struct GlimpseUser: Codable, Identifiable {
     var isOffline: Bool {
         guard last_updated != nil else { return true }
         return Calendar.current.dateComponents([.minute], from: lastUpdatedDate, to: Date()).minute ?? 0 > 3
+    }
+    
+    var timeAgoString: String {
+        guard last_updated != nil else { return "Offline" }
+        let diff = Calendar.current.dateComponents([.minute, .hour, .day], from: lastUpdatedDate, to: Date())
+        if let days = diff.day, days > 0 {
+            return "\(days)d ago"
+        }
+        if let hours = diff.hour, hours > 0 {
+            return "\(hours)h ago"
+        }
+        if let minutes = diff.minute, minutes > 0 {
+            return "\(minutes)m ago"
+        }
+        return "1m ago"
     }
     
     var isBirthdayToday: Bool {
@@ -142,6 +158,7 @@ extension GlimpseUser {
         is_charging: false,
         is_sleeping: false,
         wifi_bssid: nil,
+        activity: nil,
         latest_photo_url: nil,
         last_updated: ISO8601DateFormatter().string(from: Date()),
         invite_code: "GLMP-1234",
@@ -165,6 +182,7 @@ extension GlimpseUser {
         is_charging: false,
         is_sleeping: false,
         wifi_bssid: nil,
+        activity: nil,
         latest_photo_url: nil,
         last_updated: ISO8601DateFormatter().string(from: Date()),
         invite_code: "UNKNOWN",
