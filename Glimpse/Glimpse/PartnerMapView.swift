@@ -15,6 +15,7 @@ struct PartnerMapView: View {
     @State private var animatedPartnerLatitude: Double = 0.0
     @State private var animatedPartnerLongitude: Double = 0.0
     @State private var previousUpdateDate: Date? = nil
+    @State private var interpolationTask: Task<Void, Never>? = nil
     
     private var animatedPartnerCoordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(
@@ -247,13 +248,37 @@ struct PartnerMapView: View {
                 }()
                 previousUpdateDate = now
                 
-                if animatedPartnerLatitude == 0.0 {
-                    animatedPartnerLatitude = lat
-                    animatedPartnerLongitude = lon
-                } else {
-                    withAnimation(.linear(duration: duration)) {
-                        animatedPartnerLatitude = lat
-                        animatedPartnerLongitude = lon
+                interpolationTask?.cancel()
+                
+                let startLat = animatedPartnerLatitude == 0.0 ? lat : animatedPartnerLatitude
+                let startLon = animatedPartnerLongitude == 0.0 ? lon : animatedPartnerLongitude
+                let targetLat = lat
+                let targetLon = lon
+                
+                let fps: Double = 60.0
+                let stepInterval = 1.0 / fps
+                
+                interpolationTask = Task {
+                    let startTime = Date()
+                    while true {
+                        if Task.isCancelled { break }
+                        
+                        let elapsed = Date().timeIntervalSince(startTime)
+                        let progress = min(1.0, elapsed / duration)
+                        
+                        // Quadratic easeOut: t * (2 - t)
+                        let t = progress * (2.0 - progress)
+                        
+                        let currentLat = startLat + (targetLat - startLat) * t
+                        let currentLon = startLon + (targetLon - startLon) * t
+                        
+                        await MainActor.run {
+                            animatedPartnerLatitude = currentLat
+                            animatedPartnerLongitude = currentLon
+                        }
+                        
+                        if progress >= 1.0 { break }
+                        try? await Task.sleep(nanoseconds: UInt64(stepInterval * 1_000_000_000))
                     }
                 }
             }
