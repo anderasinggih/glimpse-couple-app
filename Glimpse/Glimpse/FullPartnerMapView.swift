@@ -180,6 +180,7 @@ struct FullPartnerMapView: View {
                     }
                 }
                 .onChange(of: animatedPartnerLatitude) { _, _ in
+                    guard !isFlying else { return }
                     if isTrackingEnabled && currentlyFocusedTarget == .partner {
                         position = .region(MKCoordinateRegion(
                             center: animatedPartnerCoordinate,
@@ -188,6 +189,7 @@ struct FullPartnerMapView: View {
                     }
                 }
                 .onChange(of: animatedMyLatitude) { _, _ in
+                    guard !isFlying else { return }
                     if isTrackingEnabled && currentlyFocusedTarget == .me {
                         position = .region(MKCoordinateRegion(
                             center: animatedMyCoordinate,
@@ -300,6 +302,29 @@ struct FullPartnerMapView: View {
                     .padding(.horizontal, 12)
                     .padding(.bottom, 8)
                     .shadow(color: Color.black.opacity(0.25), radius: 10, y: 5)
+                    .gesture(
+                        DragGesture(minimumDistance: 20)
+                            .onEnded { value in
+                                let threshold: CGFloat = 30
+                                if abs(value.translation.height) > threshold || abs(value.translation.width) > threshold {
+                                    guard !isFlying else { return }
+                                    guard let currentUser = auth.currentUser else { return }
+                                    
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    
+                                    let nextTarget: MapFocusTarget = (currentlyFocusedTarget == .me) ? .partner : .me
+                                    let myCoord = currentUser.coordinate
+                                    let partnerCoord = partner.coordinate
+                                    
+                                    isFlying = true
+                                    
+                                    let targetCoord = (nextTarget == .me) ? myCoord : partnerCoord
+                                    let startCoord = (nextTarget == .me) ? partnerCoord : myCoord
+                                    
+                                    triggerCinematicFlight(from: startCoord, to: targetCoord, targetFocus: nextTarget)
+                                }
+                            }
+                    )
                 }
             } else {
                 // Not Connected / No Partner View (Beautiful, minimalist box-less state)
