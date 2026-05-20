@@ -770,8 +770,23 @@ struct FullPartnerMapView: View {
                 let startLat = animatedPartnerLatitude == 0.0 ? target.latitude : animatedPartnerLatitude
                 let startLon = animatedPartnerLongitude == 0.0 ? target.longitude : animatedPartnerLongitude
                 
+                let startLoc = CLLocation(latitude: startLat, longitude: startLon)
+                let targetLoc = CLLocation(latitude: target.latitude, longitude: target.longitude)
+                let distance = targetLoc.distance(from: startLoc)
+                
                 // Segments will take 1.2s if we have a backlog of coordinates, and 2.5s (3-second buffer lag) under normal flow
                 let duration: TimeInterval = partnerCoordinateQueue.count > 1 ? 1.2 : 2.5
+                
+                let speedMps = distance / duration
+                let speedKmH = speedMps * 3.6
+                
+                await MainActor.run {
+                    if speedKmH >= 3.0 {
+                        auth.partnerSpeedKmH = speedKmH
+                    } else {
+                        auth.partnerSpeedKmH = nil
+                    }
+                }
                 
                 let fps: Double = 60.0
                 let stepInterval = 1.0 / fps
@@ -797,6 +812,9 @@ struct FullPartnerMapView: View {
                     try? await Task.sleep(nanoseconds: UInt64(stepInterval * 1_000_000_000))
                 }
             }
+            await MainActor.run {
+                auth.partnerSpeedKmH = nil
+            }
             isInterpolatingPartner = false
         }
     }
@@ -813,7 +831,22 @@ struct FullPartnerMapView: View {
                 let startLat = animatedMyLatitude == 0.0 ? target.latitude : animatedMyLatitude
                 let startLon = animatedMyLongitude == 0.0 ? target.longitude : animatedMyLongitude
                 
+                let startLoc = CLLocation(latitude: startLat, longitude: startLon)
+                let targetLoc = CLLocation(latitude: target.latitude, longitude: target.longitude)
+                let distance = targetLoc.distance(from: startLoc)
+                
                 let duration: TimeInterval = myCoordinateQueue.count > 1 ? 1.2 : 2.5
+                
+                let speedMps = distance / duration
+                let speedKmH = speedMps * 3.6
+                
+                await MainActor.run {
+                    if speedKmH >= 3.0 {
+                        auth.mySpeedKmH = speedKmH
+                    } else {
+                        auth.mySpeedKmH = nil
+                    }
+                }
                 
                 let fps: Double = 60.0
                 let stepInterval = 1.0 / fps
@@ -838,6 +871,9 @@ struct FullPartnerMapView: View {
                     if progress >= 1.0 { break }
                     try? await Task.sleep(nanoseconds: UInt64(stepInterval * 1_000_000_000))
                 }
+            }
+            await MainActor.run {
+                auth.mySpeedKmH = nil
             }
             isInterpolatingMy = false
         }

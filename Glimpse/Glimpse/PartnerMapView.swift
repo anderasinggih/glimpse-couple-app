@@ -312,8 +312,23 @@ struct PartnerMapView: View {
                 let startLat = animatedPartnerLatitude == 0.0 ? target.latitude : animatedPartnerLatitude
                 let startLon = animatedPartnerLongitude == 0.0 ? target.longitude : animatedPartnerLongitude
                 
+                let startLoc = CLLocation(latitude: startLat, longitude: startLon)
+                let targetLoc = CLLocation(latitude: target.latitude, longitude: target.longitude)
+                let distance = targetLoc.distance(from: startLoc)
+                
                 // Segments will take 1.2s if we have a backlog of coordinates, and 2.5s (3-second buffer lag) under normal flow
                 let duration: TimeInterval = partnerCoordinateQueue.count > 1 ? 1.2 : 2.5
+                
+                let speedMps = distance / duration
+                let speedKmH = speedMps * 3.6
+                
+                await MainActor.run {
+                    if speedKmH >= 3.0 {
+                        auth.partnerSpeedKmH = speedKmH
+                    } else {
+                        auth.partnerSpeedKmH = nil
+                    }
+                }
                 
                 let fps: Double = 60.0
                 let stepInterval = 1.0 / fps
@@ -338,6 +353,9 @@ struct PartnerMapView: View {
                     if progress >= 1.0 { break }
                     try? await Task.sleep(nanoseconds: UInt64(stepInterval * 1_000_000_000))
                 }
+            }
+            await MainActor.run {
+                auth.partnerSpeedKmH = nil
             }
             isInterpolating = false
         }
@@ -627,6 +645,14 @@ struct PartnerOverlayCard: View {
         user.id == AuthManager.shared.currentUser?.id
     }
     
+    private var currentSpeed: Double? {
+        if isMe {
+            return AuthManager.shared.mySpeedKmH
+        } else {
+            return AuthManager.shared.partnerSpeedKmH
+        }
+    }
+    
     private var distanceText: String? {
         guard let currentUser = AuthManager.shared.currentUser,
               currentUser.id != user.id,
@@ -657,9 +683,29 @@ struct PartnerOverlayCard: View {
                 // FULL GLASSMORPHIC CONTAINER CARD
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(isMe ? "Me" : user.name)
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundColor(.white)
+                        HStack(alignment: .center, spacing: 8) {
+                            Text(isMe ? "Me" : user.name)
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(.white)
+                            
+                            if let speed = currentSpeed {
+                                HStack(spacing: 3) {
+                                    Image(systemName: speed >= 20.0 ? "car.fill" : (speed >= 8.0 ? "bicycle" : "figure.walk"))
+                                        .font(.system(size: 10, weight: .semibold))
+                                    Text(String(format: "%.0f km/h", speed))
+                                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                                }
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.white.opacity(0.15))
+                                )
+                                .foregroundColor(.white)
+                                .shadow(radius: 2)
+                                .transition(.scale.combined(with: .opacity))
+                            }
+                        }
                         
                         HStack(spacing: 6) {
                             if user.isOffline {

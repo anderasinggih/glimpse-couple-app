@@ -182,6 +182,8 @@ class AuthManager {
     var isInitialStateLoaded = false
     var currentUser: GlimpseUser?
     var partner: GlimpseUser?
+    var partnerSpeedKmH: Double? = nil
+    var mySpeedKmH: Double? = nil
     var anniversaryDate: Date?
     var pairedDate: Date?
     var disconnectRequestedBy: Int?
