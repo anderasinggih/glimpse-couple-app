@@ -393,32 +393,34 @@ struct FullPartnerMapView: View {
             // Bump Explosion Overlay
             if isShowingBumpAnimation {
                 ZStack {
-                    Color.black.opacity(0.4).edgesIgnoringSafeArea(.all)
+                    Color.black.opacity(0.3)
+                        .edgesIgnoringSafeArea(.all)
                     
-                    VStack(spacing: 20) {
-                        Text("🎉")
-                            .font(.system(size: 80))
-                            .scaleEffect(isShowingBumpAnimation ? 1.5 : 0.5)
-                            .opacity(isShowingBumpAnimation ? 1.0 : 0.0)
-                            .animation(.spring(response: 0.5, dampingFraction: 0.5).delay(0.1), value: isShowingBumpAnimation)
-                            
+                    VStack(spacing: 12) {
                         Text("BUMP!")
-                            .font(.system(size: 40, weight: .black, design: .rounded))
+                            .font(.system(size: 38, weight: .black, design: .rounded))
                             .foregroundColor(.white)
-                            .shadow(color: .electricPurple, radius: 10)
-                            .scaleEffect(isShowingBumpAnimation ? 1.2 : 0.5)
-                            .opacity(isShowingBumpAnimation ? 1.0 : 0.0)
-                            .animation(.spring(response: 0.5, dampingFraction: 0.5).delay(0.2), value: isShowingBumpAnimation)
+                            .shadow(color: .electricPurple, radius: 8)
+                            .scaleEffect(isShowingBumpAnimation ? 1.15 : 0.85)
+                            .animation(.spring(response: 0.45, dampingFraction: 0.6), value: isShowingBumpAnimation)
                             
-                        Text("Pertemuan ke-\(auth.totalMeetings) berhasil dicatat!")
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                        Text("Meetup #\(auth.totalMeetings) successfully recorded!")
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
                             .foregroundColor(.white.opacity(0.9))
-                            .scaleEffect(isShowingBumpAnimation ? 1.0 : 0.5)
-                            .opacity(isShowingBumpAnimation ? 1.0 : 0.0)
-                            .animation(.spring(response: 0.5, dampingFraction: 0.5).delay(0.3), value: isShowingBumpAnimation)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                            .scaleEffect(isShowingBumpAnimation ? 1.0 : 0.9)
+                            .animation(.spring(response: 0.45, dampingFraction: 0.6).delay(0.15), value: isShowingBumpAnimation)
                     }
+                    .padding(.vertical, 24)
+                    .padding(.horizontal, 32)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                            .shadow(color: .black.opacity(0.2), radius: 10, y: 5)
+                    )
                 }
-                .transition(.opacity)
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 .zIndex(999)
             }
         }
