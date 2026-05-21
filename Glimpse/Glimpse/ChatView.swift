@@ -255,6 +255,7 @@ struct ChatView: View {
         }
         .toolbar(selectedRoom != nil ? .hidden : .visible, for: .tabBar)
         .onChange(of: selectedRoom) { oldValue, newValue in
+            auth.selectedChatRoom = newValue
             auth.activeRoomId = newValue?.id
             self.replyMessage = nil
             if let activeRoom = newValue {
@@ -337,6 +338,10 @@ struct ChatView: View {
         // Listen to live WebSocket message broadcasts from Partner
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatMessageReceived"))) { notification in
             self.handleChatMessageReceived(notification)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ShowCreateChatRoom"))) { _ in
+            newRoomName = ""
+            showCreateRoomAlert = true
         }
         .onChange(of: networkMonitor.isConnected) { _, isConnected in
             if isConnected {
@@ -1191,43 +1196,13 @@ struct ChatView: View {
     }
     
     private func roomsListHeader(partner: GlimpseUser) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                HStack(spacing: 8) {
-                    Image(systemName: "heart.fill")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(.electricPurple)
-                        .shadow(color: .electricPurple.opacity(0.5), radius: 6)
-                    
-                    Text("Glimpse")
-                        .font(.system(size: 22, weight: .black, design: .rounded))
-                        .foregroundColor(.white)
-                }
-                
-                Spacer()
-                
-                Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    newRoomName = ""
-                    showCreateRoomAlert = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.white)
-                        .frame(width: 36, height: 36)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(Circle())
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 50)
-            .padding(.bottom, 12)
-        }
-        .background(
-            Color.white.opacity(0.01)
-                .background(.ultraThinMaterial)
-        )
-        .ignoresSafeArea(edges: .top)
+        Color.clear
+            .frame(height: 95)
+            .background(
+                Color.white.opacity(0.01)
+                    .background(.ultraThinMaterial)
+            )
+            .ignoresSafeArea(edges: .top)
     }
     
     private func roomRow(_ room: GlimpseChatRoom) -> some View {

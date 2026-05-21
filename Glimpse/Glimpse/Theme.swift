@@ -202,6 +202,24 @@ struct BrandingHeader: View {
                     }
                 }
                 .buttonStyle(PlainButtonStyle())
+            } else if selectedTab == 3 {
+                Button {
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
+                    NotificationCenter.default.post(name: Notification.Name("ShowCreateChatRoom"), object: nil)
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.12))
+                            .frame(width: 44, height: 44)
+                            .blur(radius: 0.5)
+                        
+                        Image(systemName: "plus")
+                            .font(.system(size: 19, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
             }
         }
         .padding(.horizontal, 20)

@@ -413,6 +413,7 @@ class AuthManager {
     var lastLoveBurstReaction: String? = nil
     var activeSchedule: GlimpseSchedule? = nil
     var pendingInvitation: GlimpseSchedule? = nil
+    var selectedChatRoom: GlimpseChatRoom? = nil
     var showScheduleSheet = false
     var showInviteDeclinedAlert = false
     var showSessionTerminatedAlert = false

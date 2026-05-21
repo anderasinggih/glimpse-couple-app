@@ -191,7 +191,7 @@ struct MainDashboardView: View {
             }
             
             // MASTER HEADER (Like app.blade.php)
-            if auth.selectedTab != 3 {
+            if auth.selectedTab != 3 || auth.selectedChatRoom == nil {
                 BrandingHeader(
                     coupleActive: auth.coupleActive,
                     selectedTab: auth.selectedTab,
@@ -738,6 +738,38 @@ struct MainDashboardView: View {
                                             Text(schedule.scheduledDate.formatted(date: .abbreviated, time: .shortened))
                                                 .font(.system(size: 13, weight: .medium, design: .rounded))
                                                 .foregroundColor(.white.opacity(0.8))
+                                            
+                                            TimelineView(.periodic(from: Date(), by: 1.0)) { context in
+                                                let timeString = timeRemainingString(from: context.date, to: schedule.scheduledDate)
+                                                
+                                                if !timeString.isEmpty {
+                                                    HStack(spacing: 3) {
+                                                        Image(systemName: "hourglass.badge.ellipsis")
+                                                            .font(.system(size: 8))
+                                                        Text("\(timeString) left")
+                                                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                                    }
+                                                    .foregroundColor(.activeCyan)
+                                                    .padding(.horizontal, 6)
+                                                    .padding(.vertical, 2.5)
+                                                    .background(Color.activeCyan.opacity(0.12))
+                                                    .cornerRadius(5)
+                                                    .padding(.top, 2)
+                                                } else {
+                                                    HStack(spacing: 3) {
+                                                        Image(systemName: "checkmark.circle.fill")
+                                                            .font(.system(size: 8))
+                                                        Text("Happening Now!")
+                                                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                                                    }
+                                                    .foregroundColor(.vividMint)
+                                                    .padding(.horizontal, 6)
+                                                    .padding(.vertical, 2.5)
+                                                    .background(Color.vividMint.opacity(0.12))
+                                                    .cornerRadius(5)
+                                                    .padding(.top, 2)
+                                                }
+                                            }
                                         }
                                         
                                         Spacer()
@@ -1089,7 +1121,7 @@ struct MainDashboardView: View {
                             if let anniversary = auth.anniversaryDate {
                                 VStack(spacing: 8) {
                                     HStack(spacing: 10) {
-                                        Image(systemName: "calendar.badge.heart")
+                                        Image(systemName: "calendar")
                                             .foregroundColor(.activeCyan)
                                             .font(.system(size: 22))
                                             .shadow(color: .activeCyan.opacity(0.4), radius: 5)
@@ -1493,22 +1525,22 @@ struct MainDashboardView: View {
             } // Close ScrollViewReader
             
             // Floating Upload Progress Banner!
-            if auth.isUploadingFlash {
+            if auth.isUploadingFlash || auth.uploadFailed {
                 VStack {
                     Spacer()
                     
                     HStack(spacing: 12) {
-                        // Tiny thumbnail or upload icon with progress arc
+                        // Progress arc icon
                         ZStack {
                             Circle()
                                 .stroke(Color.white.opacity(0.1), lineWidth: 3)
                                 .frame(width: 38, height: 38)
                             
                             Circle()
-                                .trim(from: 0.0, to: CGFloat(auth.uploadProgress))
+                                .trim(from: 0.0, to: auth.uploadFailed ? 1.0 : CGFloat(auth.uploadProgress))
                                 .stroke(
                                     LinearGradient(
-                                        colors: [.electricPurple, .activeCyan],
+                                        colors: auth.uploadFailed ? [.red, .orange] : (auth.uploadSuccess ? [.vividMint, .green] : [.electricPurple, .activeCyan]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     ),
@@ -1518,22 +1550,80 @@ struct MainDashboardView: View {
                                 .rotationEffect(Angle(degrees: -90))
                                 .animation(.spring(response: 0.4, dampingFraction: 0.8), value: auth.uploadProgress)
                             
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundColor(.activeCyan)
+                            Image(systemName: auth.uploadFailed ? "exclamationmark" : (auth.uploadSuccess ? "checkmark" : "arrow.up.circle.fill"))
+                                .font(.system(size: auth.uploadFailed ? 16 : (auth.uploadSuccess ? 15 : 18), weight: .bold))
+                                .foregroundColor(auth.uploadFailed ? .red : (auth.uploadSuccess ? .vividMint : .activeCyan))
+                        }
+                        
+                        // Queue badge pill (only when more than 1 in queue)
+                        if auth.uploadQueueTotal > 1 && !auth.uploadFailed && !auth.uploadSuccess {
+                            Text("\(auth.uploadQueueCurrent)/\(auth.uploadQueueTotal)")
+                                .font(.system(size: 10, weight: .black, design: .rounded))
+                                .foregroundColor(.deepVelvet)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(Color.activeCyan)
+                                .clipShape(Capsule())
                         }
                         
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Uploading Glimpse...")
+                            Text(auth.uploadFailed ? "Upload Failed" : (auth.uploadSuccess ? "Flash Shared!" : (auth.uploadQueueTotal > 1 ? "Uploading Flash \(auth.uploadQueueCurrent) of \(auth.uploadQueueTotal)" : "Uploading Flash...")))
                                 .font(.system(size: 13, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
+                                .foregroundColor(auth.uploadFailed ? .red : (auth.uploadSuccess ? .vividMint : .white))
                             
-                            Text("\(Int(auth.uploadProgress * 100))% complete • Outbox safe")
+                            Text(auth.uploadFailed ? "Saved to Outbox — will retry" : (auth.uploadSuccess ? "Sent to your partner" : "\(Int(auth.uploadProgress * 100))% complete • Outbox safe"))
                                 .font(.system(size: 11, weight: .medium, design: .rounded))
                                 .foregroundColor(.white.opacity(0.6))
                         }
                         
                         Spacer()
+                        
+                        // Cancel button (only during active upload, not during failed state or success state)
+                        if auth.isUploadingFlash && !auth.uploadFailed && !auth.uploadSuccess {
+                            Button {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    auth.cancelFlashUpload()
+                                }
+                            } label: {
+                                Text("Cancel")
+                                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.white.opacity(0.1))
+                                    .cornerRadius(10)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                        
+                        // Retry button (only on failed state)
+                        if auth.uploadFailed {
+                            Button {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    auth.uploadFailed = false
+                                    auth.processPendingFlashes()
+                                }
+                            } label: {
+                                Text("Retry")
+                                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                                    .foregroundColor(.red)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.red.opacity(0.12))
+                                    .cornerRadius(10)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
@@ -1543,14 +1633,16 @@ struct MainDashboardView: View {
                         RoundedRectangle(cornerRadius: 18)
                             .stroke(
                                 LinearGradient(
-                                    colors: [.white.opacity(0.15), .clear],
+                                    colors: auth.uploadFailed
+                                        ? [.red.opacity(0.4), .clear]
+                                        : [.white.opacity(0.15), .clear],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 ),
                                 lineWidth: 1.5
                             )
                     )
-                    .shadow(color: Color.black.opacity(0.4), radius: 10, y: 5)
+                    .shadow(color: auth.uploadFailed ? Color.red.opacity(0.25) : Color.black.opacity(0.4), radius: 10, y: 5)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 20)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -1726,6 +1818,25 @@ struct MainDashboardView: View {
                 }
             }
         }
+    }
+    
+    private func timeRemainingString(from now: Date, to target: Date) -> String {
+        let diff = target.timeIntervalSince(now)
+        guard diff > 0 else { return "" }
+        
+        let totalSeconds = Int(diff)
+        let days = totalSeconds / 86400
+        let hours = (totalSeconds % 86400) / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let seconds = totalSeconds % 60
+        
+        var parts: [String] = []
+        if days > 0 { parts.append("\(days)d") }
+        if hours > 0 || days > 0 { parts.append("\(hours)hr") }
+        if minutes > 0 || hours > 0 || days > 0 { parts.append("\(minutes)min") }
+        parts.append("\(seconds)sec")
+        
+        return parts.joined(separator: " ")
     }
     
     private func formatFlashTime(_ date: Date) -> String {
