@@ -13,11 +13,24 @@ struct ChatView: View {
     @State private var newRoomName = ""
     @State private var showDeleteConfirmAlert = false
     @State private var roomToDelete: GlimpseChatRoom? = nil
+    @State private var showClearChatConfirmAlert = false
+    @State private var roomToClear: GlimpseChatRoom? = nil
+    @State private var showRoomOptionsDialog = false
+    @State private var roomForOptions: GlimpseChatRoom? = nil
     @State private var showRenameRoomAlert = false
     @State private var roomToRename: GlimpseChatRoom? = nil
     @State private var renameRoomName = ""
     @State private var dragOffset: CGFloat = 0
     @State private var pinnedRoomIds: Set<Int> = []
+    @State private var scrollToMessageTrigger: Int? = nil
+    
+    // Delete Request flows
+    @State private var showRequestDeleteAlert = false
+    @State private var roomToRequestDelete: GlimpseChatRoom? = nil
+    @State private var showRespondDeleteRequestAlert = false
+    @State private var roomToRespondDelete: GlimpseChatRoom? = nil
+    @State private var showPendingDeleteRequestAlert = false
+    @State private var roomToDeleteRequest: GlimpseChatRoom? = nil
     
     @State private var messages: [ChatMessage] = []
     @State private var messagesCache: [Int: [ChatMessage]] = [:] // Local cache for instant message loads
@@ -46,6 +59,30 @@ struct ChatView: View {
     @State private var showDatePickerForJump = false
     @State private var jumpToDateValue = Date()
     @State private var triggerJumpToDate = false
+    
+    // Magic Glow States
+    @State private var newlySentMessageIds: Set<Int> = []
+    @State private var newlyReceivedMessageIds: Set<Int> = []
+    
+    // Chat Settings & Starred messages
+    @State private var showRoomDetailsSheet = false
+    @State private var chatTextSize: CGFloat = UserDefaults.standard.object(forKey: "glimpse_chat_text_size") as? CGFloat ?? 14.0
+    @State private var starredMessageIds: Set<Int> = []
+    @State private var pinnedMessageIds: Set<Int> = []
+    
+    private var activeRoomThemeColor: Color {
+        if let hex = selectedRoom?.theme_color, !hex.isEmpty {
+            return Color(hex: hex)
+        }
+        return Color.activeCyan
+    }
+    
+    private var activeRoomBgColor: Color {
+        if let hex = selectedRoom?.background_color, !hex.isEmpty {
+            return Color(hex: hex)
+        }
+        return Color.deepVelvet
+    }
     
     var filteredMessages: [ChatMessage] {
         let cleanQuery = debouncedSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -149,8 +186,64 @@ struct ChatView: View {
             if let partner = auth.partner, auth.coupleActive {
                 ZStack {
                     chatRoomsListView(partner: partner)
-                    
-                    
+                        .alert("Request Clear Chat?", isPresented: $showRequestDeleteAlert, presenting: roomToRequestDelete) { room in
+                            Button("Cancel", role: .cancel) { roomToRequestDelete = nil }
+                            Button("Request", role: .destructive) {
+                                requestDeleteRoom(room)
+                            }
+                        } message: { room in
+                            Text("Requesting to clear general chat will ask your partner for confirmation. If approved, all messages will be permanently cleared.")
+                        }
+                        .alert("Partner Requested Clear Chat", isPresented: $showRespondDeleteRequestAlert, presenting: roomToRespondDelete) { room in
+                            Button("Decline", role: .destructive) {
+                                declineDeleteRoom(room)
+                            }
+                            Button("Accept & Clear", role: .none) {
+                                confirmDeleteRoom(room)
+                            }
+                            Button("Cancel", role: .cancel) { roomToRespondDelete = nil }
+                        } message: { room in
+                            Text("Your partner has requested to permanently clear the general chat history. Do you accept this request?")
+                        }
+                        .alert("Clear Chat Request Pending", isPresented: $showPendingDeleteRequestAlert, presenting: roomToDeleteRequest) { room in
+                            Button("Cancel Request", role: .destructive) {
+                                declineDeleteRoom(room)
+                            }
+                            Button("OK", role: .cancel) { roomToDeleteRequest = nil }
+                        } message: { room in
+                            Text("Waiting for your partner to confirm clearing the general chat history. You can cancel your request here.")
+                        }
+                        .alert("Chat Options", isPresented: $showRoomOptionsDialog, presenting: roomForOptions) { room in
+                            Button("Clear Chat", role: .destructive) {
+                                roomToClear = room
+                                showClearChatConfirmAlert = true
+                            }
+                            Button("Delete Room", role: .destructive) {
+                                roomToDelete = room
+                                showDeleteConfirmAlert = true
+                            }
+                            Button("Cancel", role: .cancel) {
+                                roomForOptions = nil
+                            }
+                        } message: { room in
+                            Text("What would you like to do with '\(room.name)'?")
+                        }
+                        .alert("Clear Chat?", isPresented: $showClearChatConfirmAlert, presenting: roomToClear) { room in
+                            Button("Cancel", role: .cancel) { roomToClear = nil }
+                            Button("Clear", role: .destructive) {
+                                clearRoomChat(room)
+                            }
+                        } message: { room in
+                            Text("Are you sure you want to clear all messages in '\(room.name)'? This action cannot be undone.")
+                        }
+                        .alert("Delete Room?", isPresented: $showDeleteConfirmAlert, presenting: roomToDelete) { room in
+                            Button("Cancel", role: .cancel) { roomToDelete = nil }
+                            Button("Delete", role: .destructive) {
+                                deleteRoom(room)
+                            }
+                        } message: { room in
+                            Text("Are you sure you want to delete '\(room.name)'? All messages in this room will be permanently lost.")
+                        }
                     if let activeRoom = selectedRoom {
                         activeChatRoomView(partner: partner, room: activeRoom)
                             .transition(.move(edge: .trailing))
@@ -165,12 +258,22 @@ struct ChatView: View {
             auth.activeRoomId = newValue?.id
             self.replyMessage = nil
             if let activeRoom = newValue {
+
                 // Reset unread counter locally upon entering the room
                 if let index = chatRooms.firstIndex(where: { $0.id == activeRoom.id }) {
                     chatRooms[index].unread_count = 0
                     auth.chatRooms = chatRooms
                     auth.updateUnreadCount()
+                    // Sync theme from latest API data into selectedRoom so it's always fresh
+                    selectedRoom = chatRooms[index]
                 }
+                
+                // Load starred & pinned message IDs for this room from local storage
+                let roomKey = activeRoom.id
+                let starredKey = "glimpse_starred_messages_room_\(roomKey)"
+                let pinnedKey = "glimpse_pinned_messages_room_\(roomKey)"
+                starredMessageIds = Set(UserDefaults.standard.array(forKey: starredKey) as? [Int] ?? [])
+                pinnedMessageIds = Set(UserDefaults.standard.array(forKey: pinnedKey) as? [Int] ?? [])
                 
                 // Load per-room baseline unread message ID
                 let currentUserId = auth.currentUser?.id ?? 0
@@ -212,6 +315,9 @@ struct ChatView: View {
             }
             auth.pushCurrentStatus()
         }
+        .sheet(isPresented: $showRoomDetailsSheet) {
+            roomDetailsSheetContent()
+        }
         // WebSocket synchronization for chat rooms
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomCreated"))) { notification in
             self.handleChatRoomCreated(notification)
@@ -221,6 +327,12 @@ struct ChatView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomUpdated"))) { notification in
             self.handleChatRoomUpdated(notification)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomDeleteStatusChanged"))) { notification in
+            self.handleChatRoomDeleteStatusChanged(notification)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomThemeUpdated"))) { notification in
+            self.handleChatRoomThemeUpdated(notification)
         }
         // Listen to live WebSocket message broadcasts from Partner
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatMessageReceived"))) { notification in
@@ -243,14 +355,6 @@ struct ChatView: View {
             }
         } message: {
             Text("Create a new chat room to discuss a different topic with your partner.")
-        }
-        .alert("Delete Room?", isPresented: $showDeleteConfirmAlert, presenting: roomToDelete) { room in
-            Button("Cancel", role: .cancel) { roomToDelete = nil }
-            Button("Delete", role: .destructive) {
-                deleteRoom(room)
-            }
-        } message: { room in
-            Text("Are you sure you want to delete '\(room.name)'? All messages in this room will be permanently lost.")
         }
         .alert("Rename Chat Room", isPresented: $showRenameRoomAlert, presenting: roomToRename) { room in
             TextField("Room name", text: $renameRoomName)
@@ -283,7 +387,7 @@ struct ChatView: View {
             ZStack(alignment: .top) {
                 // Solid Velvet Background to cover the list behind it completely
                 ZStack {
-                    Color.deepVelvet.ignoresSafeArea()
+                    activeRoomBgColor.ignoresSafeArea()
                     iOS26Background().opacity(0.4)
                 }
                 .ignoresSafeArea()
@@ -340,8 +444,6 @@ struct ChatView: View {
                                     chatBubble(msg: msg, isPending: true)
                                 }
                                 
-                                Spacer().frame(height: 4)
-                                
                                 Color.clear
                                     .frame(height: 1)
                                     .id("bottom_anchor")
@@ -351,7 +453,7 @@ struct ChatView: View {
                                             Color.clear
                                                 .onChange(of: frame.minY) { _, newValue in
                                                     let screenHeight = UIScreen.main.bounds.height
-                                                    let isOff = newValue > (screenHeight - 50)
+                                                    let isOff = newValue > (screenHeight + 300)
                                                     if isShowingScrollToBottomButton != isOff {
                                                         withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
                                                             isShowingScrollToBottomButton = isOff
@@ -362,6 +464,7 @@ struct ChatView: View {
                                     )
                             }
                             .padding(.horizontal, 16)
+                            .padding(.bottom, -8)
                             .frame(maxWidth: .infinity)
                             .background(
                                 Color.black.opacity(0.001)
@@ -465,7 +568,7 @@ struct ChatView: View {
                         .onChange(of: auth.isPartnerTyping) { _, isTyping in
                             if isTyping {
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
+                                    withAnimation(.easeOut(duration: 0.2)) {
                                         proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                     }
                                 }
@@ -495,10 +598,32 @@ struct ChatView: View {
                                 jumpToDate(jumpToDateValue, proxy: proxy)
                             }
                         }
+                        .onChange(of: scrollToMessageTrigger) { _, newValue in
+                            if let targetId = newValue {
+                                highlightedMessageId = targetId
+                                withAnimation(.easeInOut(duration: 0.45)) {
+                                    proxy.scrollTo(targetId, anchor: .center)
+                                }
+                                
+                                // Reset the trigger immediately so it can be re-triggered on next tap
+                                scrollToMessageTrigger = nil
+                                
+                                // Auto clear highlight after 2.0s
+                                let highlightId = targetId
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                    withAnimation(.easeOut(duration: 0.5)) {
+                                        if highlightedMessageId == highlightId {
+                                            highlightedMessageId = nil
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         
                         if isShowingScrollToBottomButton {
                             Button {
-                                withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                                isShowingScrollToBottomButton = false
+                                withAnimation(.easeOut(duration: 0.22)) {
                                     proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                 }
                             } label: {
@@ -508,8 +633,8 @@ struct ChatView: View {
                                     .padding(12)
                                     .background(
                                         Circle()
-                                            .fill(Color.activeCyan)
-                                            .shadow(color: .activeCyan.opacity(0.6), radius: 8, x: 0, y: 4)
+                                            .fill(activeRoomThemeColor)
+                                            .shadow(color: activeRoomThemeColor.opacity(0.6), radius: 8, x: 0, y: 4)
                                     )
                             }
                             .padding(.trailing, 20)
@@ -520,6 +645,7 @@ struct ChatView: View {
                 chatHeader(partner: partner, room: room)
                     .opacity(max(0.0, 1.0 - Double(swipeProgress) * 1.3))
                     .zIndex(10)
+
             }
             
             // Transparent Left-Edge Swipe Back Interception Zone (width: 42)
@@ -780,19 +906,41 @@ struct ChatView: View {
                                     .onTapGesture {
                                         openRoomDirectly(room)
                                     }
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                        Button(role: .destructive) {
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                        let isCurrentUserRequesting = room.delete_requested_by == auth.currentUser?.id
+                                        let isPartnerRequesting = room.delete_requested_by != nil && !isCurrentUserRequesting
+                                        
+                                        Button(role: room.is_main ? .none : .destructive) {
                                             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                                             if room.is_main {
-                                                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                                                if isCurrentUserRequesting {
+                                                    roomToDeleteRequest = room
+                                                    showPendingDeleteRequestAlert = true
+                                                } else if isPartnerRequesting {
+                                                    roomToRespondDelete = room
+                                                    showRespondDeleteRequestAlert = true
+                                                } else {
+                                                    roomToRequestDelete = room
+                                                    showRequestDeleteAlert = true
+                                                }
                                                 return
                                             }
-                                            roomToDelete = room
-                                            showDeleteConfirmAlert = true
+                                            roomForOptions = room
+                                            showRoomOptionsDialog = true
                                         } label: {
-                                            Label("Delete", systemImage: "trash.fill")
+                                            if room.is_main {
+                                                if isCurrentUserRequesting {
+                                                    Label("Pending", systemImage: "clock.badge.exclamationmark.fill")
+                                                } else if isPartnerRequesting {
+                                                    Label("Review", systemImage: "checkmark.circle.fill")
+                                                } else {
+                                                    Label("Clear Chat", systemImage: "trash.fill")
+                                                }
+                                            } else {
+                                                Label("Delete", systemImage: "trash.fill")
+                                            }
                                         }
-                                        .tint(.red)
+                                        .tint(room.is_main ? (isCurrentUserRequesting ? .orange : (isPartnerRequesting ? .activeCyan : .red)) : .red)
                                     }
                                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
                                         let isPinned = pinnedRoomIds.contains(room.id)
@@ -977,8 +1125,8 @@ struct ChatView: View {
             if isSearchingChat {
                 searchNavigationPanel(proxy: proxy)
                     .padding(.horizontal, 16)
-                    .padding(.top, 6)
-                    .padding(.bottom, 8)
+                    .padding(.top, 12)
+                    .padding(.bottom, 12)
             } else {
                 if let reply = replyMessage {
                     // Reply Preview Bar right above input field
@@ -1031,8 +1179,8 @@ struct ChatView: View {
                 
                 floatingInputBar(proxy: proxy)
                     .padding(.horizontal, 16)
-                    .padding(.top, 6)
-                    .padding(.bottom, 8)
+                    .padding(.top, 12)
+                    .padding(.bottom, 12)
             }
         }
         .background(
@@ -1044,58 +1192,16 @@ struct ChatView: View {
     
     private func roomsListHeader(partner: GlimpseUser) -> some View {
         VStack(spacing: 0) {
-            HStack(spacing: 14) {
-                AsyncImage(url: URL(string: formattedUrl(partner.profile_photo_url))) { image in
-                    image.resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Color.white.opacity(0.1)
-                }
-                .frame(width: 40, height: 40)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Color.activeCyan.opacity(0.3), lineWidth: 1.5))
-                
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(partner.name)
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
-                        
-                        Circle()
-                            .fill(partner.isOffline ? Color.gray : Color.green)
-                            .frame(width: 6, height: 6)
-                    }
+            HStack(spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(.electricPurple)
+                        .shadow(color: .electricPurple.opacity(0.5), radius: 6)
                     
-                    HStack(spacing: 6) {
-                        Text(partner.isOffline ? partner.timeAgoString : "Online")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.white.opacity(0.5))
-                        
-                        Text("•")
-                            .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.3))
-                        
-                        HStack(spacing: 2) {
-                            Image(systemName: "mappin.and.ellipse")
-                                .font(.system(size: 9))
-                            Text(partner.location_name ?? "Unknown")
-                                .font(.system(size: 10))
-                                .lineLimit(1)
-                        }
-                        .foregroundColor(.activeCyan.opacity(0.8))
-                        
-                        Text("•")
-                            .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.3))
-                        
-                        HStack(spacing: 2) {
-                            Image(systemName: partner.is_charging == true ? "battery.100.bolt" : "battery.75")
-                                .font(.system(size: 10))
-                            Text("\(partner.battery_level ?? 100)%")
-                                .font(.system(size: 10))
-                        }
-                        .foregroundColor(.white.opacity(0.6))
-                    }
+                    Text("Glimpse")
+                        .font(.system(size: 22, weight: .black, design: .rounded))
+                        .foregroundColor(.white)
                 }
                 
                 Spacer()
@@ -1205,6 +1311,115 @@ struct ChatView: View {
         }
     }
     
+    @ViewBuilder
+    private func pinnedMessageBanner(_ msg: ChatMessage) -> some View {
+        let displayText = msg.replyInfo?.actualMessage ?? msg.message
+        Button {
+            // Scroll to pinned message and glow
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            scrollToMessageTrigger = msg.id
+        } label: {
+            HStack(spacing: 10) {
+                Rectangle()
+                    .fill(activeRoomThemeColor)
+                    .frame(width: 3, height: 34)
+                    .cornerRadius(2)
+
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(activeRoomThemeColor)
+                    .rotationEffect(.degrees(45))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Pinned Message")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(activeRoomThemeColor)
+                    Text(displayText)
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.7))
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        let roomId = selectedRoom?.id ?? 0
+                        let pinnedKey = "glimpse_pinned_messages_room_\(roomId)"
+                        pinnedMessageIds.remove(msg.id)
+                        UserDefaults.standard.set(Array(pinnedMessageIds), forKey: pinnedKey)
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.white.opacity(0.35))
+                        .padding(6)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Circle())
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(
+                Rectangle()
+                    .fill(Color.black.opacity(0.15))
+                    .overlay(
+                        Rectangle()
+                            .fill(activeRoomThemeColor.opacity(0.05))
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    @ViewBuilder
+    private func roomDetailsSheetContent() -> some View {
+        if let room = selectedRoom, let partner = auth.partner {
+            ChatRoomDetailsSheet(
+                room: room,
+                partner: partner,
+                chatTextSize: $chatTextSize,
+                starredMessageIds: starredMessageIds,
+                messages: messages,
+                currentUserId: auth.currentUser?.id ?? 0,
+                apiBaseURL: auth.baseURL,
+                myLatitude: auth.currentUser?.latitude,
+                myLongitude: auth.currentUser?.longitude,
+                onThemeUpdate: { themeColor, bgColor in
+                    applyRoomTheme(room: room, themeColor: themeColor, bgColor: bgColor)
+                },
+                onScrollToStarred: { _ in
+                    showRoomDetailsSheet = false
+                },
+                onRenameRoom: { newName in
+                    renameRoomName = newName
+                    renameRoom(room)
+                }
+            )
+        }
+    }
+
+    private func applyRoomTheme(room: GlimpseChatRoom, themeColor: String?, bgColor: String?) {
+        let roomId = room.id
+        if let idx = chatRooms.firstIndex(where: { $0.id == roomId }) {
+            chatRooms[idx].theme_color = themeColor
+            chatRooms[idx].background_color = bgColor
+        }
+        var updatedRoom = room
+        updatedRoom.theme_color = themeColor
+        updatedRoom.background_color = bgColor
+        selectedRoom = updatedRoom
+        Task {
+            try? await auth.updateChatRoomTheme(
+                roomId: roomId,
+                themeColor: themeColor,
+                backgroundColor: bgColor
+            )
+        }
+    }
+
     private func chatHeader(partner: GlimpseUser, room: GlimpseChatRoom) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
@@ -1224,58 +1439,65 @@ struct ChatView: View {
                         .clipShape(Circle())
                 }
                 
-                AsyncImage(url: URL(string: formattedUrl(partner.profile_photo_url))) { image in
-                    image.resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Color.white.opacity(0.1)
-                }
-                .frame(width: 36, height: 36)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Color.activeCyan.opacity(0.3), lineWidth: 1))
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(room.name)
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                        
-                        Circle()
-                            .fill(partner.isOffline ? Color.gray : Color.green)
-                            .frame(width: 5, height: 5)
+                HStack(spacing: 12) {
+                    AsyncImage(url: URL(string: formattedUrl(partner.profile_photo_url))) { image in
+                        image.resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Color.white.opacity(0.1)
                     }
+                    .frame(width: 36, height: 36)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(activeRoomThemeColor.opacity(0.3), lineWidth: 1))
                     
-                    HStack(spacing: 6) {
-                        Text(partner.isOffline ? partner.timeAgoString : "Online")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.white.opacity(0.5))
-                        
-                        Text("•")
-                            .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.3))
-                        
-                        HStack(spacing: 2) {
-                            Image(systemName: "mappin.and.ellipse")
-                                .font(.system(size: 9))
-                            Text(partner.location_name ?? "Unknown")
-                                .font(.system(size: 10))
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(room.name)
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(.white)
                                 .lineLimit(1)
+                            
+                            Circle()
+                                .fill(partner.isOffline ? Color.gray : Color.green)
+                                .frame(width: 5, height: 5)
                         }
-                        .foregroundColor(.activeCyan.opacity(0.8))
                         
-                        Text("•")
-                            .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.3))
-                        
-                        HStack(spacing: 2) {
-                            Image(systemName: partner.is_charging == true ? "battery.100.bolt" : "battery.75")
+                        HStack(spacing: 6) {
+                            Text(partner.isOffline ? partner.timeAgoString : "Online")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.white.opacity(0.5))
+                            
+                            Text("•")
                                 .font(.system(size: 10))
-                            Text("\(partner.battery_level ?? 100)%")
+                                .foregroundColor(.white.opacity(0.3))
+                            
+                            HStack(spacing: 2) {
+                                Image(systemName: "mappin.and.ellipse")
+                                    .font(.system(size: 9))
+                                Text(partner.location_name ?? "Unknown")
+                                    .font(.system(size: 10))
+                                    .lineLimit(1)
+                            }
+                            .foregroundColor(activeRoomThemeColor.opacity(0.8))
+                            
+                            Text("•")
                                 .font(.system(size: 10))
+                                .foregroundColor(.white.opacity(0.3))
+                            
+                            HStack(spacing: 2) {
+                                Image(systemName: partner.is_charging == true ? "battery.100.bolt" : "battery.75")
+                                    .font(.system(size: 10))
+                                Text("\(partner.battery_level ?? 100)%")
+                                    .font(.system(size: 10))
+                            }
+                            .foregroundColor(.white.opacity(0.6))
                         }
-                        .foregroundColor(.white.opacity(0.6))
                     }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    showRoomDetailsSheet = true
                 }
                 
                 Spacer()
@@ -1344,6 +1566,85 @@ struct ChatView: View {
                 .padding(.bottom, 10)
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
+            
+            if let deleteRequestedBy = room.delete_requested_by {
+                let isCurrentUser = deleteRequestedBy == auth.currentUser?.id
+                
+                HStack(spacing: 12) {
+                    Image(systemName: isCurrentUser ? "clock.arrow.circlepath" : "exclamationmark.triangle.fill")
+                        .foregroundColor(isCurrentUser ? .orange : .red)
+                        .font(.system(size: 14, weight: .bold))
+                    
+                    Text(isCurrentUser ? "Clear chat request pending..." : "Partner requested to clear chat history")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+                    
+                    Spacer()
+                    
+                    if isCurrentUser {
+                        Button {
+                            declineDeleteRoom(room)
+                        } label: {
+                            Text("Cancel")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white.opacity(0.8))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Color.white.opacity(0.12))
+                                .cornerRadius(8)
+                        }
+                    } else {
+                        HStack(spacing: 8) {
+                            Button {
+                                declineDeleteRoom(room)
+                            } label: {
+                                Text("Decline")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(Color.red.opacity(0.2))
+                                    .cornerRadius(6)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .stroke(Color.red.opacity(0.4), lineWidth: 1)
+                                    )
+                            }
+                            
+                            Button {
+                                confirmDeleteRoom(room)
+                            } label: {
+                                Text("Clear")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.black)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 5)
+                                    .background(Color.activeCyan)
+                                    .cornerRadius(6)
+                                    .shadow(color: Color.activeCyan.opacity(0.4), radius: 4, x: 0, y: 2)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.black.opacity(0.25))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(isCurrentUser ? Color.orange.opacity(0.3) : Color.red.opacity(0.3), lineWidth: 1)
+                        )
+                )
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            
+            // WhatsApp-style Pinned Message Banner (directly below header)
+            if !pinnedMessageIds.isEmpty, let pinnedMsg = messages.first(where: { pinnedMessageIds.contains($0.id) }) {
+                pinnedMessageBanner(pinnedMsg)
+            }
         }
         .background(
             Color.white.opacity(0.01)
@@ -1388,9 +1689,9 @@ struct ChatView: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.deepVelvet)
                     .frame(width: 44, height: 44)
-                    .background(messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.white.opacity(0.3) : Color.activeCyan)
+                    .background(messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.white.opacity(0.3) : activeRoomThemeColor)
                     .clipShape(Circle())
-                    .shadow(color: messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.clear : Color.activeCyan.opacity(0.3), radius: 8, y: 3)
+                    .shadow(color: messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.clear : activeRoomThemeColor.opacity(0.3), radius: 8, y: 3)
             }
             .disabled(messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
@@ -1406,7 +1707,9 @@ struct ChatView: View {
 
     @ViewBuilder
     private func flashAttachmentBubble(msg: ChatMessage, isMe: Bool, timeStr: String, corners: UIRectCorner) -> some View {
-        Button {
+        let glow = getGlowProperties(msg: msg, isMe: isMe, isHighlighted: false)
+        
+        return Button {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                 auth.selectedTab = 0
             }
@@ -1442,16 +1745,21 @@ struct ChatView: View {
             .clipShape(RoundedCorner(radius: 18, corners: corners))
             .overlay(
                 RoundedCorner(radius: 18, corners: corners)
-                    .stroke(isMe ? Color.activeCyan.opacity(0.35) : Color.white.opacity(0.1), lineWidth: 1)
+                    .stroke(glow.strokeColor, lineWidth: glow.strokeWidth)
             )
-            .shadow(color: isMe ? Color.activeCyan.opacity(0.1) : Color.black.opacity(0.15), radius: 6, y: 3)
+            .scaleEffect(glow.scale)
+            .shadow(color: glow.glowColor, radius: glow.glowRadius, y: 3)
+            .animation(.spring(response: 0.35, dampingFraction: 0.72), value: newlySentMessageIds.contains(msg.id))
+            .animation(.spring(response: 0.35, dampingFraction: 0.72), value: newlyReceivedMessageIds.contains(msg.id))
         }
         .buttonStyle(PlainButtonStyle())
     }
 
     @ViewBuilder
     private func kencanInvitationBubble(msg: ChatMessage, isMe: Bool, timeStr: String, corners: UIRectCorner) -> some View {
-        Button {
+        let glow = getGlowProperties(msg: msg, isMe: isMe, isHighlighted: false)
+        
+        return Button {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                 auth.showScheduleSheet = true
             }
@@ -1494,37 +1802,45 @@ struct ChatView: View {
             .clipShape(RoundedCorner(radius: 18, corners: corners))
             .overlay(
                 RoundedCorner(radius: 18, corners: corners)
-                    .stroke(isMe ? Color.activeCyan.opacity(0.45) : Color.white.opacity(0.12), lineWidth: 1.2)
+                    .stroke(glow.strokeColor, lineWidth: glow.strokeWidth)
             )
-            .shadow(color: isMe ? Color.activeCyan.opacity(0.15) : Color.black.opacity(0.15), radius: 6, y: 3)
+            .scaleEffect(glow.scale)
+            .shadow(color: glow.glowColor, radius: glow.glowRadius, y: 3)
+            .animation(.spring(response: 0.35, dampingFraction: 0.72), value: newlySentMessageIds.contains(msg.id))
+            .animation(.spring(response: 0.35, dampingFraction: 0.72), value: newlyReceivedMessageIds.contains(msg.id))
         }
         .buttonStyle(PlainButtonStyle())
     }
 
     @ViewBuilder
     private func standardTextChatBubble(msg: ChatMessage, isMe: Bool, isPending: Bool, timeStr: String, corners: UIRectCorner, scrollProxy: ScrollViewProxy?, isHighlighted: Bool) -> some View {
+        let glow = getGlowProperties(msg: msg, isMe: isMe, isHighlighted: isHighlighted)
         let displayText = msg.replyInfo?.actualMessage ?? msg.message
-        let isShort = displayText.count < 35 && !displayText.contains("\n") && msg.replyInfo == nil
+        let isShort = displayText.count < 35 && !displayText.contains("\n") && msg.replyInfo == nil && !displayText.containsURL
         
-        Group {
+        return Group {
             if isShort {
                 HStack(alignment: .bottom, spacing: 8) {
-                    Text(displayText)
-                        .font(.system(size: 12.5))
-                        .foregroundColor(.white)
+                    LinkedTextView(text: displayText, fontSize: chatTextSize, foregroundColor: .white)
                         .multilineTextAlignment(.leading)
                     
                     HStack(spacing: 3) {
+                        if starredMessageIds.contains(msg.id) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 8.0))
+                                .foregroundColor(.yellow)
+                        }
+                        
                         if !timeStr.isEmpty {
                             Text(timeStr)
                                 .font(.system(size: 8.0, weight: .medium))
-                                .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                                .foregroundColor(isMe ? activeRoomThemeColor.opacity(0.65) : .white.opacity(0.4))
                         }
                         
                         if isPending {
                             Image(systemName: "clock")
                                 .font(.system(size: 8.0))
-                                .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                                .foregroundColor(isMe ? activeRoomThemeColor.opacity(0.65) : .white.opacity(0.4))
                         }
                     }
                     .padding(.bottom, 0.5)
@@ -1553,7 +1869,7 @@ struct ChatView: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(reply.senderName)
                                     .font(.system(size: 11, weight: .bold))
-                                    .foregroundColor(.activeCyan)
+                                    .foregroundColor(activeRoomThemeColor)
                                 Text(reply.parentMessage)
                                     .font(.system(size: 11))
                                     .foregroundColor(.white.opacity(0.65))
@@ -1567,7 +1883,7 @@ struct ChatView: View {
                             .overlay(
                                 HStack {
                                     Rectangle()
-                                        .fill(Color.activeCyan)
+                                        .fill(activeRoomThemeColor)
                                         .frame(width: 3)
                                     Spacer()
                                 }
@@ -1577,22 +1893,32 @@ struct ChatView: View {
                         .buttonStyle(PlainButtonStyle())
                     }
                     
-                    Text(displayText)
-                        .font(.system(size: 12.5))
-                        .foregroundColor(.white)
+                    LinkedTextView(text: displayText, fontSize: chatTextSize, foregroundColor: .white)
                         .multilineTextAlignment(.leading)
+
+                    // Link preview card
+                    if let url = displayText.firstURL {
+                        ChatLinkPreviewCard(url: url, themeColor: activeRoomThemeColor)
+                            .padding(.top, 2)
+                    }
                     
                     HStack(spacing: 3) {
+                        if starredMessageIds.contains(msg.id) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 8.0))
+                                .foregroundColor(.yellow)
+                        }
+                        
                         if !timeStr.isEmpty {
                             Text(timeStr)
                                 .font(.system(size: 8.0, weight: .medium))
-                                .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                                .foregroundColor(isMe ? activeRoomThemeColor.opacity(0.65) : .white.opacity(0.4))
                         }
                         
                         if isPending {
                             Image(systemName: "clock")
                                 .font(.system(size: 8.0))
-                                .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
+                                .foregroundColor(isMe ? activeRoomThemeColor.opacity(0.65) : .white.opacity(0.4))
                         }
                     }
                 }
@@ -1600,14 +1926,16 @@ struct ChatView: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 5.5)
-        .background(isHighlighted ? Color.activeCyan.opacity(0.35) : bubbleBackground(isMe: isMe))
+        .background(isHighlighted ? activeRoomThemeColor.opacity(0.35) : bubbleBackground(isMe: isMe))
         .clipShape(RoundedCorner(radius: 12, corners: corners))
         .overlay(
             RoundedCorner(radius: 12, corners: corners)
-                .stroke(isHighlighted ? Color.activeCyan : (isMe ? Color.activeCyan.opacity(0.35) : Color.white.opacity(0.05)), lineWidth: isHighlighted ? 2.0 : 1.0)
+                .stroke(glow.strokeColor, lineWidth: glow.strokeWidth)
         )
-        .scaleEffect(isHighlighted ? 1.03 : 1.0)
-        .shadow(color: isHighlighted ? Color.activeCyan.opacity(0.4) : (isMe ? Color.activeCyan.opacity(0.1) : Color.clear), radius: isHighlighted ? 8 : 4, y: 2)
+        .scaleEffect(glow.scale)
+        .shadow(color: glow.glowColor, radius: glow.glowRadius, y: 2)
+        .animation(.spring(response: 0.35, dampingFraction: 0.72), value: newlySentMessageIds.contains(msg.id))
+        .animation(.spring(response: 0.35, dampingFraction: 0.72), value: newlyReceivedMessageIds.contains(msg.id))
     }
     
     // WHATSAPP STYLE CHAT BUBBLES WITH INDIVIDUAL TIME STAMPS & SWIPE TO REPLY
@@ -1636,6 +1964,33 @@ struct ChatView: View {
                         } else {
                             standardTextChatBubble(msg: msg, isMe: isMe, isPending: isPending, timeStr: timeStr, corners: corners, scrollProxy: scrollProxy, isHighlighted: isHighlighted)
                         }
+                    }
+                }
+                .contextMenu {
+                    Button {
+                        toggleStarMessage(msg)
+                    } label: {
+                        Label(starredMessageIds.contains(msg.id) ? "Unstar" : "Star", systemImage: starredMessageIds.contains(msg.id) ? "star.slash" : "star")
+                    }
+
+                    Button {
+                        togglePinMessage(msg)
+                    } label: {
+                        Label(pinnedMessageIds.contains(msg.id) ? "Unpin" : "Pin", systemImage: pinnedMessageIds.contains(msg.id) ? "pin.slash" : "pin")
+                    }
+
+                    Button {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+                            replyMessage = msg
+                        }
+                    } label: {
+                        Label("Reply", systemImage: "arrowshape.turn.up.left")
+                    }
+
+                    Button {
+                        copyMessageToClipboard(msg)
+                    } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
                     }
                 }
                 
@@ -1854,6 +2209,130 @@ struct ChatView: View {
         }
     }
 
+    private func clearRoomChat(_ room: GlimpseChatRoom) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Task { @MainActor in
+            do {
+                try await auth.clearChatRoom(roomId: room.id)
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    // Update cache for this room to empty array
+                    self.messagesCache[room.id] = []
+                    self.auth.roomMessagesCache[room.id] = []
+                    // Clear active messages if this room is currently selected
+                    if selectedRoom?.id == room.id {
+                        self.messages = []
+                    }
+                    
+                    // Reset the latest_message in chatRooms list
+                    if let idx = self.chatRooms.firstIndex(where: { $0.id == room.id }) {
+                        self.chatRooms[idx].latest_message = nil
+                        self.chatRooms[idx].unread_count = 0
+                        self.auth.chatRooms = self.chatRooms
+                        self.auth.updateUnreadCount()
+                    }
+                }
+                roomToClear = nil
+            } catch {
+                print("❌ Failed to clear chat room: \(error)")
+            }
+        }
+    }
+
+    private func requestDeleteRoom(_ room: GlimpseChatRoom) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Task { @MainActor in
+            do {
+                try await auth.requestDeleteChatRoom(roomId: room.id)
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    for i in 0..<chatRooms.count {
+                        if chatRooms[i].id == room.id {
+                            chatRooms[i].delete_requested_by = auth.currentUser?.id
+                        }
+                    }
+                    auth.chatRooms = chatRooms
+                    
+                    if selectedRoom?.id == room.id {
+                        selectedRoom?.delete_requested_by = auth.currentUser?.id
+                    }
+                }
+                roomToRequestDelete = nil
+            } catch {
+                print("❌ Failed to request room deletion: \(error)")
+            }
+        }
+    }
+
+    private func declineDeleteRoom(_ room: GlimpseChatRoom) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Task { @MainActor in
+            do {
+                try await auth.declineDeleteChatRoom(roomId: room.id)
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    for i in 0..<chatRooms.count {
+                        if chatRooms[i].id == room.id {
+                            chatRooms[i].delete_requested_by = nil
+                        }
+                    }
+                    auth.chatRooms = chatRooms
+                    
+                    if selectedRoom?.id == room.id {
+                        selectedRoom?.delete_requested_by = nil
+                    }
+                }
+                roomToRespondDelete = nil
+                roomToDeleteRequest = nil
+            } catch {
+                print("❌ Failed to decline room deletion: \(error)")
+            }
+        }
+    }
+
+    private func confirmDeleteRoom(_ room: GlimpseChatRoom) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Task { @MainActor in
+            do {
+                try await auth.confirmDeleteChatRoom(roomId: room.id)
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    if room.is_main {
+                        self.messages = []
+                        self.messagesCache[room.id] = []
+                        auth.roomMessagesCache[room.id] = []
+                        
+                        for i in 0..<chatRooms.count {
+                            if chatRooms[i].id == room.id {
+                                chatRooms[i].delete_requested_by = nil
+                                chatRooms[i].latest_message = nil
+                            }
+                        }
+                        auth.chatRooms = chatRooms
+                        
+                        if selectedRoom?.id == room.id {
+                            selectedRoom?.delete_requested_by = nil
+                            selectedRoom?.latest_message = nil
+                        }
+                    } else {
+                        var filtered: [GlimpseChatRoom] = []
+                        for r in self.chatRooms {
+                            if r.id != room.id {
+                                filtered.append(r)
+                            }
+                        }
+                        self.chatRooms = filtered
+                        auth.chatRooms = filtered
+                        auth.updateUnreadCount()
+                        
+                        if selectedRoom?.id == room.id {
+                            selectedRoom = nil
+                        }
+                    }
+                }
+                roomToRespondDelete = nil
+            } catch {
+                print("❌ Failed to confirm room deletion: \(error)")
+            }
+        }
+    }
+
     private func renameRoom(_ room: GlimpseChatRoom) {
         let name = renameRoomName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
@@ -1901,7 +2380,6 @@ struct ChatView: View {
         guard !cleanText.isEmpty else { return }
         
         messageInput = ""
-        AudioServicesPlaySystemSound(1104)
         UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
         
         // Instantly clear unread message divider baseline when sending a message
@@ -1955,6 +2433,20 @@ struct ChatView: View {
         do {
             // Fix: Use msg.room_id instead of selectedRoom?.id in case user exits the room while sending
             let sentMsg = try await auth.sendChatMessage(text: msg.message, roomId: msg.room_id)
+            
+            // Play sound only when confirmed sent by server!
+            AudioServicesPlaySystemSound(1104)
+            
+            // Trigger temporary glow for the newly sent message
+            let sentId = sentMsg.id
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.72)) {
+                self.newlySentMessageIds.insert(sentId)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                withAnimation(.easeOut(duration: 1.0)) {
+                    _ = self.newlySentMessageIds.remove(sentId)
+                }
+            }
             
             // Update the pending queue instantly
             var newPending: [ChatMessage] = []
@@ -2030,6 +2522,42 @@ struct ChatView: View {
         }
     }
     
+    private func toggleStarMessage(_ msg: ChatMessage) {
+        guard let roomId = selectedRoom?.id else { return }
+        let starredKey = "glimpse_starred_messages_room_\(roomId)"
+        var current = starredMessageIds
+        if current.contains(msg.id) {
+            current.remove(msg.id)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        } else {
+            current.insert(msg.id)
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        }
+        starredMessageIds = current
+        UserDefaults.standard.set(Array(current), forKey: starredKey)
+    }
+
+    private func togglePinMessage(_ msg: ChatMessage) {
+        guard let roomId = selectedRoom?.id else { return }
+        let pinnedKey = "glimpse_pinned_messages_room_\(roomId)"
+        var current = pinnedMessageIds
+        if current.contains(msg.id) {
+            current.remove(msg.id)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        } else {
+            current.insert(msg.id)
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        }
+        pinnedMessageIds = current
+        UserDefaults.standard.set(Array(current), forKey: pinnedKey)
+    }
+
+    private func copyMessageToClipboard(_ msg: ChatMessage) {
+        let displayText = msg.replyInfo?.actualMessage ?? msg.message
+        UIPasteboard.general.string = displayText
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+    }
+
     private func formatMessageTime(_ rawDate: String?) -> String {
         guard let rawDate = rawDate else { return "" }
         let formatter = ISO8601DateFormatter()
@@ -2055,6 +2583,73 @@ struct ChatView: View {
         outputFormatter.dateFormat = "HH:mm"
         outputFormatter.timeZone = TimeZone.current
         return outputFormatter.string(from: validDate)
+    }
+    
+    struct BubbleGlowProperties {
+        let glowColor: Color
+        let glowRadius: CGFloat
+        let strokeColor: Color
+        let strokeWidth: CGFloat
+        let scale: CGFloat
+    }
+    
+    private func parseMessageDate(_ rawDate: String?) -> Date? {
+        guard let rawDate = rawDate else { return nil }
+        let formatter = ISO8601DateFormatter()
+        
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: rawDate) {
+            return date
+        }
+        
+        formatter.formatOptions = [.withInternetDateTime]
+        if let date = formatter.date(from: rawDate) {
+            return date
+        }
+        
+        let fallbackFormatter = DateFormatter()
+        fallbackFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        fallbackFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return fallbackFormatter.date(from: rawDate)
+    }
+    
+    private func getGlowProperties(msg: ChatMessage, isMe: Bool, isHighlighted: Bool) -> BubbleGlowProperties {
+        let newlySent = newlySentMessageIds.contains(msg.id)
+        let newlyReceived = newlyReceivedMessageIds.contains(msg.id)
+        
+        let glowColor: Color
+        let glowRadius: CGFloat
+        let strokeColor: Color
+        let strokeWidth: CGFloat
+        let scale: CGFloat
+        
+        if isHighlighted {
+            glowColor = Color.activeCyan.opacity(0.4)
+            glowRadius = 8
+            strokeColor = Color.activeCyan
+            strokeWidth = 2.0
+            scale = 1.03
+        } else if newlySent {
+            glowColor = Color.activeCyan.opacity(0.85)
+            glowRadius = 12
+            strokeColor = Color.activeCyan
+            strokeWidth = 1.5
+            scale = 1.02
+        } else if newlyReceived {
+            glowColor = Color.electricPurple.opacity(0.85)
+            glowRadius = 12
+            strokeColor = Color.electricPurple
+            strokeWidth = 1.5
+            scale = 1.02
+        } else {
+            glowColor = isMe ? Color.activeCyan.opacity(0.1) : Color.clear
+            glowRadius = isMe ? 4 : 0
+            strokeColor = isMe ? Color.activeCyan.opacity(0.35) : Color.white.opacity(0.05)
+            strokeWidth = 1.0
+            scale = 1.0
+        }
+        
+        return BubbleGlowProperties(glowColor: glowColor, glowRadius: glowRadius, strokeColor: strokeColor, strokeWidth: strokeWidth, scale: scale)
     }
     
     private func shouldShowDateHeader(for index: Int) -> Bool {
@@ -2193,7 +2788,56 @@ struct ChatView: View {
             }
         }
     }
-    
+
+    private func handleChatRoomDeleteStatusChanged(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let roomId = userInfo["room_id"] as? Int else { return }
+        
+        let deleteRequestedBy = userInfo["delete_requested_by"] as? Int
+        
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            var updatedRooms: [GlimpseChatRoom] = []
+            for var room in chatRooms {
+                if room.id == roomId {
+                    room.delete_requested_by = deleteRequestedBy
+                }
+                updatedRooms.append(room)
+            }
+            chatRooms = updatedRooms
+            auth.chatRooms = updatedRooms
+            
+            if let active = selectedRoom, active.id == roomId {
+                var updatedSelected = active
+                updatedSelected.delete_requested_by = deleteRequestedBy
+                selectedRoom = updatedSelected
+            }
+        }
+    }
+
+    private func handleChatRoomThemeUpdated(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let roomId = userInfo["room_id"] as? Int else { return }
+        let themeColor = userInfo["theme_color"] as? String
+        let bgColor = userInfo["background_color"] as? String
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            var updatedRooms: [GlimpseChatRoom] = []
+            for var room in chatRooms {
+                if room.id == roomId {
+                    room.theme_color = themeColor
+                    room.background_color = bgColor
+                }
+                updatedRooms.append(room)
+            }
+            chatRooms = updatedRooms
+            if let active = selectedRoom, active.id == roomId {
+                var updatedSelected = active
+                updatedSelected.theme_color = themeColor
+                updatedSelected.background_color = bgColor
+                selectedRoom = updatedSelected
+            }
+        }
+    }
+
     private func handleChatMessageReceived(_ notification: Notification) {
         guard let newMsg = notification.object as? ChatMessage else { return }
         let isMainRoom = selectedRoom?.is_main ?? false
@@ -2241,6 +2885,17 @@ struct ChatView: View {
                     
                     // Live-mark partner message as read if we are inside the active room
                     if isPartnerMessage {
+                        // Trigger temporary glow for the newly received partner message
+                        let rcvId = newMsg.id
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.72)) {
+                            self.newlyReceivedMessageIds.insert(rcvId)
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                            withAnimation(.easeOut(duration: 1.0)) {
+                                _ = self.newlyReceivedMessageIds.remove(rcvId)
+                            }
+                        }
+                        
                         Task {
                             await auth.markMessagesAsRead(messageId: newMsg.id)
                             
