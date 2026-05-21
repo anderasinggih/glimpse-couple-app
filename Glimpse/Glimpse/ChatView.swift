@@ -299,6 +299,10 @@ struct ChatView: View {
                     }
                 }
                 
+                // Clear messages to trigger clean load next time
+                self.messages = []
+                self.pendingMessages = []
+                
                 // Clear the divider baseline when leaving the room
                 self.roomInitialLastReadId = nil
                 
@@ -404,50 +408,58 @@ struct ChatView: View {
                             LazyVStack(spacing: 12) {
                                 Spacer().frame(height: isSearchingChat ? 165 : 110)
                                 
-                                ForEach(Array(filteredMessages.enumerated()), id: \.element.id) { index, msg in
-                                    VStack(spacing: 12) {
-                                        if shouldShowDateHeader(for: index) {
-                                            dateHeaderBadge(for: msg)
+                            VStack(spacing: 0) {
+                                LazyVStack(spacing: 12) {
+                                    Spacer().frame(height: isSearchingChat ? 165 : 110)
+                                    
+                                    ForEach(Array(filteredMessages.enumerated()), id: \.element.id) { index, msg in
+                                        VStack(spacing: 12) {
+                                            if shouldShowDateHeader(for: index) {
+                                                dateHeaderBadge(for: msg)
+                                            }
+                                            
+                                            if msg.id == firstUnreadMessageId {
+                                                unreadMessagesDivider()
+                                            }
+                                            
+                                            chatBubble(msg: msg, scrollProxy: proxy)
+                                                .transition(.asymmetric(
+                                                    insertion: .scale(scale: 0.8, anchor: msg.sender_id == auth.currentUser?.id ? .bottomTrailing : .bottomLeading)
+                                                        .combined(with: .opacity),
+                                                    removal: .opacity
+                                                ))
                                         }
-                                        
-                                        if msg.id == firstUnreadMessageId {
-                                            unreadMessagesDivider()
+                                    }
+                                    
+                                    if !searchQuery.isEmpty && filteredMessages.isEmpty {
+                                        VStack(spacing: 12) {
+                                            Image(systemName: "magnifyingglass.circle.fill")
+                                                .font(.system(size: 44))
+                                                .foregroundColor(.white.opacity(0.25))
+                                            Text("No results for \"\(searchQuery)\"")
+                                                .font(.system(size: 14, weight: .medium))
+                                                .foregroundColor(.white.opacity(0.5))
                                         }
-                                        
-                                        chatBubble(msg: msg, scrollProxy: proxy)
-                                            .transition(.asymmetric(
-                                                insertion: .scale(scale: 0.8, anchor: msg.sender_id == auth.currentUser?.id ? .bottomTrailing : .bottomLeading)
-                                                    .combined(with: .opacity),
-                                                removal: .opacity
-                                            ))
+                                        .padding(.vertical, 40)
+                                        .frame(maxWidth: .infinity)
+                                    }
+                                    
+                                    if auth.isPartnerTyping {
+                                        HStack {
+                                            TypingIndicatorView()
+                                            Spacer()
+                                        }
+                                        .padding(.leading, 4)
+                                        .padding(.top, 4)
+                                    }
+                                    
+                                    ForEach(pendingMessages) { msg in
+                                        chatBubble(msg: msg, isPending: true)
                                     }
                                 }
-                                
-                                if !searchQuery.isEmpty && filteredMessages.isEmpty {
-                                    VStack(spacing: 12) {
-                                        Image(systemName: "magnifyingglass.circle.fill")
-                                            .font(.system(size: 44))
-                                            .foregroundColor(.white.opacity(0.25))
-                                        Text("No results for \"\(searchQuery)\"")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(.white.opacity(0.5))
-                                    }
-                                    .padding(.vertical, 40)
-                                    .frame(maxWidth: .infinity)
-                                }
-                                
-                                if auth.isPartnerTyping {
-                                    HStack {
-                                        TypingIndicatorView()
-                                        Spacer()
-                                    }
-                                    .padding(.leading, 4)
-                                    .padding(.top, 4)
-                                }
-                                
-                                ForEach(pendingMessages) { msg in
-                                    chatBubble(msg: msg, isPending: true)
-                                }
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, -8)
+                                .frame(maxWidth: .infinity)
                                 
                                 Color.clear
                                     .frame(height: 1)
@@ -457,6 +469,7 @@ struct ChatView: View {
                                             let frame = geo.frame(in: .global)
                                             Color.clear
                                                 .onChange(of: frame.minY) { _, newValue in
+                                                    guard newValue > 0 else { return }
                                                     let screenHeight = UIScreen.main.bounds.height
                                                     let isOff = newValue > (screenHeight + 300)
                                                     if isShowingScrollToBottomButton != isOff {
@@ -468,9 +481,6 @@ struct ChatView: View {
                                         }
                                     )
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, -8)
-                            .frame(maxWidth: .infinity)
                             .background(
                                 Color.black.opacity(0.001)
                                     .contentShape(Rectangle())
@@ -509,10 +519,12 @@ struct ChatView: View {
                                 }
                             } else {
                                 // Immediate scroll to bottom on room open
+                                self.isShowingScrollToBottomButton = false
                                 proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                 // Extra delayed scrolls to catch async cache/fetch loads
                                 for delay in [0.08, 0.20, 0.40] {
                                     DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                                        self.isShowingScrollToBottomButton = false
                                         proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                     }
                                 }
@@ -536,8 +548,10 @@ struct ChatView: View {
                             
                             if oldMessages.isEmpty || oldMessages.count < 3 {
                                 // Initial/cache load: scroll instantly to bottom
+                                self.isShowingScrollToBottomButton = false
                                 proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                                    self.isShowingScrollToBottomButton = false
                                     proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                 }
                                 return

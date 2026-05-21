@@ -180,6 +180,7 @@ struct BrandingHeader: View {
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
             }
+            .frame(height: 44)
             
             Spacer()
             
@@ -220,8 +221,12 @@ struct BrandingHeader: View {
                     }
                 }
                 .buttonStyle(PlainButtonStyle())
+            } else {
+                Color.clear
+                    .frame(width: 44, height: 44)
             }
         }
+        .frame(height: 44)
         .padding(.horizontal, 20)
         .padding(.top, 10) // Locked Top Padding
     }
