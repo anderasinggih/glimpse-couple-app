@@ -405,9 +405,6 @@ struct ChatView: View {
                 ScrollViewReader { proxy in
                     ZStack(alignment: .bottomTrailing) {
                         ScrollView {
-                            LazyVStack(spacing: 12) {
-                                Spacer().frame(height: isSearchingChat ? 165 : 110)
-                                
                             VStack(spacing: 0) {
                                 LazyVStack(spacing: 12) {
                                     Spacer().frame(height: isSearchingChat ? 165 : 110)
