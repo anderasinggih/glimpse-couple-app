@@ -409,6 +409,7 @@ class AuthManager {
     var highestTogetherStreak = 0
     var totalMeetings = 0
     var lastLoveBurstTimestamp: Double = 0.0
+    var lastLoveBumpTimestamp: Double = 0.0
     var lastLoveBurstReaction: String? = nil
     var activeSchedule: GlimpseSchedule? = nil
     var pendingInvitation: GlimpseSchedule? = nil
@@ -1924,6 +1925,30 @@ class AuthManager {
         }
     }
     
+    func triggerServerBump() async throws {
+        guard let url = URL(string: "\(baseURL)/glimpse/bump") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 500, userInfo: [NSLocalizedDescriptionKey: "Bump failed"])
+        }
+        
+        struct BumpResponse: Codable {
+            let total_meetings: Int
+        }
+        if let res = try? JSONDecoder().decode(BumpResponse.self, from: data) {
+            await MainActor.run {
+                self.totalMeetings = res.total_meetings
+            }
+        }
+    }
+    
     func sendTypingStatus(isTyping: Bool) {
         guard isAuthenticated else { return }
         
@@ -2363,6 +2388,23 @@ class AuthManager {
                             // Update lastLoveBurstTimestamp in real-time!
                             self.lastLoveBurstReaction = payload.reaction
                             self.lastLoveBurstTimestamp = payload.timestamp
+                        }
+                    }
+                }
+                
+            case "App\\Events\\LoveBumpSent":
+                print("🤜🤛 Live Love Bump broadcast received!")
+                if let eventDataString = pusherEvent.data,
+                   let eventData = eventDataString.data(using: .utf8) {
+                    struct LoveBumpPayload: Codable {
+                        let timestamp: Double
+                        let sender_id: Int
+                        let total_meetings: Int
+                    }
+                    if let payload = try? JSONDecoder().decode(LoveBumpPayload.self, from: eventData) {
+                        DispatchQueue.main.async {
+                            self.totalMeetings = payload.total_meetings
+                            self.lastLoveBumpTimestamp = payload.timestamp
                         }
                     }
                 }

@@ -24,6 +24,8 @@ struct FullPartnerMapView: View {
     @State private var removalEdge: Edge = .top
     @State private var currentCameraSpan: Double = 0.0022
     @State private var syncToastMessage: String? = nil
+    @State private var isShowingBumpAnimation = false
+    @State private var lastSeenLoveBumpTimestamp: Double = 0.0
     
     // Glow/Pulse Animation states
     @State private var meGlowScale: CGFloat = 1.0
@@ -387,6 +389,38 @@ struct FullPartnerMapView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.deepVelvet)
             }
+            
+            // Bump Explosion Overlay
+            if isShowingBumpAnimation {
+                ZStack {
+                    Color.black.opacity(0.4).edgesIgnoringSafeArea(.all)
+                    
+                    VStack(spacing: 20) {
+                        Text("🎉")
+                            .font(.system(size: 80))
+                            .scaleEffect(isShowingBumpAnimation ? 1.5 : 0.5)
+                            .opacity(isShowingBumpAnimation ? 1.0 : 0.0)
+                            .animation(.spring(response: 0.5, dampingFraction: 0.5).delay(0.1), value: isShowingBumpAnimation)
+                            
+                        Text("BUMP!")
+                            .font(.system(size: 40, weight: .black, design: .rounded))
+                            .foregroundColor(.white)
+                            .shadow(color: .electricPurple, radius: 10)
+                            .scaleEffect(isShowingBumpAnimation ? 1.2 : 0.5)
+                            .opacity(isShowingBumpAnimation ? 1.0 : 0.0)
+                            .animation(.spring(response: 0.5, dampingFraction: 0.5).delay(0.2), value: isShowingBumpAnimation)
+                            
+                        Text("Pertemuan ke-\(auth.totalMeetings) berhasil dicatat!")
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.9))
+                            .scaleEffect(isShowingBumpAnimation ? 1.0 : 0.5)
+                            .opacity(isShowingBumpAnimation ? 1.0 : 0.0)
+                            .animation(.spring(response: 0.5, dampingFraction: 0.5).delay(0.3), value: isShowingBumpAnimation)
+                    }
+                }
+                .transition(.opacity)
+                .zIndex(999)
+            }
         }
         .onAppear {
             if let partner = auth.partner, let lat = partner.latitude, let lon = partner.longitude {
@@ -440,6 +474,19 @@ struct FullPartnerMapView: View {
                         center: center,
                         span: MKCoordinateSpan(latitudeDelta: currentCameraSpan, longitudeDelta: currentCameraSpan)
                     ))
+                }
+            }
+        }
+        .onShake {
+            if auth.isTogether {
+                triggerBump()
+            }
+        }
+        .onChange(of: auth.lastLoveBumpTimestamp) { _, newTimestamp in
+            if newTimestamp > lastSeenLoveBumpTimestamp {
+                lastSeenLoveBumpTimestamp = newTimestamp
+                if auth.isTogether {
+                    showBumpAnimation()
                 }
             }
         }
@@ -844,6 +891,32 @@ struct FullPartnerMapView: View {
                 if syncToastMessage == "📡 GPS Wake & Sync Triggered!" || syncToastMessage == "⏳ Please wait 5 mins to refresh again" {
                     syncToastMessage = nil
                 }
+            }
+        }
+    }
+    
+    private func triggerBump() {
+        UISelectionFeedbackGenerator().selectionChanged()
+        
+        Task {
+            try? await auth.triggerServerBump()
+        }
+        
+        showBumpAnimation()
+    }
+    
+    private func showBumpAnimation() {
+        // Trigger haptic feedback for explosion
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+        
+        withAnimation {
+            isShowingBumpAnimation = true
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+            withAnimation {
+                isShowingBumpAnimation = false
             }
         }
     }
