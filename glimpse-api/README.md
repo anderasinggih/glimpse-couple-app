@@ -64,3 +64,9 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+php artisan octane:start --server=roadrunner --host=127.0.0.1 --port=8001 --workers=1
+
+php artisan reverb:start
+
+git config --local --unset http.https://github.com/.extraheader

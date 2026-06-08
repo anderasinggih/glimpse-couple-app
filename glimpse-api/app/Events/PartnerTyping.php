@@ -15,12 +15,14 @@ class PartnerTyping implements ShouldBroadcast
     public $coupleId;
     public $userId;
     public $isTyping;
+    public $roomId;
 
-    public function __construct($coupleId, $userId, $isTyping)
+    public function __construct($coupleId, $userId, $isTyping, $roomId = null)
     {
         $this->coupleId = $coupleId;
         $this->userId = $userId;
         $this->isTyping = $isTyping;
+        $this->roomId = $roomId;
     }
 
     public function broadcastOn(): array
@@ -32,7 +34,7 @@ class PartnerTyping implements ShouldBroadcast
 
     public function broadcastWith(): array
     {
-        $protobufBinary = \App\Helpers\GlimpseProtobuf::encodeTyping($this->userId, $this->isTyping);
+        $protobufBinary = \App\Helpers\GlimpseProtobuf::encodeTyping($this->userId, $this->isTyping, $this->roomId);
         return [
             'pb' => base64_encode($protobufBinary)
         ];

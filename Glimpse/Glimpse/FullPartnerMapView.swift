@@ -8,7 +8,7 @@ enum MapFocusTarget {
 }
 
 struct FullPartnerMapView: View {
-    @AppStorage("glimpse_default_map_style") var defaultMapStyle = "satellite"
+    @AppStorage("glimpse_default_map_style", store: UserDefaults(suiteName: "group.glimpse.app")) var defaultMapStyle = "satellite"
     @State private var auth = AuthManager.shared
     @State private var position: MapCameraPosition
     @State private var mapStyle: MapStyle = .standard(emphasis: .muted)
@@ -24,8 +24,6 @@ struct FullPartnerMapView: View {
     @State private var removalEdge: Edge = .top
     @State private var currentCameraSpan: Double = 0.0022
     @State private var syncToastMessage: String? = nil
-    @State private var isShowingBumpAnimation = false
-    @State private var lastSeenLoveBumpTimestamp: Double = 0.0
     
     // Glow/Pulse Animation states
     @State private var meGlowScale: CGFloat = 1.0
@@ -95,152 +93,149 @@ struct FullPartnerMapView: View {
         _isSatellite = State(initialValue: savedStyle == "satellite")
     }
     
-    var body: some View {
-        ZStack(alignment: .top) {
-            if !auth.isInitialStateLoaded {
-                // PRESTIGE LOADING / SHIMMERING STATE
-                VStack(spacing: 20) {
-                    ProgressView()
-                        .tint(.electricPurple)
-                        .scaleEffect(1.3)
-                    Text("Loading map space...")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundColor(.white.opacity(0.5))
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.deepVelvet)
-            } else if let partner = auth.partner {
-                // Full Screen Map with Pulsing Partner Marker
-                Map(position: $position) {
+    private var loadingView: some View {
+        VStack(spacing: 20) {
+            ProgressView()
+                .tint(.electricPurple)
+                .scaleEffect(1.3)
+            Text("Loading map space...")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundColor(.white.opacity(0.5))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.adaptiveBackground)
+    }
 
-                    if auth.isTogether, let currentUser = auth.currentUser {
-                        Annotation("Together", coordinate: animatedPartnerCoordinate) {
-                            togetherMarker(currentUser: currentUser, partner: partner)
-                        }
-                    } else {
-                        // Wavy Connecting line
-                        if let currentUser = auth.currentUser,
-                           let partnerLat = partner.latitude, partnerLat != 0.0,
-                           let myLat = currentUser.latitude, myLat != 0.0 {
-                            wavyConnectingLine(currentUser: currentUser, partner: partner)
-                        }
-                        
-                        if let currentUser = auth.currentUser {
-                            meAnnotation(currentUser: currentUser)
-                        }
-                        
-                        partnerAnnotation(partner: partner)
-                    }
+    private var unconnectedView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "map")
+                .font(.system(size: 56, weight: .light))
+                .foregroundColor(.white.opacity(0.35))
+                .shadow(color: .electricPurple.opacity(0.15), radius: 8)
+            
+            VStack(spacing: 8) {
+                Text("No Location Sharing")
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                
+                Text("Connect with your partner first to share and see live coordinates on the map!")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.5))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.adaptiveBackground)
+    }
+
+    @ViewBuilder
+    private func mapSpaceView(partner: GlimpseUser) -> some View {
+        Group {
+            // Full Screen Map with Pulsing Partner Marker
+            Map(position: $position) {
+                if let currentUser = auth.currentUser {
+                    mapAnnotations(currentUser: currentUser, partner: partner)
+                } else {
+                    partnerAnnotation(partner: partner)
                 }
-                .mapStyle(isSatellite ? .hybrid(elevation: .realistic) : .standard(emphasis: .muted))
-                .mapControls {
-                    MapCompass()
-                    MapScaleView()
-                }
-                .ignoresSafeArea()
-                .onMapCameraChange { context in
-                    guard !isFlying else { return } // Ignore updates during cinematic flight transitions!
-                    
-                    if position.positionedByUser {
-                        isTrackingEnabled = false
-                    }
-                    
-                    currentCameraCenter = context.region.center
-                    
-                    guard let currentUser = auth.currentUser else { return }
-                    let centerLoc = CLLocation(latitude: context.region.center.latitude, longitude: context.region.center.longitude)
-                    let myLoc = CLLocation(latitude: currentUser.coordinate.latitude, longitude: currentUser.coordinate.longitude)
-                    let partnerLoc = CLLocation(latitude: partner.coordinate.latitude, longitude: partner.coordinate.longitude)
-                    
-                    if centerLoc.distance(from: myLoc) < centerLoc.distance(from: partnerLoc) {
-                        currentlyFocusedTarget = .me
-                    } else {
-                        currentlyFocusedTarget = .partner
-                    }
-                }
-                // Automatically move map camera smoothly when partner's live coordinates change
-                .onChange(of: partner.last_updated) { _, _ in
-                    if let lat = partner.latitude, let lon = partner.longitude, lat != 0.0, lon != 0.0 {
-                        let newCoord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
-                        partnerCoordinateQueue.append(newCoord)
-                        
-                        if !isInterpolatingPartner {
-                            startPartnerQueueInterpolator()
-                        }
-                    }
-                }
-                .onChange(of: auth.currentUser?.last_updated) { _, _ in
-                    guard let currentUser = auth.currentUser else { return }
-                    if let lat = currentUser.latitude, let lon = currentUser.longitude, lat != 0.0, lon != 0.0 {
-                        let newCoord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
-                        myCoordinateQueue.append(newCoord)
-                        
-                        if !isInterpolatingMy {
-                            startMyQueueInterpolator()
-                        }
-                    }
+            }
+            .mapStyle(isSatellite ? .hybrid(elevation: .realistic) : .standard(emphasis: .muted))
+            .mapControls {
+                MapCompass()
+                MapScaleView()
+            }
+            .ignoresSafeArea()
+            .onMapCameraChange { (context: MapCameraUpdateContext) in
+                guard !isFlying else { return } // Ignore updates during cinematic flight transitions!
+                
+                currentCameraCenter = context.region.center
+                
+                guard isTrackingEnabled else { return }
+                
+                // Compare current camera center with the tracked target coordinate to detect manual user panning (iOS 17 compatible)
+                let targetCoord: CLLocationCoordinate2D
+                if currentlyFocusedTarget == .me {
+                    targetCoord = CLLocationCoordinate2D(latitude: animatedMyLatitude, longitude: animatedMyLongitude)
+                } else {
+                    targetCoord = CLLocationCoordinate2D(latitude: animatedPartnerLatitude, longitude: animatedPartnerLongitude)
                 }
                 
-                if let toast = syncToastMessage {
-                    Text(toast)
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(20)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(Color.electricPurple.opacity(0.4), lineWidth: 0.8)
-                        )
-                        .shadow(color: Color.black.opacity(0.3), radius: 10, y: 5)
-                        .padding(.top, 70) // Float nicely below safe area / header
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .zIndex(100)
-                }
+                let latDelta = abs(context.region.center.latitude - targetCoord.latitude)
+                let lonDelta = abs(context.region.center.longitude - targetCoord.longitude)
                 
-                // Overlay HUD
-                VStack(spacing: 0) {
-                    Spacer(minLength: 50) // Space under master header
-                    
+                // If camera center drifted more than ~80 meters (0.0008 degrees) from target, user manually panned away
+                if latDelta > 0.0008 || lonDelta > 0.0008 {
+                    isTrackingEnabled = false
+                }
+            }
+
+            if let toast = syncToastMessage {
+                Text(toast)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(20)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.electricPurple.opacity(0.4), lineWidth: 0.8)
+                    )
+                    .shadow(color: Color.black.opacity(0.3), radius: 10, y: 5)
+                    .padding(.top, 70) // Float nicely below safe area / header
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(100)
+            }
+            
+            // Overlay HUD
+            VStack(spacing: 0) {
+                Spacer(minLength: 50) // Space under master header
+                
+                Spacer()
+                
+                // Map Controls (Satellite + Re-Center Scope) on the right
+                HStack {
                     Spacer()
-                    
-                    // Map Controls (Satellite + Re-Center Scope) on the right
-                    HStack {
-                        Spacer()
-                        VStack(spacing: 12) {
-                            // Satellite toggle
-                            Button {
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                withAnimation(.spring()) {
-                                    isSatellite.toggle()
-                                }
-                            } label: {
-                                Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
-                                    .font(.system(size: 20, weight: .semibold))
-                                    .foregroundColor(.white)
-                                    .frame(width: 46, height: 46)
-                                    .background(.ultraThinMaterial)
-                                    .clipShape(Circle())
-                                    .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 0.5))
+                    VStack(spacing: 12) {
+                        // Satellite toggle
+                        Button {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            withAnimation(.spring()) {
+                                isSatellite.toggle()
                             }
+                        } label: {
+                            Image(systemName: isSatellite ? "map.fill" : "globe.americas.fill")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: 46, height: 46)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Circle())
+                                .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 0.5))
+                        }
+                        
+                        // Re-center Scope
+                        Button {
+                            UISelectionFeedbackGenerator().selectionChanged()
+                            guard !isFlying else { return }
+                            guard let currentUser = auth.currentUser else { return }
                             
-                            // Re-center Scope
-                            // Re-center Scope
-                            Button {
-                                UISelectionFeedbackGenerator().selectionChanged()
-                                guard !isFlying else { return }
-                                guard let currentUser = auth.currentUser else { return }
-                                
-                                let myCoord = currentUser.coordinate
-                                let partnerCoord = partner.coordinate
-                                
-                                isFlying = true
-                                
-                                let targetCoord: CLLocationCoordinate2D
-                                let startCoord: CLLocationCoordinate2D
-                                let nextTarget: MapFocusTarget
-                                
+                            let myCoord = currentUser.coordinate
+                            let partnerCoord = partner.coordinate
+                            
+                            isFlying = true
+                            
+                            let targetCoord: CLLocationCoordinate2D
+                            let startCoord: CLLocationCoordinate2D
+                            let nextTarget: MapFocusTarget
+                            
+                            if !isTrackingEnabled {
+                                // If tracking was disabled (user panned away), recenter on the current focused target
+                                nextTarget = currentlyFocusedTarget
+                                targetCoord = (currentlyFocusedTarget == .me) ? myCoord : partnerCoord
+                                startCoord = (currentlyFocusedTarget == .me) ? partnerCoord : myCoord
+                            } else {
+                                // If already tracking, toggle focus to the other target
                                 if currentlyFocusedTarget == .me {
                                     targetCoord = partnerCoord
                                     startCoord = myCoord
@@ -250,178 +245,134 @@ struct FullPartnerMapView: View {
                                     startCoord = partnerCoord
                                     nextTarget = .me
                                 }
-                                
-                                triggerCinematicFlight(from: startCoord, to: targetCoord, targetFocus: nextTarget)
-                            } label: {
-                                Image(systemName: "scope")
-                                    .font(.system(size: 20, weight: .semibold))
-                                    .foregroundColor(.white)
-                                    .frame(width: 46, height: 46)
-                                    .background(.ultraThinMaterial)
-                                    .clipShape(Circle())
-                                    .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 0.5))
                             }
-                        }
-                        .padding(.trailing, 16)
-                        .padding(.bottom, 12)
-                    }
-                    
-                    // Bottom Info Card (Observing dynamically either Me or Partner based on active focus)
-                    Group {
-                        if let currentUser = auth.currentUser, currentlyFocusedTarget == .me {
-                            PartnerOverlayCard(user: currentUser, locationOverride: nil, isMinimal: false)
-                                .id("me_card")
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    UISelectionFeedbackGenerator().selectionChanged()
-                                    isTrackingEnabled = true
-                                    let spanDelta = cameraSpanDelta(for: auth.mySpeedKmH)
-                                    withAnimation(.easeInOut(duration: 0.3)) {
-                                        currentCameraSpan = spanDelta
-                                        position = .region(MKCoordinateRegion(
-                                            center: animatedMyCoordinate,
-                                            span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
-                                        ))
-                                    }
-                                    triggerLocalSync()
-                                }
-                        } else {
-                            PartnerOverlayCard(user: partner, locationOverride: nil, isMinimal: false)
-                                .id("partner_card")
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    UISelectionFeedbackGenerator().selectionChanged()
-                                    isTrackingEnabled = true
-                                    let spanDelta = cameraSpanDelta(for: auth.partnerSpeedKmH)
-                                    withAnimation(.easeInOut(duration: 0.3)) {
-                                        currentCameraSpan = spanDelta
-                                        position = .region(MKCoordinateRegion(
-                                            center: animatedPartnerCoordinate,
-                                            span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
-                                        ))
-                                    }
-                                    triggerPartnerGlow()
-                                }
-                        }
-                    }
-                    .transition(.asymmetric(
-                        insertion: .move(edge: insertionEdge).combined(with: .opacity),
-                        removal: .move(edge: removalEdge).combined(with: .opacity)
-                    ))
-                    .animation(.spring(response: 0.35, dampingFraction: 0.85), value: currentlyFocusedTarget)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 8)
-                    .shadow(color: Color.black.opacity(0.25), radius: 10, y: 5)
-                    .gesture(
-                        DragGesture(minimumDistance: 15)
-                            .onEnded { value in
-                                guard !isFlying else { return }
-                                guard let currentUser = auth.currentUser else { return }
-                                
-                                let threshold: CGFloat = 30
-                                let dx = value.translation.width
-                                let dy = value.translation.height
-                                
-                                // Determine primary swipe direction and assign transitions accordingly
-                                if abs(dx) > abs(dy) {
-                                    // Horizontal swipe
-                                    if dx < -threshold {
-                                        // Swipe left -> next enters from trailing (right), old exits to leading (left)
-                                        insertionEdge = .trailing
-                                        removalEdge = .leading
-                                    } else if dx > threshold {
-                                        // Swipe right -> next enters from leading (left), old exits to trailing (right)
-                                        insertionEdge = .leading
-                                        removalEdge = .trailing
-                                    } else {
-                                        return
-                                    }
-                                } else {
-                                    // Vertical swipe
-                                    if dy < -threshold {
-                                        // Swipe up -> next enters from bottom, old exits to top
-                                        insertionEdge = .bottom
-                                        removalEdge = .top
-                                    } else if dy > threshold {
-                                        // Swipe down -> next enters from top, old exits to bottom
-                                        insertionEdge = .top
-                                        removalEdge = .bottom
-                                    } else {
-                                        return
-                                    }
-                                }
-                                
-                                UISelectionFeedbackGenerator().selectionChanged()
-                                
-                                let nextTarget: MapFocusTarget = (currentlyFocusedTarget == .me) ? .partner : .me
-                                let myCoord = currentUser.coordinate
-                                let partnerCoord = partner.coordinate
-                                
-                                isFlying = true
-                                
-                                let targetCoord = (nextTarget == .me) ? myCoord : partnerCoord
-                                let startCoord = (nextTarget == .me) ? partnerCoord : myCoord
-                                
-                                triggerCinematicFlight(from: startCoord, to: targetCoord, targetFocus: nextTarget)
-                            }
-                    )
-                }
-            } else {
-                // Not Connected / No Partner View (Beautiful, minimalist box-less state)
-                VStack(spacing: 16) {
-                    Image(systemName: "map")
-                        .font(.system(size: 56, weight: .light))
-                        .foregroundColor(.white.opacity(0.35))
-                        .shadow(color: .electricPurple.opacity(0.15), radius: 8)
-                    
-                    VStack(spacing: 8) {
-                        Text("No Location Sharing")
-                            .font(.system(size: 18, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                        
-                        Text("Connect with your partner first to share and see live coordinates on the map!")
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
-                            .foregroundColor(.white.opacity(0.5))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.deepVelvet)
-            }
-            
-            // Bump Explosion Overlay
-            if isShowingBumpAnimation {
-                ZStack {
-                    Color.black.opacity(0.3)
-                        .edgesIgnoringSafeArea(.all)
-                    
-                    VStack(spacing: 12) {
-                        Text("BUMP!")
-                            .font(.system(size: 38, weight: .black, design: .rounded))
-                            .foregroundColor(.white)
-                            .shadow(color: .electricPurple, radius: 8)
-                            .scaleEffect(isShowingBumpAnimation ? 1.15 : 0.85)
-                            .animation(.spring(response: 0.45, dampingFraction: 0.6), value: isShowingBumpAnimation)
                             
-                        Text("Meetup #\(auth.totalMeetings) successfully recorded!")
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundColor(.white.opacity(0.9))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
-                            .scaleEffect(isShowingBumpAnimation ? 1.0 : 0.9)
-                            .animation(.spring(response: 0.45, dampingFraction: 0.6).delay(0.15), value: isShowingBumpAnimation)
+                            triggerCinematicFlight(from: startCoord, to: targetCoord, targetFocus: nextTarget)
+                        } label: {
+                            Image(systemName: "scope")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: 46, height: 46)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Circle())
+                                .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 0.5))
+                        }
                     }
-                    .padding(.vertical, 24)
-                    .padding(.horizontal, 32)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                            .shadow(color: .black.opacity(0.2), radius: 10, y: 5)
-                    )
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 12)
                 }
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                .zIndex(999)
+                
+                // Bottom Info Card (Observing dynamically either Me or Partner based on active focus)
+                Group {
+                    if let currentUser = auth.currentUser, currentlyFocusedTarget == .me {
+                        PartnerOverlayCard(user: currentUser, locationOverride: nil, isMinimal: false)
+                            .id("me_card")
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                UISelectionFeedbackGenerator().selectionChanged()
+                                isTrackingEnabled = true
+                                let spanDelta = cameraSpanDelta(for: auth.myAverageSpeedKmH)
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    currentCameraSpan = spanDelta
+                                    position = .region(MKCoordinateRegion(
+                                        center: animatedMyCoordinate,
+                                        span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
+                                    ))
+                                }
+                                triggerLocalSync()
+                            }
+                    } else {
+                        PartnerOverlayCard(user: partner, locationOverride: nil, isMinimal: false)
+                            .id("partner_card")
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                UISelectionFeedbackGenerator().selectionChanged()
+                                isTrackingEnabled = true
+                                let spanDelta = cameraSpanDelta(for: auth.partnerAverageSpeedKmH)
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    currentCameraSpan = spanDelta
+                                    position = .region(MKCoordinateRegion(
+                                        center: animatedPartnerCoordinate,
+                                        span: MKCoordinateSpan(latitudeDelta: spanDelta, longitudeDelta: spanDelta)
+                                    ))
+                                }
+                                triggerPartnerGlow()
+                            }
+                    }
+                }
+                .transition(.asymmetric(
+                    insertion: .move(edge: insertionEdge).combined(with: .opacity),
+                    removal: .move(edge: removalEdge).combined(with: .opacity)
+                ))
+                .animation(.spring(response: 0.35, dampingFraction: 0.85), value: currentlyFocusedTarget)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+                .shadow(color: Color.black.opacity(0.25), radius: 10, y: 5)
+                .gesture(
+                    DragGesture(minimumDistance: 15)
+                        .onEnded { value in
+                            guard !isFlying else { return }
+                            guard let currentUser = auth.currentUser else { return }
+                            
+                            let threshold: CGFloat = 30
+                            let dx = value.translation.width
+                            let dy = value.translation.height
+                            
+                            // Determine primary swipe direction and assign transitions accordingly
+                            if abs(dx) > abs(dy) {
+                                // Horizontal swipe
+                                if dx < -threshold {
+                                    // Swipe left -> next enters from trailing (right), old exits to leading (left)
+                                    insertionEdge = .trailing
+                                    removalEdge = .leading
+                                } else if dx > threshold {
+                                    // Swipe right -> next enters from leading (left), old exits to trailing (right)
+                                    insertionEdge = .leading
+                                    removalEdge = .trailing
+                                } else {
+                                    return
+                                }
+                            } else {
+                                // Vertical swipe
+                                if dy < -threshold {
+                                    // Swipe up -> next enters from bottom, old exits to top
+                                    insertionEdge = .bottom
+                                    removalEdge = .top
+                                } else if dy > threshold {
+                                    // Swipe down -> next enters from top, old exits to bottom
+                                    insertionEdge = .top
+                                    removalEdge = .bottom
+                                } else {
+                                    return
+                                }
+                            }
+                            
+                            UISelectionFeedbackGenerator().selectionChanged()
+                            
+                            let nextTarget: MapFocusTarget = (currentlyFocusedTarget == .me) ? .partner : .me
+                            let myCoord = currentUser.coordinate
+                            let partnerCoord = partner.coordinate
+                            
+                            isFlying = true
+                            
+                            let targetCoord = (nextTarget == .me) ? myCoord : partnerCoord
+                            let startCoord = (nextTarget == .me) ? partnerCoord : myCoord
+                            
+                            triggerCinematicFlight(from: startCoord, to: targetCoord, targetFocus: nextTarget)
+                        }
+                )
+            }
+        }
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            if !auth.isInitialStateLoaded {
+                loadingView
+            } else if let partner = auth.partner {
+                mapSpaceView(partner: partner)
+            } else {
+                unconnectedView
             }
         }
         .onAppear {
@@ -429,25 +380,25 @@ struct FullPartnerMapView: View {
                 animatedPartnerLatitude = lat
                 animatedPartnerLongitude = lon
             }
-            let initialSpeed = (currentlyFocusedTarget == .me) ? auth.mySpeedKmH : auth.partnerSpeedKmH
+            let initialSpeed = (currentlyFocusedTarget == .me) ? auth.myAverageSpeedKmH : auth.partnerAverageSpeedKmH
             currentCameraSpan = cameraSpanDelta(for: initialSpeed)
             triggerImmediateSync()
         }
         .onReceive(deadReckoningTimer) { _ in
-            extrapolateDeadReckoning()
+            // extrapolateDeadReckoning() // Disabled predictive movement
         }
-        .onChange(of: auth.mySpeedKmH) { _, newSpeed in
+        .onChange(of: auth.myAverageSpeedKmH) { _, newSpeed in
             if currentlyFocusedTarget == .me {
                 updateZoomLevel(for: newSpeed)
             }
         }
-        .onChange(of: auth.partnerSpeedKmH) { _, newSpeed in
+        .onChange(of: auth.partnerAverageSpeedKmH) { _, newSpeed in
             if currentlyFocusedTarget == .partner {
                 updateZoomLevel(for: newSpeed)
             }
         }
         .onChange(of: currentlyFocusedTarget) { _, newTarget in
-            let speed = (newTarget == .me) ? auth.mySpeedKmH : auth.partnerSpeedKmH
+            let speed = (newTarget == .me) ? auth.myAverageSpeedKmH : auth.partnerAverageSpeedKmH
             speedAbove70Start = nil
             speedBelow70Start = nil
             targetCameraSpan = cameraSpanDelta(for: speed)
@@ -461,9 +412,37 @@ struct FullPartnerMapView: View {
                 ))
             }
         }
+        .onChange(of: auth.partner?.last_updated) {
+            guard let partner = auth.partner else { return }
+            guard let lat = partner.latitude, let lon = partner.longitude else { return }
+            if lat != 0.0 && lon != 0.0 {
+                let newCoord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                partnerCoordinateQueue.append(newCoord)
+                if !isInterpolatingPartner {
+                    startPartnerQueueInterpolator()
+                }
+            }
+        }
+        .onChange(of: auth.currentUser?.last_updated) {
+            guard let currentUser = auth.currentUser else { return }
+            guard let lat = currentUser.latitude, let lon = currentUser.longitude else { return }
+            if lat != 0.0 && lon != 0.0 {
+                let newCoord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                myCoordinateQueue.append(newCoord)
+                if !isInterpolatingMy {
+                    startMyQueueInterpolator()
+                }
+            }
+        }
         .onReceive(zoomTimer) { _ in
-            let activeSpeed = (currentlyFocusedTarget == .me) ? auth.mySpeedKmH : auth.partnerSpeedKmH
+            let activeSpeed = (currentlyFocusedTarget == .me) ? auth.myAverageSpeedKmH : auth.partnerAverageSpeedKmH
             updateZoomLevel(for: activeSpeed)
+            
+            // Advance the wave phase for a flowing neon signal connection line
+            wavePhase += 0.035
+            if wavePhase >= 2.0 * .pi {
+                wavePhase -= 2.0 * .pi
+            }
             
             let spanDiff = targetCameraSpan - currentCameraSpan
             if abs(spanDiff) > 0.00001 {
@@ -479,66 +458,26 @@ struct FullPartnerMapView: View {
                 }
             }
         }
-        .onShake {
-            if auth.isTogether {
-                triggerBump()
-            }
-        }
-        .onChange(of: auth.lastLoveBumpTimestamp) { _, newTimestamp in
-            if newTimestamp > lastSeenLoveBumpTimestamp {
-                lastSeenLoveBumpTimestamp = newTimestamp
-                if auth.isTogether {
-                    showBumpAnimation()
-                }
-            }
-        }
     }
     
     private func extrapolateDeadReckoning() {
-        guard let partner = auth.partner,
-              let history = partner.location_history,
-              history.count >= 2 else { return }
-        
-        let lastUpdated = partner.lastUpdatedDate
-        let elapsed = Date().timeIntervalSince(lastUpdated)
-        
-        // Extrapolate if network drops for >= 10 seconds but < 5 minutes (300 seconds)
-        guard elapsed >= 10.0 && elapsed < 300.0 else { return }
-        
-        let p1 = history[history.count - 2]
-        let p2 = history[history.count - 1]
-        
-        let t1 = Double(p1.timestamp)
-        let t2 = Double(p2.timestamp)
-        let dt = t2 - t1
-        
-        guard dt > 0 else { return }
-        
-        let dLat = p2.latitude - p1.latitude
-        let dLon = p2.longitude - p1.longitude
-        
-        let speedLat = dLat / dt
-        let speedLon = dLon / dt
-        
-        // Verify user is actually moving (not stationary / sleeping)
-        let distance = sqrt(pow(dLat * 111000, 2) + pow(dLon * 111000, 2))
-        let speedMetersPerSec = distance / dt
-        
-        // Extrapolate only if moving >= 1.5 m/s (~5.4 km/h)
-        guard speedMetersPerSec >= 1.5 else { return }
-        
-        let currentTimestamp = Date().timeIntervalSince1970
-        let timeSinceLastPoint = currentTimestamp - t2
-        
-        // Cap extrapolation duration to max 60 seconds to avoid drifting out of bounds
-        let extrapolationDuration = min(timeSinceLastPoint, 60.0)
-        
-        let targetLat = p2.latitude + (speedLat * extrapolationDuration)
-        let targetLon = p2.longitude + (speedLon * extrapolationDuration)
-        
-        withAnimation(.linear(duration: 1.0)) {
-            animatedPartnerLatitude = targetLat
-            animatedPartnerLongitude = targetLon
+        // Disabled predictive movement
+    }
+    
+    @MapContentBuilder
+    private func mapAnnotations(currentUser: GlimpseUser, partner: GlimpseUser) -> some MapContent {
+        if auth.isTogether {
+            Annotation("Together", coordinate: animatedPartnerCoordinate) {
+                togetherMarker(currentUser: currentUser, partner: partner)
+            }
+        } else {
+            if let partnerLat = partner.latitude, partnerLat != 0.0,
+               let myLat = currentUser.latitude, myLat != 0.0 {
+                wavyConnectingLine(currentUser: currentUser, partner: partner)
+            }
+            
+            meAnnotation(currentUser: currentUser)
+            partnerAnnotation(partner: partner)
         }
     }
     
@@ -588,7 +527,7 @@ struct FullPartnerMapView: View {
             )
         }
         .onTapGesture {
-            let spanDelta = cameraSpanDelta(for: auth.partnerSpeedKmH)
+            let spanDelta = cameraSpanDelta(for: auth.partnerAverageSpeedKmH)
             withAnimation(.easeInOut(duration: 0.3)) {
                 currentCameraSpan = spanDelta
                 position = .region(MKCoordinateRegion(
@@ -661,13 +600,13 @@ struct FullPartnerMapView: View {
                     .frame(width: 60, height: 60)
                     .blur(radius: 10)
                 
-                PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name, isSleeping: currentUser.is_sleeping, speed: auth.mySpeedKmH)
+                PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name, isSleeping: currentUser.is_sleeping, speed: auth.myAverageSpeedKmH)
                     .scaleEffect(meAvatarScale)
             }
             .onTapGesture {
                 currentlyFocusedTarget = .me
                 isTrackingEnabled = true
-                let spanDelta = cameraSpanDelta(for: auth.mySpeedKmH)
+                let spanDelta = cameraSpanDelta(for: auth.myAverageSpeedKmH)
                 withAnimation(.easeInOut(duration: 0.3)) {
                     currentCameraSpan = spanDelta
                     position = .region(MKCoordinateRegion(
@@ -697,13 +636,13 @@ struct FullPartnerMapView: View {
                     .frame(width: 60, height: 60)
                     .blur(radius: 10)
                 
-                PartnerMarker(photoUrl: partner.profile_photo_url, isOffline: partner.isOffline, batteryLevel: partner.battery_level, isCharging: partner.is_charging, locationName: partner.location_name, isSleeping: partner.is_sleeping, speed: auth.partnerSpeedKmH)
+                PartnerMarker(photoUrl: partner.profile_photo_url, isOffline: partner.isOffline, batteryLevel: partner.battery_level, isCharging: partner.is_charging, locationName: partner.location_name, isSleeping: partner.is_sleeping, speed: auth.partnerAverageSpeedKmH)
                     .scaleEffect(partnerAvatarScale)
             }
             .onTapGesture {
                 currentlyFocusedTarget = .partner
                 isTrackingEnabled = true
-                let spanDelta = cameraSpanDelta(for: auth.partnerSpeedKmH)
+                let spanDelta = cameraSpanDelta(for: auth.partnerAverageSpeedKmH)
                 withAnimation(.easeInOut(duration: 0.3)) {
                     currentCameraSpan = spanDelta
                     position = .region(MKCoordinateRegion(
@@ -738,6 +677,7 @@ struct FullPartnerMapView: View {
     }
     
     private func triggerCinematicFlight(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D, targetFocus: MapFocusTarget) {
+        isFlying = true
         isTrackingEnabled = true
         
         // Update bottom overlay info card instantly at start for zero latency!
@@ -897,32 +837,6 @@ struct FullPartnerMapView: View {
         }
     }
     
-    private func triggerBump() {
-        UISelectionFeedbackGenerator().selectionChanged()
-        
-        Task {
-            try? await auth.triggerServerBump()
-        }
-        
-        showBumpAnimation()
-    }
-    
-    private func showBumpAnimation() {
-        // Trigger haptic feedback for explosion
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-        
-        withAnimation {
-            isShowingBumpAnimation = true
-        }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
-            withAnimation {
-                isShowingBumpAnimation = false
-            }
-        }
-    }
-    
     private func triggerPartnerGlow() {
         partnerGlowScale = 1.0
         partnerGlowOpacity = 1.0
@@ -963,10 +877,20 @@ struct FullPartnerMapView: View {
                 let speedKmH = speedMps * 3.6
                 
                 await MainActor.run {
-                    if speedKmH >= 3.0 {
+                    if speedKmH >= 1.0 {
                         auth.updatePartnerSpeed(speedKmH)
                     } else {
                         auth.updatePartnerSpeed(nil)
+                    }
+                    
+                    // Animate camera position smoothly to target coordinate once per update segment
+                    if isTrackingEnabled && currentlyFocusedTarget == .partner && !isFlying {
+                        withAnimation(.linear(duration: duration)) {
+                            position = .region(MKCoordinateRegion(
+                                center: target,
+                                span: MKCoordinateSpan(latitudeDelta: currentCameraSpan, longitudeDelta: currentCameraSpan)
+                            ))
+                        }
                     }
                 }
                 
@@ -988,13 +912,6 @@ struct FullPartnerMapView: View {
                     await MainActor.run {
                         animatedPartnerLatitude = currentLat
                         animatedPartnerLongitude = currentLon
-                        
-                        if isTrackingEnabled && currentlyFocusedTarget == .partner && !isFlying {
-                            position = .region(MKCoordinateRegion(
-                                center: CLLocationCoordinate2D(latitude: currentLat, longitude: currentLon),
-                                span: MKCoordinateSpan(latitudeDelta: currentCameraSpan, longitudeDelta: currentCameraSpan)
-                            ))
-                        }
                     }
                     
                     if progress >= 1.0 { break }
@@ -1030,10 +947,20 @@ struct FullPartnerMapView: View {
                 let speedKmH = speedMps * 3.6
                 
                 await MainActor.run {
-                    if speedKmH >= 3.0 {
+                    if speedKmH >= 1.0 {
                         auth.updateMySpeed(speedKmH)
                     } else {
                         auth.updateMySpeed(nil)
+                    }
+                    
+                    // Animate camera position smoothly to target coordinate once per update segment
+                    if isTrackingEnabled && currentlyFocusedTarget == .me && !isFlying {
+                        withAnimation(.linear(duration: duration)) {
+                            position = .region(MKCoordinateRegion(
+                                center: target,
+                                span: MKCoordinateSpan(latitudeDelta: currentCameraSpan, longitudeDelta: currentCameraSpan)
+                            ))
+                        }
                     }
                 }
                 
@@ -1055,13 +982,6 @@ struct FullPartnerMapView: View {
                     await MainActor.run {
                         animatedMyLatitude = currentLat
                         animatedMyLongitude = currentLon
-                        
-                        if isTrackingEnabled && currentlyFocusedTarget == .me && !isFlying {
-                            position = .region(MKCoordinateRegion(
-                                center: CLLocationCoordinate2D(latitude: currentLat, longitude: currentLon),
-                                span: MKCoordinateSpan(latitudeDelta: currentCameraSpan, longitudeDelta: currentCameraSpan)
-                            ))
-                        }
                     }
                     
                     if progress >= 1.0 { break }

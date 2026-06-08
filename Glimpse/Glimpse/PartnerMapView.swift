@@ -3,7 +3,7 @@ import MapKit
 import Combine
 
 struct PartnerMapView: View {
-    @AppStorage("glimpse_default_map_style") var defaultMapStyle = "satellite"
+    @AppStorage("glimpse_default_map_style", store: UserDefaults(suiteName: "group.glimpse.app")) var defaultMapStyle = "satellite"
     let user: GlimpseUser
     @State private var position: MapCameraPosition
     @State private var isShowingPhoto = true
@@ -26,6 +26,61 @@ struct PartnerMapView: View {
         )
     }
     
+    @State private var selectedFlashIndex = 0
+    @State private var mapUpdateTask: Task<Void, Never>? = nil
+    
+    private var partnerFlashes: [GlimpseFlash] {
+        auth.flashes.filter { $0.sender_id == user.id }
+            .sorted(by: { $0.createdDate > $1.createdDate })
+    }
+    
+    private var displayFlashes: [GlimpseFlash] {
+        let list = partnerFlashes
+        if list.isEmpty, let photoUrl = user.latest_photo_url, !photoUrl.isEmpty {
+            return [
+                GlimpseFlash(
+                    id: -1,
+                    sender_id: user.id,
+                    sender_name: user.name,
+                    photo_url: photoUrl,
+                    latitude: user.latest_photo_latitude ?? user.latitude,
+                    longitude: user.latest_photo_longitude ?? user.longitude,
+                    location_name: user.latest_photo_location_name ?? user.location_name,
+                    status_note: user.latest_photo_status_note ?? user.status_note,
+                    battery_level: user.latest_photo_battery_level ?? user.battery_level,
+                    created_at: user.latest_photo_created_at ?? user.last_updated ?? ""
+                )
+            ]
+        }
+        return list
+    }
+    
+    private var selectedUser: GlimpseUser {
+        if !displayFlashes.isEmpty && selectedFlashIndex < displayFlashes.count {
+            let flash = displayFlashes[selectedFlashIndex]
+            var tempUser = user
+            tempUser.latest_photo_url = flash.photo_url
+            tempUser.latest_photo_latitude = flash.latitude
+            tempUser.latest_photo_longitude = flash.longitude
+            tempUser.latest_photo_location_name = flash.location_name
+            tempUser.latest_photo_status_note = flash.status_note
+            tempUser.latest_photo_battery_level = flash.battery_level
+            tempUser.latest_photo_created_at = flash.created_at
+            return tempUser
+        }
+        return user
+    }
+    
+    private var targetCoordinate: CLLocationCoordinate2D {
+        let activeUser = selectedUser
+        if let photoUrl = activeUser.latest_photo_url, !photoUrl.isEmpty,
+           let flashLat = activeUser.latest_photo_latitude, let flashLon = activeUser.latest_photo_longitude,
+           flashLat != 0.0, flashLon != 0.0 {
+            return CLLocationCoordinate2D(latitude: flashLat, longitude: flashLon)
+        }
+        return animatedPartnerCoordinate
+    }
+    
     // Auto-rotation timer every 10 seconds
     private let autoRotateTimer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
     
@@ -45,8 +100,34 @@ struct PartnerMapView: View {
             if isShowingPhoto {
                 // PHOTO SIDE
                 ZStack {
-                    if let photoUrl = user.latest_photo_url, !photoUrl.isEmpty {
-                        CachedImageView(urlString: formatImageUrlString(photoUrl))
+                    if !displayFlashes.isEmpty {
+                        TabView(selection: $selectedFlashIndex) {
+                            ForEach(Array(displayFlashes.enumerated()), id: \.element.id) { index, flash in
+                                CachedImageView(urlString: formatImageUrlString(flash.photo_url))
+                                    .tag(index)
+                                    .onTapGesture {
+                                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                        withAnimation(.easeInOut(duration: 0.5)) {
+                                            isShowingPhoto.toggle()
+                                        }
+                                    }
+                            }
+                        }
+                        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+                        .onChange(of: selectedFlashIndex) {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            
+                            mapUpdateTask?.cancel()
+                            mapUpdateTask = Task {
+                                try? await Task.sleep(nanoseconds: 150_000_000) // 150ms delay
+                                guard !Task.isCancelled else { return }
+                                
+                                await MainActor.run {
+                                    updateLocalAddress()
+                                    updateMapPosition()
+                                }
+                            }
+                        }
                     } else {
                         Color.black.opacity(0.8)
                             .overlay(
@@ -58,12 +139,20 @@ struct PartnerMapView: View {
                                 }
                                 .foregroundColor(.white.opacity(0.3))
                             )
+                            .onTapGesture {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                withAnimation(.easeInOut(duration: 0.5)) {
+                                    isShowingPhoto.toggle()
+                                }
+                            }
                     }
                     
                     // Minimal mode card overlay fades inside the Photo container
-                    PartnerOverlayCard(user: user, locationOverride: localAddress, isMinimal: true)
+                    PartnerOverlayCard(user: selectedUser, locationOverride: localAddress, isMinimal: true)
                         .padding(12)
                         .frame(maxHeight: .infinity, alignment: .bottom)
+                        // Ignore gestures on overlay card to allow swipe gestures underneath
+                        .allowsHitTesting(false)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .transition(.opacity)
@@ -72,9 +161,9 @@ struct PartnerMapView: View {
                 ZStack {
                     Map(position: $position, interactionModes: []) {
                         if auth.isTogether, let currentUser = auth.currentUser,
-                           let userLat = user.latitude, userLat != 0.0,
+                           let userLat = selectedUser.latitude, userLat != 0.0,
                            let myLat = currentUser.latitude, myLat != 0.0 {
-                            Annotation("Together", coordinate: animatedPartnerCoordinate) {
+                            Annotation("Together", coordinate: targetCoordinate) {
                                 ZStack {
                                     Circle()
                                         .fill(LinearGradient(colors: [.electricPurple.opacity(0.3), .activeCyan.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -96,7 +185,7 @@ struct PartnerMapView: View {
                                             .shadow(color: .red, radius: 4)
                                             .zIndex(5)
                                         
-                                        CachedImageView(urlString: user.profile_photo_url)
+                                        CachedImageView(urlString: selectedUser.profile_photo_url)
                                             .frame(width: 38, height: 38)
                                             .clipShape(Circle())
                                             .overlay(Circle().stroke(Color.activeCyan, lineWidth: 1.5))
@@ -116,7 +205,7 @@ struct PartnerMapView: View {
                                 .onTapGesture {
                                     withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                                         position = .region(MKCoordinateRegion(
-                                            center: animatedPartnerCoordinate,
+                                            center: targetCoordinate,
                                             span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
                                         ))
                                     }
@@ -126,17 +215,17 @@ struct PartnerMapView: View {
                         } else {
                             // Wavy Connecting line
                             if let currentUser = auth.currentUser,
-                               let userLat = user.latitude, userLat != 0.0,
+                               let userLat = selectedUser.latitude, userLat != 0.0,
                                let myLat = currentUser.latitude, myLat != 0.0 {
                                 let startLoc = CLLocation(latitude: currentUser.coordinate.latitude, longitude: currentUser.coordinate.longitude)
-                                let endLoc = CLLocation(latitude: animatedPartnerCoordinate.latitude, longitude: animatedPartnerCoordinate.longitude)
+                                let endLoc = CLLocation(latitude: targetCoordinate.latitude, longitude: targetCoordinate.longitude)
                                 let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
                                 
                                 let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
                                 
                                 if isInterpolating {
                                     // STRAIGHT LINE when moving - super light, 0% CPU calculations!
-                                    let lineCoords = [currentUser.coordinate, animatedPartnerCoordinate]
+                                    let lineCoords = [currentUser.coordinate, targetCoordinate]
                                     
                                     MapPolyline(coordinates: lineCoords)
                                         .stroke(
@@ -151,7 +240,7 @@ struct PartnerMapView: View {
                                         )
                                 } else {
                                     // WAVY LINE when static - beautiful dynamic shape!
-                                    let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: animatedPartnerCoordinate, phase: wavePhase)
+                                    let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: targetCoordinate, phase: wavePhase)
                                     
                                     // 1. Bottom Layer: Outer Neon Glow
                                     MapPolyline(coordinates: wavyCoords)
@@ -177,7 +266,7 @@ struct PartnerMapView: View {
                                             .frame(width: 60, height: 60)
                                             .blur(radius: 10)
                                         
-                                        PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name, isSleeping: currentUser.is_sleeping, speed: auth.mySpeedKmH)
+                                        PartnerMarker(photoUrl: currentUser.profile_photo_url, isOffline: false, batteryLevel: currentUser.battery_level, isCharging: currentUser.is_charging, locationName: currentUser.location_name, isSleeping: currentUser.is_sleeping, speed: auth.myAverageSpeedKmH)
                                     }
                                     .onTapGesture {
                                         withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
@@ -191,20 +280,28 @@ struct PartnerMapView: View {
                                 }
                             }
                             
-                            if let userLat = user.latitude, userLat != 0.0 {
-                                Annotation(user.name, coordinate: animatedPartnerCoordinate) {
+                            if let userLat = selectedUser.latitude, userLat != 0.0 {
+                                Annotation(selectedUser.name, coordinate: targetCoordinate) {
                                     ZStack {
                                         Circle()
                                             .fill(Color.activeCyan.opacity(0.3))
                                             .frame(width: 80, height: 80)
                                             .blur(radius: 20)
                                         
-                                        PartnerMarker(photoUrl: user.profile_photo_url, isOffline: user.isOffline, batteryLevel: user.battery_level, isCharging: user.is_charging, locationName: user.location_name, isSleeping: user.is_sleeping, speed: auth.partnerSpeedKmH)
+                                        PartnerMarker(
+                                            photoUrl: selectedUser.profile_photo_url,
+                                            isOffline: selectedUser.latest_photo_url != nil ? false : selectedUser.isOffline,
+                                            batteryLevel: selectedUser.latest_photo_url != nil ? (selectedUser.latest_photo_battery_level ?? selectedUser.battery_level) : selectedUser.battery_level,
+                                            isCharging: selectedUser.latest_photo_url != nil ? false : (selectedUser.is_charging ?? false),
+                                            locationName: selectedUser.latest_photo_url != nil ? (selectedUser.latest_photo_location_name ?? selectedUser.location_name) : selectedUser.location_name,
+                                            isSleeping: selectedUser.latest_photo_url != nil ? false : (selectedUser.is_sleeping ?? false),
+                                            speed: selectedUser.latest_photo_url != nil ? 0.0 : auth.partnerAverageSpeedKmH
+                                        )
                                     }
                                     .onTapGesture {
                                         withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                                             position = .region(MKCoordinateRegion(
-                                                center: animatedPartnerCoordinate,
+                                                center: targetCoordinate,
                                                 span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
                                             ))
                                         }
@@ -215,28 +312,29 @@ struct PartnerMapView: View {
                         }
                     }
                     .mapStyle(defaultMapStyle == "satellite" ? .hybrid(elevation: .realistic) : .standard(emphasis: .muted))
-                    .onChange(of: user.latitude) {
+                    .onTapGesture {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        withAnimation(.easeInOut(duration: 0.5)) {
+                            isShowingPhoto.toggle()
+                        }
+                    }
+                    .onChange(of: selectedUser.latitude) {
                         updateMapPosition()
                     }
-                    .onChange(of: user.last_updated) {
+                    .onChange(of: selectedUser.last_updated) {
                         updateMapPosition()
                     }
                     
                     // Full mode card overlay fades inside the Map container
-                    PartnerOverlayCard(user: user, locationOverride: localAddress, isMinimal: false)
+                    PartnerOverlayCard(user: selectedUser, locationOverride: localAddress, isMinimal: false)
                         .padding(12)
                         .frame(maxHeight: .infinity, alignment: .bottom)
+                        .allowsHitTesting(false)
                 }
                 .transition(.opacity)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 24))
-        .onTapGesture {
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            withAnimation(.easeInOut(duration: 0.5)) {
-                isShowingPhoto.toggle()
-            }
-        }
         .onReceive(autoRotateTimer) { _ in
             withAnimation(.easeInOut(duration: 0.5)) {
                 isShowingPhoto.toggle()
@@ -248,12 +346,23 @@ struct PartnerMapView: View {
             }
         }
         .onAppear {
+            selectedFlashIndex = 0
             updateLocalAddress()
             updateMapPosition()
             if let lat = user.latitude, let lon = user.longitude, lat != 0.0, lon != 0.0 {
                 animatedPartnerLatitude = lat
                 animatedPartnerLongitude = lon
             }
+        }
+        .onChange(of: user.latest_photo_url) {
+            selectedFlashIndex = 0
+            updateLocalAddress()
+            updateMapPosition()
+        }
+        .onChange(of: auth.dashboardRefreshTrigger) {
+            selectedFlashIndex = 0
+            updateLocalAddress()
+            updateMapPosition()
         }
         .onChange(of: user.latitude) {
             updateLocalAddress()
@@ -268,55 +377,12 @@ struct PartnerMapView: View {
             }
         }
         .onReceive(deadReckoningTimer) { _ in
-            extrapolateDeadReckoning()
+            // extrapolateDeadReckoning() // Disabled predictive movement
         }
     }
     
     private func extrapolateDeadReckoning() {
-        guard let history = user.location_history,
-              history.count >= 2 else { return }
-        
-        let lastUpdated = user.lastUpdatedDate
-        let elapsed = Date().timeIntervalSince(lastUpdated)
-        
-        // Extrapolate if network drops for >= 10 seconds but < 5 minutes (300 seconds)
-        guard elapsed >= 10.0 && elapsed < 300.0 else { return }
-        
-        let p1 = history[history.count - 2]
-        let p2 = history[history.count - 1]
-        
-        let t1 = Double(p1.timestamp)
-        let t2 = Double(p2.timestamp)
-        let dt = t2 - t1
-        
-        guard dt > 0 else { return }
-        
-        let dLat = p2.latitude - p1.latitude
-        let dLon = p2.longitude - p1.longitude
-        
-        let speedLat = dLat / dt
-        let speedLon = dLon / dt
-        
-        // Verify user is actually moving (not stationary / sleeping)
-        let distance = sqrt(pow(dLat * 111000, 2) + pow(dLon * 111000, 2))
-        let speedMetersPerSec = distance / dt
-        
-        // Extrapolate only if moving >= 1.5 m/s (~5.4 km/h)
-        guard speedMetersPerSec >= 1.5 else { return }
-        
-        let currentTimestamp = Date().timeIntervalSince1970
-        let timeSinceLastPoint = currentTimestamp - t2
-        
-        // Cap extrapolation duration to max 60 seconds to avoid drifting out of bounds
-        let extrapolationDuration = min(timeSinceLastPoint, 60.0)
-        
-        let targetLat = p2.latitude + (speedLat * extrapolationDuration)
-        let targetLon = p2.longitude + (speedLon * extrapolationDuration)
-        
-        withAnimation(.linear(duration: 1.0)) {
-            animatedPartnerLatitude = targetLat
-            animatedPartnerLongitude = targetLon
-        }
+        // Disabled predictive movement
     }
     
     private func startQueueInterpolator() {
@@ -342,7 +408,7 @@ struct PartnerMapView: View {
                 let speedKmH = speedMps * 3.6
                 
                 await MainActor.run {
-                    if speedKmH >= 3.0 {
+                    if speedKmH >= 1.0 {
                         auth.updatePartnerSpeed(speedKmH)
                     } else {
                         auth.updatePartnerSpeed(nil)
@@ -381,10 +447,11 @@ struct PartnerMapView: View {
     }
     
     private func updateMapPosition() {
-        if let lat = user.latitude, let lon = user.longitude, lat != 0.0, lon != 0.0 {
+        let centerCoord = targetCoordinate
+        if centerCoord.latitude != 0.0, centerCoord.longitude != 0.0 {
             withAnimation(.easeInOut(duration: 1.0)) {
                 position = .region(MKCoordinateRegion(
-                    center: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+                    center: centerCoord,
                     span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
                 ))
             }
@@ -399,13 +466,19 @@ struct PartnerMapView: View {
     }
     
     private func updateLocalAddress() {
-        if let serverAddress = user.location_name, !serverAddress.isEmpty {
+        if let photoUrl = user.latest_photo_url, !photoUrl.isEmpty {
+            if let flashAddress = user.latest_photo_location_name, !flashAddress.isEmpty {
+                self.localAddress = flashAddress
+                return
+            }
+        } else if let serverAddress = user.location_name, !serverAddress.isEmpty {
             self.localAddress = serverAddress
             return
         }
         
         Task {
-            let location = CLLocation(latitude: user.latitude ?? 0, longitude: user.longitude ?? 0)
+            let coord = targetCoordinate
+            let location = CLLocation(latitude: coord.latitude, longitude: coord.longitude)
             let geocoder = CLGeocoder()
             if let placemarks = try? await geocoder.reverseGeocodeLocation(location),
                let placemark = placemarks.first {
@@ -731,7 +804,44 @@ struct PartnerOverlayCard: View {
         user.id == AuthManager.shared.currentUser?.id
     }
     
+    private var displayDate: Date {
+        if user.latest_photo_url != nil, let created = user.latest_photo_created_at {
+            let formatter = ISO8601DateFormatter()
+            return formatter.date(from: created) ?? user.lastUpdatedDate
+        }
+        return user.lastUpdatedDate
+    }
+    
+    private var displayLocationName: String {
+        if user.latest_photo_url != nil {
+            return user.latest_photo_location_name ?? user.location_name ?? "Somewhere"
+        }
+        return user.location_name ?? (locationOverride ?? "Somewhere unknown...")
+    }
+    
+    private var displayStatusNote: String? {
+        if user.latest_photo_url != nil {
+            return user.latest_photo_status_note ?? user.status_note
+        }
+        return user.status_note
+    }
+    
+    private var displayBatteryLevel: Int {
+        if user.latest_photo_url != nil {
+            return user.latest_photo_battery_level ?? user.battery_level ?? 0
+        }
+        return user.battery_level ?? 0
+    }
+    
+    private var displayBatteryCharging: Bool {
+        if user.latest_photo_url != nil {
+            return false // Capture state has static battery
+        }
+        return user.is_charging ?? false
+    }
+    
     private var currentSpeed: Double? {
+        if user.latest_photo_url != nil { return nil }
         if isMe {
             return AuthManager.shared.mySpeedKmH
         } else {
@@ -740,6 +850,7 @@ struct PartnerOverlayCard: View {
     }
     
     private var averageSpeed: Double? {
+        if user.latest_photo_url != nil { return nil }
         if isMe {
             return AuthManager.shared.myAverageSpeedKmH
         } else {
@@ -751,14 +862,26 @@ struct PartnerOverlayCard: View {
         guard let currentUser = AuthManager.shared.currentUser,
               currentUser.id != user.id,
               let myLat = currentUser.latitude, myLat != 0.0,
-              let myLon = currentUser.longitude, myLon != 0.0,
-              let partnerLat = user.latitude, partnerLat != 0.0,
-              let partnerLon = user.longitude, partnerLon != 0.0 else {
+              let myLon = currentUser.longitude, myLon != 0.0 else {
+            return nil
+        }
+        
+        let targetLat: Double
+        let targetLon: Double
+        if user.latest_photo_url != nil,
+           let flashLat = user.latest_photo_latitude, let flashLon = user.latest_photo_longitude,
+           flashLat != 0.0, flashLon != 0.0 {
+            targetLat = flashLat
+            targetLon = flashLon
+        } else if let liveLat = user.latitude, let liveLon = user.longitude, liveLat != 0.0, liveLon != 0.0 {
+            targetLat = liveLat
+            targetLon = liveLon
+        } else {
             return nil
         }
         
         let myLoc = CLLocation(latitude: myLat, longitude: myLon)
-        let partnerLoc = CLLocation(latitude: partnerLat, longitude: partnerLon)
+        let partnerLoc = CLLocation(latitude: targetLat, longitude: targetLon)
         let distanceInMeters = myLoc.distance(from: partnerLoc)
         
         if distanceInMeters < 100 {
@@ -782,7 +905,7 @@ struct PartnerOverlayCard: View {
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundColor(.white)
                             
-                            if let speed = currentSpeed {
+                            if let speed = averageSpeed {
                                 HStack(spacing: 3) {
                                     let mode = isMe ? auth.myActivityMode : auth.partnerActivityMode
                                     let icon: String = {
@@ -811,7 +934,7 @@ struct PartnerOverlayCard: View {
                         }
                         
                         HStack(spacing: 6) {
-                            if user.isOffline {
+                            if user.isOffline && user.latest_photo_url == nil {
                                 Text("Offline")
                                     .font(.caption)
                                     .foregroundColor(.white.opacity(0.4))
@@ -820,7 +943,7 @@ struct PartnerOverlayCard: View {
                                     .font(.caption)
                                     .foregroundColor(.white.opacity(0.2))
                                 
-                                Text("Synced \(timeAgo(from: user.lastUpdatedDate))")
+                                Text("Synced \(timeAgo(from: displayDate))")
                                     .font(.caption)
                                     .foregroundColor(.white.opacity(0.5))
                                 
@@ -832,6 +955,33 @@ struct PartnerOverlayCard: View {
                                     Text(dist)
                                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                                         .foregroundColor(.activeCyan.opacity(0.6))
+                                }
+                            } else if user.latest_photo_url != nil {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "camera.shutter.button.fill")
+                                        .font(.system(size: 8))
+                                        .foregroundColor(.activeCyan)
+                                    Text("Flash Captured")
+                                        .font(.caption.bold())
+                                        .foregroundColor(.activeCyan)
+                                }
+                                
+                                Text("•")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.2))
+                                
+                                Text(timeAgo(from: displayDate))
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.5))
+                                
+                                if let dist = distanceText {
+                                    Text("•")
+                                        .font(.caption)
+                                        .foregroundColor(.white.opacity(0.2))
+                                    
+                                    Text(dist)
+                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.activeCyan.opacity(0.8))
                                 }
                             } else {
                                 HStack(spacing: 4) {
@@ -860,7 +1010,7 @@ struct PartnerOverlayCard: View {
                     
                     Spacer()
                     
-                    BatteryIndicator(level: user.battery_level ?? 0, isCharging: user.is_charging)
+                    BatteryIndicator(level: displayBatteryLevel, isCharging: displayBatteryCharging)
                 }
                 
                 HStack(spacing: 8) {
@@ -868,14 +1018,14 @@ struct PartnerOverlayCard: View {
                         .foregroundColor(.activeCyan)
                         .font(.system(size: 14))
                     
-                    Text(user.location_name ?? (locationOverride ?? "Somewhere unknown..."))
+                    Text(displayLocationName)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.white.opacity(0.85))
                         .lineLimit(1)
                 }
                 .padding(.top, 4)
                 
-                if !isMe, let note = user.status_note, !note.isEmpty {
+                if !isMe, let note = displayStatusNote, !note.isEmpty {
                     HStack(spacing: 8) {
                         Image(systemName: "quote.bubble.fill")
                             .foregroundColor(.electricPurple)
@@ -890,15 +1040,15 @@ struct PartnerOverlayCard: View {
             } else {
                 // MINIMAL MODE FOR PHOTO (cuma waktu 2m ago sama lokasi sama note)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(timeAgo(from: user.lastUpdatedDate))
+                    Text(timeAgo(from: displayDate))
                         .font(.system(size: 11, weight: .regular))
                         .foregroundColor(.white.opacity(0.7))
                     
-                    Text(user.location_name ?? (locationOverride ?? "Somewhere unknown..."))
+                    Text(displayLocationName)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.white)
                     
-                    if !isMe, let note = user.status_note, !note.isEmpty {
+                    if !isMe, let note = displayStatusNote, !note.isEmpty {
                         Text(note)
                             .font(.system(size: 13, weight: .regular))
                             .foregroundColor(.white.opacity(0.9))
@@ -985,10 +1135,35 @@ class ImageCacheManager {
 struct CachedImageView: View {
     let urlString: String
     @State private var uiImage: UIImage? = nil
+    @State private var isImageDeleted: Bool = false
     
     var body: some View {
         Group {
-            if let uiImage = uiImage {
+            if urlString.isEmpty {
+                ZStack {
+                    Color.gray.opacity(0.12)
+                    Image(systemName: "person.crop.circle.fill")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .foregroundColor(.white.opacity(0.25))
+                        .padding(8)
+                }
+            } else if isImageDeleted {
+                Color.black.opacity(0.85)
+                    .overlay(
+                        VStack(spacing: 8) {
+                            Image(systemName: "photo.badge.arrow.down.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(.white.opacity(0.3))
+                            Text("Photo Expired")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.5))
+                            Text("Flashes are auto-deleted after 24 hours.")
+                                .font(.system(size: 11))
+                                .foregroundColor(.white.opacity(0.3))
+                        }
+                    )
+            } else if let uiImage = uiImage {
                 Image(uiImage: uiImage)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -1038,11 +1213,15 @@ struct CachedImageView: View {
     }
     
     private func loadImage() async {
+        guard !urlString.isEmpty else { return }
         let finalUrlStr = formattedUrl()
         
-        // 0. Cek In-Memory Cache (SUPER CEPAT, mencegah Memory Leak di Peta!)
+        // 0. Cek In-Memory Cache
         if let cached = ImageCacheManager.shared.getImage(for: finalUrlStr) {
-            await MainActor.run { self.uiImage = cached }
+            await MainActor.run {
+                self.uiImage = cached
+                self.isImageDeleted = false
+            }
             return
         }
         
@@ -1050,8 +1229,11 @@ struct CachedImageView: View {
         
         // 1. Cek primary Cache file
         if let data = try? Data(contentsOf: fileURL), let cached = UIImage(data: data) {
-            ImageCacheManager.shared.saveImage(cached, for: finalUrlStr) // Simpan ke RAM
-            await MainActor.run { self.uiImage = cached }
+            ImageCacheManager.shared.saveImage(cached, for: finalUrlStr)
+            await MainActor.run {
+                self.uiImage = cached
+                self.isImageDeleted = false
+            }
             return
         }
         
@@ -1059,15 +1241,25 @@ struct CachedImageView: View {
         if let fallbackURL = localCachesDirectoryURL(for: finalUrlStr),
            let data = try? Data(contentsOf: fallbackURL),
            let cached = UIImage(data: data) {
-            ImageCacheManager.shared.saveImage(cached, for: finalUrlStr) // Simpan ke RAM
-            await MainActor.run { self.uiImage = cached }
+            ImageCacheManager.shared.saveImage(cached, for: finalUrlStr)
+            await MainActor.run {
+                self.uiImage = cached
+                self.isImageDeleted = false
+            }
             return
         }
         
         // 3. Fetch jika belum ada di cache
         guard let url = URL(string: finalUrlStr) else { return }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await URLSession.shared.data(from: url)
+            if let httpResponse = response as? HTTPURLResponse {
+                if httpResponse.statusCode == 404 {
+                    await MainActor.run { self.isImageDeleted = true }
+                    return
+                }
+            }
+            
             if let fetched = UIImage(data: data) {
                 // Simpan ke primary App Group file cache
                 do {
@@ -1079,11 +1271,16 @@ struct CachedImageView: View {
                     }
                 }
                 
-                ImageCacheManager.shared.saveImage(fetched, for: finalUrlStr) // Simpan ke RAM
-                await MainActor.run { self.uiImage = fetched }
+                ImageCacheManager.shared.saveImage(fetched, for: finalUrlStr)
+                await MainActor.run {
+                    self.uiImage = fetched
+                    self.isImageDeleted = false
+                }
+            } else {
+                await MainActor.run { self.isImageDeleted = true }
             }
         } catch {
-            // Error handling silent
+            // network/timeout error - don't mark as deleted, just keep loading spinner
         }
     }
 }

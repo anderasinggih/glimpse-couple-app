@@ -8,172 +8,6 @@ import ImageIO
 import UniformTypeIdentifiers
 import SQLite3
 
-// MARK: - SQLite Database Manager
-class GlimpseDatabase {
-    static let shared = GlimpseDatabase()
-    private var db: OpaquePointer?
-    
-    private init() {
-        openDatabase()
-        createTable()
-    }
-    
-    private func openDatabase() {
-        let fileManager = FileManager.default
-        guard let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            print("❌ SQLite: Failed to find documents directory")
-            return
-        }
-        let fileURL = documentsDirectory.appendingPathComponent("glimpse_chat.sqlite")
-        
-        if sqlite3_open(fileURL.path, &db) != SQLITE_OK {
-            print("❌ SQLite: Error opening database")
-        } else {
-            print("✅ SQLite: Opened connection to database at \(fileURL.path)")
-        }
-    }
-    
-    private func createTable() {
-        let createTableString = """
-        CREATE TABLE IF NOT EXISTS chat_messages (
-            id INTEGER PRIMARY KEY,
-            couple_id INTEGER,
-            sender_id INTEGER,
-            message TEXT,
-            room_id INTEGER,
-            created_at TEXT,
-            updated_at TEXT
-        );
-        """
-        
-        var createTableStatement: OpaquePointer?
-        if sqlite3_prepare_v2(db, createTableString, -1, &createTableStatement, nil) == SQLITE_OK {
-            if sqlite3_step(createTableStatement) == SQLITE_DONE {
-                print("✅ SQLite: chat_messages table created or verified.")
-            } else {
-                print("❌ SQLite: chat_messages table could not be created.")
-            }
-        } else {
-            print("❌ SQLite: CREATE TABLE statement could not be prepared.")
-        }
-        sqlite3_finalize(createTableStatement)
-    }
-    
-    func saveMessage(_ msg: ChatMessage) {
-        let insertStatementString = """
-        INSERT OR REPLACE INTO chat_messages (id, couple_id, sender_id, message, room_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?);
-        """
-        
-        var insertStatement: OpaquePointer?
-        if sqlite3_prepare_v2(db, insertStatementString, -1, &insertStatement, nil) == SQLITE_OK {
-            sqlite3_bind_int(insertStatement, 1, Int32(msg.id))
-            sqlite3_bind_int(insertStatement, 2, Int32(msg.couple_id))
-            sqlite3_bind_int(insertStatement, 3, Int32(msg.sender_id))
-            sqlite3_bind_text(insertStatement, 4, (msg.message as NSString).utf8String, -1, nil)
-            
-            if let roomId = msg.room_id {
-                sqlite3_bind_int(insertStatement, 5, Int32(roomId))
-            } else {
-                sqlite3_bind_null(insertStatement, 5)
-            }
-            
-            sqlite3_bind_text(insertStatement, 6, (msg.created_at as NSString? ?? "" as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(insertStatement, 7, (msg.updated_at as NSString? ?? "" as NSString).utf8String, -1, nil)
-            
-            if sqlite3_step(insertStatement) == SQLITE_DONE {
-                // Successfully inserted or updated
-            } else {
-                print("❌ SQLite: Could not insert row.")
-            }
-        } else {
-            print("❌ SQLite: INSERT statement could not be prepared.")
-        }
-        sqlite3_finalize(insertStatement)
-    }
-    
-    func saveMessages(_ messages: [ChatMessage]) {
-        // Run in transaction for high performance bulk inserts
-        sqlite3_exec(db, "BEGIN TRANSACTION", nil, nil, nil)
-        for msg in messages {
-            saveMessage(msg)
-        }
-        sqlite3_exec(db, "COMMIT TRANSACTION", nil, nil, nil)
-    }
-    
-    func getMessages(forRoomId roomId: Int?) -> [ChatMessage] {
-        let queryStatementString: String
-        if let rId = roomId {
-            queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id = ? ORDER BY id ASC;"
-        } else {
-            queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id IS NULL ORDER BY id ASC;"
-        }
-        
-        var queryStatement: OpaquePointer?
-        var messages: [ChatMessage] = []
-        
-        if sqlite3_prepare_v2(db, queryStatementString, -1, &queryStatement, nil) == SQLITE_OK {
-            if let rId = roomId {
-                sqlite3_bind_int(queryStatement, 1, Int32(rId))
-            }
-            
-            while sqlite3_step(queryStatement) == SQLITE_ROW {
-                let id = Int(sqlite3_column_int(queryStatement, 0))
-                let coupleId = Int(sqlite3_column_int(queryStatement, 1))
-                let senderId = Int(sqlite3_column_int(queryStatement, 2))
-                
-                guard let messageTextBytes = sqlite3_column_text(queryStatement, 3) else { continue }
-                let message = String(cString: messageTextBytes)
-                
-                var roomId: Int? = nil
-                if sqlite3_column_type(queryStatement, 4) != SQLITE_NULL {
-                    roomId = Int(sqlite3_column_int(queryStatement, 4))
-                }
-                
-                let createdAt: String?
-                if let createdAtBytes = sqlite3_column_text(queryStatement, 5) {
-                    createdAt = String(cString: createdAtBytes)
-                } else {
-                    createdAt = nil
-                }
-                
-                let updatedAt: String?
-                if let updatedAtBytes = sqlite3_column_text(queryStatement, 6) {
-                    updatedAt = String(cString: updatedAtBytes)
-                } else {
-                    updatedAt = nil
-                }
-                
-                let chatMessage = ChatMessage(
-                    id: id,
-                    couple_id: coupleId,
-                    sender_id: senderId,
-                    message: message,
-                    room_id: roomId,
-                    created_at: createdAt,
-                    updated_at: updatedAt
-                )
-                messages.append(chatMessage)
-            }
-        } else {
-            print("❌ SQLite: SELECT statement could not be prepared.")
-        }
-        sqlite3_finalize(queryStatement)
-        return messages
-    }
-    
-    func clearAllMessages() {
-        let deleteString = "DELETE FROM chat_messages;"
-        var deleteStatement: OpaquePointer?
-        if sqlite3_prepare_v2(db, deleteString, -1, &deleteStatement, nil) == SQLITE_OK {
-            if sqlite3_step(deleteStatement) == SQLITE_DONE {
-                print("✅ SQLite: All messages cleared.")
-            }
-        }
-        sqlite3_finalize(deleteStatement)
-    }
-}
-
 enum ActivityMode: String, Codable {
     case unknown, walking, cycling, car
 }
@@ -466,19 +300,30 @@ class AuthManager {
     var uploadQueueCurrent: Int = 0
     
     // WEBSOCKET PROPERTIES
-    private var webSocketTask: URLSessionWebSocketTask?
+    var webSocketTask: URLSessionWebSocketTask?
     var isWebSocketConnected = false
     var isPartnerTyping = false
-    private var shouldReconnect = true
-    private var reconnectInterval: TimeInterval = 2.0
-    private var pingTimer: Timer?
-    private var isConnecting = false
+    var partnerTypingRoomId: Int? = nil
+    var shouldReconnect = true
+    var reconnectInterval: TimeInterval = 2.0
+    var pingTimer: Timer?
+    var isConnecting = false
+    var dailyBumps: Int = 0
     
     var userToken: String? {
         UserDefaults.standard.string(forKey: "auth_token")
     }
     
-    let baseURL = "https://api.galleryfortwo.my.id/api"
+    var dashboardRefreshTrigger = false
+    
+    var baseURL: String {
+        get {
+            UserDefaults.standard.string(forKey: "glimpse_api_base_url") ?? "https://api.galleryfortwo.my.id/api"
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "glimpse_api_base_url")
+        }
+    }
     
     init() {
         // FAST START: Don't do heavy work here
@@ -796,7 +641,7 @@ class AuthManager {
         }
     }
     
-    func pushLocationAndStatus(latitude: Double?, longitude: Double?, locationName: String?) {
+    func pushLocationAndStatus(latitude: Double?, longitude: Double?, locationName: String?, gpsTimestamp: TimeInterval? = nil) {
         guard isAuthenticated else { return }
         
         UIDevice.current.isBatteryMonitoringEnabled = true
@@ -828,7 +673,8 @@ class AuthManager {
                 isCharging: isCharging,
                 statusNote: nil,
                 locationName: locationName,
-                wifiBssid: wifi
+                wifiBssid: wifi,
+                gpsTimestamp: gpsTimestamp ?? Date().timeIntervalSince1970
             )
             let protoData = status.encodeProtobuf()
             
@@ -1124,6 +970,62 @@ class AuthManager {
         
         return sentMsg
     }
+    
+    func uploadAudioMessage(fileUrl: URL, duration: TimeInterval, roomId: Int? = nil) async throws -> ChatMessage {
+        guard let url = URL(string: "\(baseURL)/glimpse/chat/audio") else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
+        }
+        guard let token = userToken else {
+            throw NSError(domain: "Auth", code: 401, userInfo: [NSLocalizedDescriptionKey: "Unauthorized"])
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/x-protobuf", forHTTPHeaderField: "Accept")
+        
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        
+        var body = Data()
+        
+        // Duration
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"duration\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(duration)\r\n".data(using: .utf8)!)
+        
+        // Room ID if present
+        if let roomId = roomId {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"room_id\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(roomId)\r\n".data(using: .utf8)!)
+        }
+        
+        // Audio file
+        if let audioData = try? Data(contentsOf: fileUrl) {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"audio\"; filename=\"audio.m4a\"\r\n".data(using: .utf8)!)
+            body.append("Content-Type: audio/m4a\r\n\r\n".data(using: .utf8)!)
+            body.append(audioData)
+            body.append("\r\n".data(using: .utf8)!)
+        }
+        
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        
+        request.httpBody = body
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: "Failed to upload audio message"])
+        }
+        
+        guard let sentMsg = ChatMessage.decodeProtobuf(from: data) else {
+            throw NSError(domain: "Auth", code: 500, userInfo: [NSLocalizedDescriptionKey: "Failed to decode response Protobuf"])
+        }
+        
+        return sentMsg
+    }
 
     func fetchChatRooms() async throws -> [GlimpseChatRoom] {
         guard let url = URL(string: "\(baseURL)/glimpse/chat-rooms") else { return [] }
@@ -1281,9 +1183,9 @@ class AuthManager {
         }
     }
 
-    func updateProfile(name: String?, email: String?, bornDate: String?, gender: String?, photo: UIImage?) async throws {
-        guard let url = URL(string: "\(baseURL)/user/update") else { return }
-        guard let token = userToken else { return }
+    func updateProfile(name: String?, email: String?, bornDate: String?, gender: String?, photo: UIImage?) async throws -> Bool {
+        guard let url = URL(string: "\(baseURL)/user/update") else { return false }
+        guard let token = userToken else { return false }
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -1333,12 +1235,18 @@ class AuthManager {
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
         
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw NSError(domain: "Auth", code: 500, userInfo: [NSLocalizedDescriptionKey: "Update failed"])
         }
         
         try await fetchState()
+        
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let pending = json["email_change_pending"] as? Bool {
+            return pending
+        }
+        return false
     }
 
     func updateAnniversary(date: Date) async throws {
@@ -1535,6 +1443,255 @@ class AuthManager {
                 try? await self.fetchState()
                 self.connectWebSocket()
             }
+        }
+    }
+    
+    func forgotPassword(email: String) async throws {
+        guard let url = URL(string: "\(baseURL)/forgot-password") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let body = ["email": email]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let errorMsg: String
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = json["message"] as? String {
+                errorMsg = message
+            } else {
+                errorMsg = "Failed to send reset code"
+            }
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+        }
+    }
+    
+    func resetPassword(email: String, otp: String, newPassword: String) async throws {
+        guard let url = URL(string: "\(baseURL)/reset-password") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let body = ["email": email, "otp": otp, "password": newPassword]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let errorMsg: String
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = json["message"] as? String {
+                errorMsg = message
+            } else {
+                errorMsg = "Failed to reset password"
+            }
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+        }
+    }
+    
+    func verifyEmail(otp: String) async throws {
+        guard let url = URL(string: "\(baseURL)/verify-email") else { return }
+        guard let token = userToken else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let body = ["otp": otp]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let errorMsg: String
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = json["message"] as? String {
+                errorMsg = message
+            } else {
+                errorMsg = "Invalid or expired verification code"
+            }
+            throw NSError(domain: "Auth", code: 422, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+        }
+        
+        try await fetchState()
+    }
+    
+    func resendVerification() async throws {
+        guard let url = URL(string: "\(baseURL)/resend-verification") else { return }
+        guard let token = userToken else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let errorMsg: String
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = json["message"] as? String {
+                errorMsg = message
+            } else {
+                errorMsg = "Failed to resend verification code"
+            }
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+        }
+    }
+    
+    func verifyEmailChange(otp: String) async throws {
+        guard let url = URL(string: "\(baseURL)/user/update/verify-email") else { return }
+        guard let token = userToken else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let body = ["otp": otp]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let errorMsg: String
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = json["message"] as? String {
+                errorMsg = message
+            } else {
+                errorMsg = "Failed to verify email change"
+            }
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+        }
+        
+        try await fetchState()
+    }
+    
+    func resendEmailChangeVerification() async throws {
+        guard let url = URL(string: "\(baseURL)/user/update/resend-email-change") else { return }
+        guard let token = userToken else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let errorMsg: String
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = json["message"] as? String {
+                errorMsg = message
+            } else {
+                errorMsg = "Failed to resend email change verification"
+            }
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+        }
+    }
+    
+    func changePassword(currentPassword: String, newPassword: String) async throws {
+        guard let url = URL(string: "\(baseURL)/user/change-password") else { return }
+        guard let token = userToken else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let body = ["current_password": currentPassword, "new_password": newPassword]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let errorMsg: String
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = json["message"] as? String {
+                errorMsg = message
+            } else {
+                errorMsg = "Failed to update password"
+            }
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+        }
+    }
+    
+    func sendDeleteAccountOtp() async throws {
+        guard let url = URL(string: "\(baseURL)/user/delete/send-otp") else { return }
+        guard let token = userToken else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let errorMsg: String
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = json["message"] as? String {
+                errorMsg = message
+            } else {
+                errorMsg = "Failed to send deletion OTP"
+            }
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+        }
+    }
+    
+    func deleteAccount(method: String, password: String?, otp: String?, agreement: Bool) async throws {
+        guard let url = URL(string: "\(baseURL)/user/delete") else { return }
+        guard let token = userToken else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        var body: [String: Any] = ["method": method, "agreement": agreement]
+        if let pwd = password {
+            body["password"] = pwd
+        }
+        if let o = otp {
+            body["otp"] = o
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let errorMsg: String
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = json["message"] as? String {
+                errorMsg = message
+            } else {
+                errorMsg = "Failed to delete account"
+            }
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+        }
+        
+        logout()
+    }
+    
+    func reportBug(title: String, description: String, deviceInfo: String?) async throws {
+        guard let url = URL(string: "\(baseURL)/user/report-bug") else { return }
+        guard let token = userToken else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        var body: [String: Any] = ["title": title, "description": description]
+        if let devInfo = deviceInfo {
+            body["device_info"] = devInfo
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let errorMsg: String
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = json["message"] as? String {
+                errorMsg = message
+            } else {
+                errorMsg = "Failed to report bug"
+            }
+            throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: errorMsg])
         }
     }
     
@@ -1868,7 +2025,7 @@ class AuthManager {
             self.uploadProgress = 0.5
         }
         
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
         
         await MainActor.run {
             self.uploadProgress = 0.8
@@ -1882,9 +2039,19 @@ class AuthManager {
             self.uploadProgress = 0.9
         }
         
+        var photoUrl = ""
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let pUrl = json["photo_url"] as? String {
+            photoUrl = pUrl
+        }
+        
+        let caption = note ?? ""
+        let location = locationName ?? ""
+        let messageText = "📷 Sent a Flash! [FLASH_ATTACHMENT]|\(photoUrl)|\(caption)|\(location)"
+        
         // Fire off companion requests asynchronously in parallel without blocking the main upload completion
         Task {
-            if let sentMsg = try? await sendChatMessage(text: "📷 Sent a Flash! [FLASH_ATTACHMENT]") {
+            if let sentMsg = try? await sendChatMessage(text: messageText) {
                 // Immediately mark as read from sender's side to prevent self-unread badge
                 await markMessagesAsRead(messageId: sentMsg.id)
                 
@@ -1950,7 +2117,7 @@ class AuthManager {
         }
     }
     
-    func sendTypingStatus(isTyping: Bool) {
+    func sendTypingStatus(isTyping: Bool, roomId: Int? = nil) {
         guard isAuthenticated else { return }
         
         Task {
@@ -1963,610 +2130,13 @@ class AuthManager {
             request.addValue("application/json", forHTTPHeaderField: "Content-Type")
             request.addValue("application/json", forHTTPHeaderField: "Accept")
             
-            let body = ["is_typing": isTyping]
+            var body: [String: Any] = ["is_typing": isTyping]
+            if let rId = roomId {
+                body["room_id"] = rId
+            }
             request.httpBody = try? JSONSerialization.data(withJSONObject: body)
             
             _ = try? await URLSession.shared.data(for: request)
-        }
-    }
-    
-    // MARK: - WEBSOCKET INTEGRATION
-    func connectWebSocket() {
-        // If already connected, do nothing
-        if isWebSocketConnected && webSocketTask != nil && webSocketTask?.state == .running {
-            print("🔌 WebSocket already connected, ignoring connect request.")
-            return
-        }
-        
-        // If already in the process of connecting, do nothing
-        if isConnecting {
-            print("🔌 WebSocket is currently connecting, ignoring duplicate request.")
-            return
-        }
-        
-        // Close any existing connection first
-        disconnectWebSocket()
-        
-        // Restore shouldReconnect to true since disconnectWebSocket sets it to false
-        shouldReconnect = true
-        isConnecting = true
-        
-        guard let _ = currentUser?.couple_id, coupleActive else {
-            isConnecting = false
-            return
-        }
-        
-        // Parse host from baseURL
-        guard let urlComponents = URLComponents(string: baseURL),
-              let host = urlComponents.host else {
-            isConnecting = false
-            return
-        }
-        
-        let appKey = "u1eadho8wbhzv2mcnlfy"
-        let isLocal = host.contains("localhost") || host.contains("127.0.0.1") || host.contains("192.168.")
-        let wsScheme = urlComponents.scheme == "https" ? "wss" : "ws"
-        
-        let wsUrlString = isLocal ?
-            "\(wsScheme)://\(host):8080/app/\(appKey)?protocol=7&client=js&version=8.4.0-reverb" :
-            "\(wsScheme)://\(host)/app/\(appKey)?protocol=7&client=js&version=8.4.0-reverb"
-        guard let url = URL(string: wsUrlString) else {
-            isConnecting = false
-            return
-        }
-        
-        print("🔌 Connecting to WebSockets at: \(wsUrlString)")
-        
-        let originScheme = wsScheme == "wss" ? "https" : "http"
-        var request = URLRequest(url: url)
-        request.setValue("\(originScheme)://\(host)", forHTTPHeaderField: "Origin")
-        request.setValue("Glimpse/1.0 (iOS; Mobile)", forHTTPHeaderField: "User-Agent")
-        
-        webSocketTask = URLSession.shared.webSocketTask(with: request)
-        webSocketTask?.resume()
-        
-        listenWebSocketMessages()
-        startPingTimer()
-    }
-    
-    func disconnectWebSocket() {
-        shouldReconnect = false
-        isConnecting = false
-        stopPingTimer()
-        webSocketTask?.cancel(with: .goingAway, reason: nil)
-        webSocketTask = nil
-        DispatchQueue.main.async {
-            self.isWebSocketConnected = false
-        }
-        print("🔌 WebSocket disconnected manually.")
-    }
-    
-    private func startPingTimer() {
-        stopPingTimer()
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.pingTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
-                self?.sendPingFrame()
-            }
-        }
-    }
-    
-    private func stopPingTimer() {
-        DispatchQueue.main.async { [weak self] in
-            self?.pingTimer?.invalidate()
-            self?.pingTimer = nil
-        }
-    }
-    
-    private func sendPingFrame() {
-        let payload = ["event": "pusher:ping", "data": [String: String]()] as [String : Any]
-        if let jsonData = try? JSONSerialization.data(withJSONObject: payload),
-           let jsonString = String(data: jsonData, encoding: .utf8) {
-            webSocketTask?.send(.string(jsonString)) { error in
-                if let error = error {
-                    print("⚠️ Failed to send ping: \(error)")
-                } else {
-                    print("📤 Sent websocket ping.")
-                }
-            }
-        }
-    }
-    
-    private func sendPongFrame() {
-        let payload = ["event": "pusher:pong", "data": [String: String]()] as [String : Any]
-        if let jsonData = try? JSONSerialization.data(withJSONObject: payload),
-           let jsonString = String(data: jsonData, encoding: .utf8) {
-            webSocketTask?.send(.string(jsonString)) { error in
-                if let error = error {
-                    print("⚠️ Failed to send pong: \(error)")
-                } else {
-                    print("📤 Sent websocket pong.")
-                }
-            }
-        }
-    }
-    
-    private func listenWebSocketMessages() {
-        webSocketTask?.receive { [weak self] result in
-            guard let self = self else { return }
-            switch result {
-            case .success(let message):
-                switch message {
-                case .string(let text):
-                    self.handleWebSocketString(text)
-                case .data(let data):
-                    if let text = String(data: data, encoding: .utf8) {
-                        self.handleWebSocketString(text)
-                    }
-                @unknown default:
-                    break
-                }
-                
-                // Continue listening recursively
-                self.listenWebSocketMessages()
-                
-            case .failure(let error):
-                print("❌ WebSocket connection failed/disconnected: \(error)")
-                self.isConnecting = false
-                self.handleWebSocketDisconnection()
-            }
-        }
-    }
-    
-    struct PusherEvent: Codable {
-        let event: String
-        let channel: String?
-        let data: String?
-    }
-    
-    private func handleWebSocketString(_ text: String) {
-        guard let data = text.data(using: .utf8) else { return }
-        do {
-            let pusherEvent = try JSONDecoder().decode(PusherEvent.self, from: data)
-            
-            switch pusherEvent.event {
-            case "pusher:ping":
-                self.sendPongFrame()
-                
-            case "pusher:pong":
-                print("📥 Received websocket pong.")
-                
-            case "pusher:connection_established":
-                print("✅ WebSocket handshake established!")
-                self.isConnecting = false
-                DispatchQueue.main.async {
-                    self.isWebSocketConnected = true
-                }
-                if let coupleId = self.currentUser?.couple_id {
-                    self.sendSubscribeFrame(channel: "couple.\(coupleId)")
-                }
-                
-            case "pusher_internal:subscription_succeeded":
-                print("❤️ Subscribed successfully to Glimpse Live Channel!")
-                
-            case "App\\Events\\PartnerStateUpdated":
-                print("🔔 Live State Updated from partner!")
-                if let eventDataString = pusherEvent.data,
-                   let eventData = eventDataString.data(using: .utf8) {
-                    struct ProtobufPayload: Codable {
-                        let pb: String?
-                    }
-                    if let pbPayload = try? JSONDecoder().decode(ProtobufPayload.self, from: eventData),
-                       let pbString = pbPayload.pb,
-                       let update = GlimpsePartnerStateUpdate.decodeProtobuf(from: pbString) {
-                        DispatchQueue.main.async {
-                            if var p = self.partner, p.id == update.userId {
-                                if let lat = update.latitude { p.latitude = lat }
-                                if let lon = update.longitude { p.longitude = lon }
-                                if let batt = update.batteryLevel { p.battery_level = batt }
-                                if let char = update.isCharging { p.is_charging = char }
-                                if let lastSeen = update.lastSeenMessageId { p.last_seen_message_id = lastSeen }
-                                p.status_note = update.statusNote
-                                p.location_name = update.locationName
-                                p.wifi_bssid = update.wifiBssid
-                                p.last_updated = ISO8601DateFormatter().string(from: Date())
-                                self.partner = p
-                            }
-                            
-                            // Trigger immediate local state notification
-                            NotificationCenter.default.post(name: Notification.Name("GlimpseLiveStateUpdated"), object: nil)
-                            Task {
-                                try? await self.fetchFlashes()
-                            }
-                        }
-                    }
-                }
-                
-            case "App\\Events\\SyncLocationRequested":
-                print("🔄 Sync Location Requested received from Pusher!")
-                if let eventDataString = pusherEvent.data,
-                   let eventData = eventDataString.data(using: .utf8) {
-                    struct SyncPayload: Codable {
-                        let targetUserId: Int
-                    }
-                    if let payload = try? JSONDecoder().decode(SyncPayload.self, from: eventData) {
-                        // Only force sync if the target user ID matches my current user ID
-                        if payload.targetUserId == self.currentUser?.id {
-                            print("🛰️ Forcing GPS Location Sync as requested by Web/Partner!")
-                            DispatchQueue.main.async {
-                                // Wake up GPS immediately to get fresh satellite coordinates
-                                LiveLocationManager.shared.forceWakeGPSAndSync(bypassCooldown: true)
-                            }
-                        }
-                    }
-                }
-                
-            case "App\\Events\\ChatRoomCreated":
-                print("🆕 Chat room created broadcast received!")
-                if let eventDataString = pusherEvent.data,
-                   let eventData = eventDataString.data(using: .utf8) {
-                    struct RoomPayload: Codable {
-                        let room: GlimpseChatRoom
-                    }
-                    if let payload = try? JSONDecoder().decode(RoomPayload.self, from: eventData) {
-                        DispatchQueue.main.async {
-                            NotificationCenter.default.post(name: Notification.Name("GlimpseChatRoomCreated"), object: payload.room)
-                        }
-                    }
-                }
-                
-            case "App\\Events\\ChatRoomDeleted":
-                print("🗑️ Chat room deleted broadcast received!")
-                if let eventDataString = pusherEvent.data,
-                   let eventData = eventDataString.data(using: .utf8) {
-                    struct RoomIdPayload: Codable {
-                        let room_id: Int
-                    }
-                    if let payload = try? JSONDecoder().decode(RoomIdPayload.self, from: eventData) {
-                        DispatchQueue.main.async {
-                            NotificationCenter.default.post(name: Notification.Name("GlimpseChatRoomDeleted"), object: payload.room_id)
-                        }
-                    }
-                }
-
-            case "App\\Events\\ChatRoomUpdated":
-                print("🔄 Chat room renamed broadcast received!")
-                if let eventDataString = pusherEvent.data,
-                   let eventData = eventDataString.data(using: .utf8) {
-                    struct RoomUpdatePayload: Codable {
-                        let room_id: Int
-                        let name: String
-                    }
-                    if let payload = try? JSONDecoder().decode(RoomUpdatePayload.self, from: eventData) {
-                        DispatchQueue.main.async {
-                            NotificationCenter.default.post(
-                                name: Notification.Name("GlimpseChatRoomUpdated"),
-                                object: nil,
-                                userInfo: ["room_id": payload.room_id, "name": payload.name]
-                            )
-                        }
-                    }
-                }
-
-            case "App\\Events\\ChatRoomThemeUpdated":
-                print("🎨 Chat room theme updated broadcast received!")
-                if let eventDataString = pusherEvent.data,
-                   let eventData = eventDataString.data(using: .utf8) {
-                    struct ThemeUpdatePayload: Codable {
-                        let room_id: Int
-                        let theme_color: String?
-                        let background_color: String?
-                    }
-                    if let payload = try? JSONDecoder().decode(ThemeUpdatePayload.self, from: eventData) {
-                        DispatchQueue.main.async {
-                            NotificationCenter.default.post(
-                                name: Notification.Name("GlimpseChatRoomThemeUpdated"),
-                                object: nil,
-                                userInfo: [
-                                    "room_id": payload.room_id,
-                                    "theme_color": payload.theme_color as Any,
-                                    "background_color": payload.background_color as Any
-                                ]
-                            )
-                        }
-                    }
-                }
-
-            case "App\\Events\\ChatRoomDeleteStatusChanged":
-                print("⚠️ Chat room delete status changed broadcast received!")
-                if let eventDataString = pusherEvent.data,
-                   let eventData = eventDataString.data(using: .utf8) {
-                    struct StatusPayload: Codable {
-                        let room_id: Int
-                        let delete_requested_by: Int?
-                    }
-                    if let payload = try? JSONDecoder().decode(StatusPayload.self, from: eventData) {
-                        DispatchQueue.main.async {
-                            NotificationCenter.default.post(
-                                name: Notification.Name("GlimpseChatRoomDeleteStatusChanged"),
-                                object: nil,
-                                userInfo: ["room_id": payload.room_id, "delete_requested_by": payload.delete_requested_by as Any]
-                            )
-                        }
-                    }
-                }
-
-            case "App\\Events\\MessageSent":
-                print("💬 New message broadcast received!")
-                if let eventDataString = pusherEvent.data,
-                   let eventData = eventDataString.data(using: .utf8) {
-                    
-                    var decodedMessage: ChatMessage? = nil
-                    
-                    // High-Performance Pure Protocol Buffers decoding
-                    struct ProtobufPayload: Codable {
-                        let pb: String?
-                    }
-                    if let pbPayload = try? JSONDecoder().decode(ProtobufPayload.self, from: eventData),
-                       let pbString = pbPayload.pb,
-                       let pbMessage = ChatMessage.decodeProtobuf(from: pbString) {
-                        decodedMessage = pbMessage
-                        print("⚡️ Decoded message instantly using High-Speed Protobuf binary!")
-                    } else {
-                        print("⚠️ Received MessageSent broadcast, but it was missing or had invalid Protobuf data.")
-                    }
-                    
-                    if let finalMsg = decodedMessage {
-                        // Persist in local SQLite database instantly
-                        GlimpseDatabase.shared.saveMessage(finalMsg)
-                        
-                        DispatchQueue.main.async {
-                            // If it belongs to the main chat room, append to latestFetchedMessages
-                            if finalMsg.room_id == nil {
-                                if !self.latestFetchedMessages.contains(where: { $0.id == finalMsg.id }) {
-                                    self.latestFetchedMessages.append(finalMsg)
-                                }
-                            } else {
-                                // If it belongs to a subroom, append to the in-memory roomMessagesCache
-                                if let rId = finalMsg.room_id {
-                                    var currentRoomMsgs = self.roomMessagesCache[rId] ?? []
-                                    if !currentRoomMsgs.contains(where: { $0.id == finalMsg.id }) {
-                                        currentRoomMsgs.append(finalMsg)
-                                        self.roomMessagesCache[rId] = currentRoomMsgs
-                                    }
-                                }
-                            }
-                            
-                            // Always notify the UI view so it can render the message live
-                            NotificationCenter.default.post(name: Notification.Name("GlimpseChatMessageReceived"), object: finalMsg)
-                            
-                            // Unified coordinated Task to sync chat rooms and read state without double-fetching race conditions
-                            Task {
-                                let isCurrentActiveRoom = self.selectedTab == 3 && self.activeRoomId == finalMsg.room_id
-                                let isMyOwnMessage = finalMsg.sender_id == self.currentUser?.id
-                                
-                                if (isCurrentActiveRoom && !isMyOwnMessage) || isMyOwnMessage {
-                                    if !isMyOwnMessage {
-                                        await self.markMessagesAsRead(messageId: finalMsg.id)
-                                    }
-                                    // Instantly update the local UserDefaults session for this room
-                                    let currentUserId = self.currentUser?.id ?? 0
-                                    let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(finalMsg.room_id ?? 0)"
-                                    UserDefaults.standard.set(finalMsg.id, forKey: userDefaultsKey)
-                                }
-                                
-                                // Now safe to fetch room updates
-                                if var rooms = try? await self.fetchChatRooms() {
-                                    await MainActor.run {
-                                        let currentUserId = self.currentUser?.id ?? 0
-                                        for i in 0..<rooms.count {
-                                            let r = rooms[i]
-                                            let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(r.id)"
-                                            let storedId = UserDefaults.standard.integer(forKey: userDefaultsKey)
-                                            if let latestId = r.latest_message?.id, latestId > 0 && latestId <= storedId {
-                                                rooms[i].unread_count = 0
-                                            }
-                                            if (isCurrentActiveRoom || isMyOwnMessage) && r.id == finalMsg.room_id {
-                                                rooms[i].unread_count = 0
-                                            }
-                                        }
-                                        self.chatRooms = rooms
-                                        self.updateUnreadCount()
-                                    }
-                                }
-                            }
-                            
-                            // Global sound & haptic alert for incoming messages from partner!
-                            if finalMsg.sender_id != self.currentUser?.id {
-                                AudioServicesPlaySystemSound(1103) // Soft ting/ping sound as requested by user
-                                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                            }
-                        }
-                    }
-                }
-                
-            case "App\\Events\\LoveBurstSent":
-                print("💖 Live Love Burst broadcast received!")
-                if let eventDataString = pusherEvent.data,
-                   let eventData = eventDataString.data(using: .utf8) {
-                    struct LoveBurstPayload: Codable {
-                        let timestamp: Double
-                        let sender_id: Int
-                        let reaction: String?
-                    }
-                    if let payload = try? JSONDecoder().decode(LoveBurstPayload.self, from: eventData) {
-                        DispatchQueue.main.async {
-                            // Update lastLoveBurstTimestamp in real-time!
-                            self.lastLoveBurstReaction = payload.reaction
-                            self.lastLoveBurstTimestamp = payload.timestamp
-                        }
-                    }
-                }
-                
-            case "App\\Events\\LoveBumpSent":
-                print("🤜🤛 Live Love Bump broadcast received!")
-                if let eventDataString = pusherEvent.data,
-                   let eventData = eventDataString.data(using: .utf8) {
-                    struct LoveBumpPayload: Codable {
-                        let timestamp: Double
-                        let sender_id: Int
-                        let total_meetings: Int
-                    }
-                    if let payload = try? JSONDecoder().decode(LoveBumpPayload.self, from: eventData) {
-                        DispatchQueue.main.async {
-                            self.totalMeetings = payload.total_meetings
-                            self.lastLoveBumpTimestamp = payload.timestamp
-                        }
-                    }
-                }
-                
-            case "App\\Events\\PartnerTyping":
-                print("⌨️ Live typing status broadcast received!")
-                if let eventDataString = pusherEvent.data,
-                   let eventData = eventDataString.data(using: .utf8) {
-                    struct ProtobufPayload: Codable {
-                        let pb: String?
-                    }
-                    if let pbPayload = try? JSONDecoder().decode(ProtobufPayload.self, from: eventData),
-                       let pbString = pbPayload.pb,
-                       let state = GlimpseTypingState.decodeProtobuf(from: pbString) {
-                        DispatchQueue.main.async {
-                            // Update partner typing status ONLY if it comes from the partner, not me!
-                            if state.userId != self.currentUser?.id {
-                                self.isPartnerTyping = state.isTyping
-                            }
-                        }
-                    }
-                }
-                
-            default:
-                break
-            }
-        } catch {
-            print("⚠️ Failed to parse incoming socket event: \(error)")
-        }
-    }
-    
-    private func sendSubscribeFrame(channel: String) {
-        struct SubscribePayload: Codable {
-            let event: String
-            let data: SubscribeData
-        }
-        struct SubscribeData: Codable {
-            let channel: String
-        }
-        
-        let payload = SubscribePayload(event: "pusher:subscribe", data: SubscribeData(channel: channel))
-        if let jsonData = try? JSONEncoder().encode(payload),
-           let jsonString = String(data: jsonData, encoding: .utf8) {
-            webSocketTask?.send(.string(jsonString)) { error in
-                if let error = error {
-                    print("⚠️ Failed to send subscribe frame: \(error)")
-                } else {
-                    print("📤 Sent subscription frame for: \(channel)")
-                }
-            }
-        }
-    }
-    
-    private func handleWebSocketDisconnection() {
-        DispatchQueue.main.async {
-            self.isWebSocketConnected = false
-        }
-        guard shouldReconnect else { return }
-        
-        DispatchQueue.global().asyncAfter(deadline: .now() + reconnectInterval) { [weak self] in
-            print("🔄 Attempting to reconnect to WebSocket...")
-            self?.connectWebSocket()
-        }
-    }
-    
-    // MARK: - MESSAGES CACHING
-    func saveMessagesCache() {
-        GlimpseDatabase.shared.saveMessages(latestFetchedMessages)
-    }
-    
-    func loadCachedMessages() {
-        // Clean up old legacy UserDefaults cache if present
-        if UserDefaults.standard.object(forKey: "glimpse_cached_messages") != nil {
-            UserDefaults.standard.removeObject(forKey: "glimpse_cached_messages")
-        }
-        
-        // Clean up legacy JSON cache file if present
-        let fileManager = FileManager.default
-        if let cacheDirectory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first {
-            let jsonURL = cacheDirectory.appendingPathComponent("glimpse_messages_cache.json")
-            if fileManager.fileExists(atPath: jsonURL.path) {
-                try? fileManager.removeItem(at: jsonURL)
-            }
-        }
-        
-        // Load main room messages from native SQLite database
-        self.latestFetchedMessages = GlimpseDatabase.shared.getMessages(forRoomId: nil)
-    }
-    
-    func saveChatRoomsCache() {
-        if let encoded = try? JSONEncoder().encode(chatRooms) {
-            UserDefaults.standard.set(encoded, forKey: "glimpse_cached_chat_rooms")
-        }
-    }
-    
-    func loadCachedChatRooms() {
-        if let data = UserDefaults.standard.data(forKey: "glimpse_cached_chat_rooms"),
-           let rooms = try? JSONDecoder().decode([GlimpseChatRoom].self, from: data) {
-            self.chatRooms = rooms
-        }
-    }
-    
-    func saveFlashesCache() {
-        if let encoded = try? JSONEncoder().encode(flashes) {
-            UserDefaults.standard.set(encoded, forKey: "glimpse_cached_flashes")
-        }
-    }
-    
-    func loadCachedFlashes() {
-        if let data = UserDefaults.standard.data(forKey: "glimpse_cached_flashes"),
-           let decoded = try? JSONDecoder().decode([GlimpseFlash].self, from: data) {
-            self.flashes = decoded
-        }
-    }
-    
-    func getCachedMessages(for roomId: Int?) -> [ChatMessage] {
-        if let rId = roomId {
-            if let inMemory = roomMessagesCache[rId], !inMemory.isEmpty {
-                return inMemory
-            }
-            let fromDb = GlimpseDatabase.shared.getMessages(forRoomId: rId)
-            roomMessagesCache[rId] = fromDb
-            return fromDb
-        } else {
-            if !latestFetchedMessages.isEmpty {
-                return latestFetchedMessages
-            }
-            let fromDb = GlimpseDatabase.shared.getMessages(forRoomId: nil)
-            latestFetchedMessages = fromDb
-            return fromDb
-        }
-    }
-    
-    // MARK: - SESSION CACHING
-    private func saveSessionCache(_ data: Data) {
-        UserDefaults.standard.set(data, forKey: "cached_couple_response")
-    }
-    
-    private func loadCachedSession() {
-        guard let cachedData = UserDefaults.standard.data(forKey: "cached_couple_response") else { return }
-        do {
-            let responseData = try JSONDecoder().decode(CoupleResponse.self, from: cachedData)
-            self.currentUser = responseData.user
-            self.partner = responseData.partner_data
-            self.anniversaryDate = responseData.anniversaryDate
-            self.pairedDate = responseData.pairedDate
-            self.disconnectRequestedBy = responseData.disconnect_requested_by
-            self.coupleActive = responseData.couple_active ?? false
-            self.invitedBy = responseData.invited_by
-            self.isTogether = responseData.is_together ?? false
-            self.togetherStreak = responseData.together_streak ?? 0
-            self.highestTogetherStreak = responseData.highest_together_streak ?? 0
-            self.totalMeetings = responseData.total_meetings ?? 0
-            self.lastLoveBurstTimestamp = responseData.love_burst_timestamp ?? 0.0
-            self.activeSchedule = responseData.active_schedule
-            self.pendingInvitation = responseData.pending_invitation
-            
-            // Mark loaded so that it doesn't show loading spinner if cached data is present!
-            self.isInitialStateLoaded = true
-        } catch {
-            print("❌ Failed to decode cached session: \(error)")
         }
     }
     

@@ -233,6 +233,7 @@ Route::post('/admin/api', function (Request $request) {
             $users = User::all();
             $couples = Couple::with('users')->get();
             $messagesCount = Message::count();
+            $bugReports = \App\Models\BugReport::with('user')->latest()->get();
             
             // Format nice couple listings
             $couplesFormatted = $couples->map(function ($couple) {
@@ -253,7 +254,13 @@ Route::post('/admin/api', function (Request $request) {
                 ],
                 'users' => $users,
                 'couples' => $couplesFormatted,
+                'bug_reports' => $bugReports,
             ]);
+
+        case 'delete_bug_report':
+            $reportId = $request->input('report_id');
+            \App\Models\BugReport::where('id', $reportId)->delete();
+            return response()->json(['success' => true, 'message' => 'Bug report deleted successfully!']);
 
         case 'change_admin_token':
             $newToken = trim($request->input('new_token') ?: '');
@@ -302,6 +309,18 @@ Route::post('/admin/api', function (Request $request) {
             event(new \App\Events\PartnerStateUpdated($user));
 
             return response()->json(['success' => true, 'message' => "Location updated successfully for {$user->name}."]);
+
+        case 'sync_location':
+            $userId = $request->input('user_id');
+            $user = User::findOrFail($userId);
+            if (!$user->couple_id) {
+                return response()->json(['error' => 'User does not belong to a couple connection.'], 400);
+            }
+            
+            // Dispatch the Pusher event to trigger the target phone's GPS sync
+            event(new \App\Events\SyncLocationRequested($user->couple_id, $user->id));
+            
+            return response()->json(['success' => true, 'message' => "Force Sync & Wipe Wi-Fi Cache event dispatched to {$user->name}'s device."]);
 
         case 'push_diagnostics':
             $userId = $request->input('user_id');
@@ -412,9 +431,10 @@ Route::post('/admin/api', function (Request $request) {
             $deletePhysicalFile = function($url) {
                 if (!$url) return;
                 $relativePath = parse_url($url, PHP_URL_PATH);
-                if (strpos($relativePath, '/storage/') === 0) {
+                if (str_starts_with($relativePath, '/storage/')) {
                     $relativePath = substr($relativePath, 9);
                 }
+                $relativePath = ltrim($relativePath, '/');
                 \Illuminate\Support\Facades\Storage::disk('public')->delete($relativePath);
             };
 
@@ -469,9 +489,10 @@ Route::post('/admin/api', function (Request $request) {
             $deletePhysicalFile = function($url) {
                 if (!$url) return;
                 $relativePath = parse_url($url, PHP_URL_PATH);
-                if (strpos($relativePath, '/storage/') === 0) {
+                if (str_starts_with($relativePath, '/storage/')) {
                     $relativePath = substr($relativePath, 9);
                 }
+                $relativePath = ltrim($relativePath, '/');
                 \Illuminate\Support\Facades\Storage::disk('public')->delete($relativePath);
             };
 
@@ -693,7 +714,7 @@ Route::post('/admin/api', function (Request $request) {
                             'longitude' => (double)$longitude,
                             'timestamp' => (double)microtime(true)
                         ];
-                        $user->location_history = array_slice($history, -50);
+                        $user->location_history = array_slice($history, -2);
                     }
                 } catch (\Exception $historyEx) {
                     // Column missing in this deployment - skip silently
@@ -805,6 +826,57 @@ Route::post('/admin/api', function (Request $request) {
             } catch (\Exception $e) {
                 return response()->json([
                     'success' => false,
+                    'error' => $e->getMessage()
+                ], 500);
+            }
+
+        case 'octane_status':
+            $isRunning = false;
+            $latency = 0;
+            $startTime = microtime(true);
+            $connection = @fsockopen('127.0.0.1', 8001, $errno, $errstr, 1.0);
+            if ($connection) {
+                $isRunning = true;
+                fclose($connection);
+                $latency = round((microtime(true) - $startTime) * 1000, 2);
+            }
+
+            $artisanOutput = '';
+            try {
+                if (!isset(\Illuminate\Support\Facades\Artisan::all()['octane:status'])) {
+                    \Illuminate\Support\Facades\Artisan::registerCommand(new \Laravel\Octane\Commands\StatusCommand());
+                }
+                \Illuminate\Support\Facades\Artisan::call('octane:status');
+                $artisanOutput = \Illuminate\Support\Facades\Artisan::output();
+            } catch (\Exception $e) {
+                $artisanOutput = 'Error: ' . $e->getMessage();
+            }
+
+            return response()->json([
+                'success' => true,
+                'is_running' => $isRunning,
+                'latency_ms' => $latency,
+                'artisan_output' => trim($artisanOutput),
+                'php_version' => PHP_VERSION,
+                'server_time' => now()->toDateTimeString(),
+            ]);
+            
+        case 'octane_reload':
+            try {
+                if (!isset(\Illuminate\Support\Facades\Artisan::all()['octane:reload'])) {
+                    \Illuminate\Support\Facades\Artisan::registerCommand(new \Laravel\Octane\Commands\ReloadCommand());
+                }
+                \Illuminate\Support\Facades\Artisan::call('octane:reload');
+                $artisanOutput = \Illuminate\Support\Facades\Artisan::output();
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Octane workers reloaded successfully!',
+                    'artisan_output' => trim($artisanOutput),
+                ]);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to reload Octane workers.',
                     'error' => $e->getMessage()
                 ], 500);
             }

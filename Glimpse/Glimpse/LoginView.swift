@@ -6,6 +6,7 @@ struct LoginView: View {
     @State private var password = ""
     @State private var isLoading = false
     @State private var errorMessage = ""
+    @State private var showForgotPassword = false
     
     @FocusState private var focusedField: Field?
     
@@ -16,7 +17,7 @@ struct LoginView: View {
     var body: some View {
         ZStack {
             // Background tap to dismiss keyboard
-            Color.deepVelvet
+            Color.adaptiveBackground
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -62,6 +63,18 @@ struct LoginView: View {
                         .submitLabel(.done)
                         .id("login-password-field")
                         .onTapGesture { focusedField = .password } // Click anywhere in container
+                    
+                    HStack {
+                        Spacer()
+                        Button {
+                            showForgotPassword = true
+                        } label: {
+                            Text("Forgot password?")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.electricPurple)
+                        }
+                    }
+                    .padding(.top, 4)
                 }
                 .onSubmit {
                     if focusedField == .email {
@@ -110,28 +123,35 @@ struct LoginView: View {
             .padding(.top, 40)
         }
         .navigationBarBackButtonHidden(true)
+        .sheet(isPresented: $showForgotPassword) {
+            ForgotPasswordView()
+        }
     }
     
     private func validate() -> Bool {
-        if !email.contains("@") || !email.contains(".") {
+        let trimmedEmail = email.trimmingCharacters(in: .whitespaces)
+        guard trimmedEmail.contains("@"), trimmedEmail.contains(".") else {
             errorMessage = "Please enter a valid email address."
             return false
         }
-        if password.count < 6 {
-            errorMessage = "Password must be at least 6 characters."
+        guard password.count >= 8 else {
+            errorMessage = "Password must be at least 8 characters."
             return false
         }
         return true
     }
     
     private func login() async {
-        hideKeyboard()
+        focusedField = nil
         isLoading = true
         errorMessage = ""
         do {
-            try await AuthManager.shared.login(email: email.lowercased().trimmingCharacters(in: .whitespaces), password: password)
+            try await AuthManager.shared.login(
+                email: email.lowercased().trimmingCharacters(in: .whitespaces),
+                password: password
+            )
         } catch {
-            errorMessage = error.localizedDescription
+            withAnimation { errorMessage = error.localizedDescription }
         }
         isLoading = false
     }

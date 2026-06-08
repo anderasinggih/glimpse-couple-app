@@ -4,6 +4,8 @@ import AudioToolbox
 
 struct ChatView: View {
     @State private var auth = AuthManager.shared
+    @State private var relativeTimeRefreshTrigger = Date()
+    private let refreshTimer = Timer.publish(every: 5.0, on: .main, in: .common).autoconnect()
     
     // Multi-room Chat state
     @State private var chatRooms: [GlimpseChatRoom] = []
@@ -20,7 +22,6 @@ struct ChatView: View {
     @State private var showRenameRoomAlert = false
     @State private var roomToRename: GlimpseChatRoom? = nil
     @State private var renameRoomName = ""
-    @State private var dragOffset: CGFloat = 0
     @State private var pinnedRoomIds: Set<Int> = []
     @State private var scrollToMessageTrigger: Int? = nil
     
@@ -47,6 +48,7 @@ struct ChatView: View {
     @State private var debouncedSearchQuery = ""
     @State private var searchTask: Task<Void, Never>? = nil
     @State private var isShowingScrollToBottomButton = false
+    @State private var isKeyboardTransitioning = false
     @State private var showNoInternetAlert = false
     @State private var networkMonitor = NetworkMonitor.shared
     @State private var pendingMessages: [ChatMessage] = []
@@ -69,6 +71,15 @@ struct ChatView: View {
     @State private var chatTextSize: CGFloat = UserDefaults.standard.object(forKey: "glimpse_chat_text_size") as? CGFloat ?? 14.0
     @State private var starredMessageIds: Set<Int> = []
     @State private var pinnedMessageIds: Set<Int> = []
+    @AppStorage("glimpse_background_theme", store: UserDefaults(suiteName: "group.glimpse.app")) var backgroundTheme = "default"
+    
+    @StateObject private var audioRecorder = AudioRecordManager.shared
+    @ObservedObject private var audioPlayerManager = AudioPlayManager.shared
+    @State private var dragOffset: CGFloat = 0.0
+    @State private var blinkOpacity = 1.0
+    @State private var isRecordingLocked = false
+    @State private var hasInitiatedRecording = false
+    @State private var isRecordingCancelled = false
     
     private var activeRoomThemeColor: Color {
         if let hex = selectedRoom?.theme_color, !hex.isEmpty {
@@ -78,10 +89,13 @@ struct ChatView: View {
     }
     
     private var activeRoomBgColor: Color {
+        if backgroundTheme == "dark" {
+            return Color.black
+        }
         if let hex = selectedRoom?.background_color, !hex.isEmpty {
             return Color(hex: hex)
         }
-        return Color.deepVelvet
+        return Color.adaptiveBackground
     }
     
     var filteredMessages: [ChatMessage] {
@@ -152,10 +166,11 @@ struct ChatView: View {
             }
             
             for msg in msgsToSearch {
-                if msg.message.contains("[FLASH_ATTACHMENT]") || msg.message.contains("[KENCAN_INVITATION]") {
+                let bodyText = msg.replyInfo?.actualMessage ?? msg.message
+                if bodyText.contains("[FLASH_ATTACHMENT]") || bodyText.contains("[KENCAN_INVITATION]") {
                     continue
                 }
-                if msg.message.localizedCaseInsensitiveContains(cleanQuery) {
+                if bodyText.localizedCaseInsensitiveContains(cleanQuery) {
                     let result = GlobalSearchResult(room: room, message: msg)
                     uniqueResults[result.id] = result
                 }
@@ -165,15 +180,11 @@ struct ChatView: View {
         return uniqueResults.values.sorted { $0.message.id > $1.message.id }
     }
     
-    private var swipeProgress: CGFloat {
-        min(1.0, max(0.0, dragOffset / UIScreen.main.bounds.width))
-    }
-    
     var body: some View {
         ZStack {
             // LAYER 1: Background
             ZStack {
-                Color.deepVelvet.ignoresSafeArea()
+                Color.adaptiveBackground.ignoresSafeArea()
                 iOS26Background().opacity(0.4)
             }
             .ignoresSafeArea()
@@ -184,7 +195,7 @@ struct ChatView: View {
             
             // LAYER 2: Main Content
             if let partner = auth.partner, auth.coupleActive {
-                ZStack {
+                NavigationStack {
                     chatRoomsListView(partner: partner)
                         .alert("Request Clear Chat?", isPresented: $showRequestDeleteAlert, presenting: roomToRequestDelete) { room in
                             Button("Cancel", role: .cancel) { roomToRequestDelete = nil }
@@ -234,7 +245,8 @@ struct ChatView: View {
                                 clearRoomChat(room)
                             }
                         } message: { room in
-                            Text("Are you sure you want to clear all messages in '\(room.name)'? This action cannot be undone.")
+                            let msg = "Are you sure you want to clear all messages in '\(room.name)'? This action cannot be undone."
+                            Text(msg)
                         }
                         .alert("Delete Room?", isPresented: $showDeleteConfirmAlert, presenting: roomToDelete) { room in
                             Button("Cancel", role: .cancel) { roomToDelete = nil }
@@ -244,11 +256,15 @@ struct ChatView: View {
                         } message: { room in
                             Text("Are you sure you want to delete '\(room.name)'? All messages in this room will be permanently lost.")
                         }
-                    if let activeRoom = selectedRoom {
-                        activeChatRoomView(partner: partner, room: activeRoom)
-                            .transition(.move(edge: .trailing))
-                    }
+                        .navigationDestination(item: $selectedRoom) { activeRoom in
+                            activeChatRoomView(partner: partner, room: activeRoom)
+                                .navigationBarBackButtonHidden(true)
+                                .toolbar(.hidden, for: .navigationBar)
+                                .toolbar(.hidden, for: .tabBar)
+                        }
+                        .toolbar(.hidden, for: .navigationBar)
                 }
+                .toolbar(.hidden, for: .navigationBar)
             } else {
                 notConnectedView
             }
@@ -289,13 +305,23 @@ struct ChatView: View {
                     }
                 }
             } else {
+                // Auto-send voice note if currently recording on room exit
+                if audioRecorder.isRecording {
+                    stopAndSendRecording()
+                    isRecordingLocked = false
+                    dragOffset = 0.0
+                }
+                
                 // Leaving the room: save final read state sweep to prevent badges from reappearing
-                if let oldRoom = oldValue, let lastMsg = messages.last, lastMsg.id > 0 {
-                    let currentUserId = auth.currentUser?.id ?? 0
-                    let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(oldRoom.id)"
-                    UserDefaults.standard.set(lastMsg.id, forKey: userDefaultsKey)
-                    Task {
-                        await auth.markMessagesAsRead(messageId: lastMsg.id)
+                if let oldRoom = oldValue {
+                    auth.sendTypingStatus(isTyping: false, roomId: oldRoom.is_main ? 0 : oldRoom.id)
+                    if let lastMsg = messages.last, lastMsg.id > 0 {
+                        let currentUserId = auth.currentUser?.id ?? 0
+                        let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(oldRoom.id)"
+                        UserDefaults.standard.set(lastMsg.id, forKey: userDefaultsKey)
+                        Task {
+                            await auth.markMessagesAsRead(messageId: lastMsg.id)
+                        }
                     }
                 }
                 
@@ -310,6 +336,12 @@ struct ChatView: View {
                 self.isSearchingChat = false
                 self.searchQuery = ""
                 self.isInsideChatSearchFocused = false
+            }
+        }
+        .onChange(of: audioPlayerManager.navigateToMessageIdTrigger) { _, newValue in
+            if let targetId = newValue {
+                scrollToMessageTrigger = targetId
+                audioPlayerManager.navigateToMessageIdTrigger = nil
             }
         }
         .onAppear {
@@ -339,9 +371,11 @@ struct ChatView: View {
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomThemeUpdated"))) { notification in
             self.handleChatRoomThemeUpdated(notification)
         }
-        // Listen to live WebSocket message broadcasts from Partner
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatMessageReceived"))) { notification in
             self.handleChatMessageReceived(notification)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseAudioPlaybackDidFinish"))) { notification in
+            self.handleAudioPlaybackDidFinish(notification)
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ShowCreateChatRoom"))) { _ in
             newRoomName = ""
@@ -354,6 +388,18 @@ struct ChatView: View {
         }
         .onChange(of: messageInput) { oldValue, newValue in
             self.handleMessageInputChanged(oldValue: oldValue, newValue: newValue)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+            if isInputFocused && !messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let targetRoomId = selectedRoom?.is_main == true ? 0 : selectedRoom?.id
+                auth.sendTypingStatus(isTyping: false, roomId: targetRoomId)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            if isInputFocused && !messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let targetRoomId = selectedRoom?.is_main == true ? 0 : selectedRoom?.id
+                auth.sendTypingStatus(isTyping: true, roomId: targetRoomId)
+            }
         }
         // Custom creation and deletion alerts
         .alert("New Chat Room", isPresented: $showCreateRoomAlert) {
@@ -386,12 +432,28 @@ struct ChatView: View {
             debouncedSearchQuery = newValue
             updateLocalSearchMatches()
         }
+        .onReceive(refreshTimer) { _ in
+            relativeTimeRefreshTrigger = Date()
+        }
     }
     
     // --- 💬 ACTIVE CHAT ROOM SCREEN (Type-safety separated) ---
     @ViewBuilder
     private func activeChatRoomView(partner: GlimpseUser, room: GlimpseChatRoom) -> some View {
-        ZStack(alignment: .leading) {
+        let currentUserId = auth.currentUser?.id ?? 0
+        let partnerLastSeenId = auth.partner?.last_seen_message_id ?? 0
+        let latestSeenId = messages.last(where: {
+            $0.sender_id == currentUserId &&
+            $0.id <= partnerLastSeenId
+        })?.id
+        
+        let initialReadId = roomInitialLastReadId
+        let partnerId = auth.partner?.id ?? 0
+        let firstUnreadId = initialReadId != nil ? messages.first(where: { msg in
+            msg.sender_id == partnerId && msg.id > initialReadId!
+        })?.id : nil
+
+        return ZStack(alignment: .leading) {
             // Main Chat Room Content
             ZStack(alignment: .top) {
                 // Solid Velvet Background to cover the list behind it completely
@@ -401,6 +463,10 @@ struct ChatView: View {
                 }
                 .ignoresSafeArea()
                 .ignoresSafeArea(.keyboard)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    isInputFocused = false
+                }
                 
                 ScrollViewReader { proxy in
                     ZStack(alignment: .bottomTrailing) {
@@ -415,11 +481,28 @@ struct ChatView: View {
                                                 dateHeaderBadge(for: msg)
                                             }
                                             
-                                            if msg.id == firstUnreadMessageId {
+                                            if msg.id == firstUnreadId {
                                                 unreadMessagesDivider()
                                             }
                                             
-                                            chatBubble(msg: msg, scrollProxy: proxy)
+                                            ChatBubbleView(
+                                                msg: msg,
+                                                isPending: false,
+                                                auth: auth,
+                                                activeRoomThemeColor: activeRoomThemeColor,
+                                                highlightedMessageId: $highlightedMessageId,
+                                                latestSeenId: latestSeenId,
+                                                scrollProxy: proxy,
+                                                newlySentMessageIds: newlySentMessageIds,
+                                                newlyReceivedMessageIds: newlyReceivedMessageIds,
+                                                starredMessageIds: starredMessageIds,
+                                                pinnedMessageIds: pinnedMessageIds,
+                                                getGlowProperties: getGlowProperties,
+                                                onReply: { withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) { replyMessage = msg } },
+                                                onPin: { togglePinMessage(msg) },
+                                                onStar: { toggleStarMessage(msg) },
+                                                onCopy: { copyMessageToClipboard(msg) }
+                                            )
                                                 .transition(.asymmetric(
                                                     insertion: .scale(scale: 0.8, anchor: msg.sender_id == auth.currentUser?.id ? .bottomTrailing : .bottomLeading)
                                                         .combined(with: .opacity),
@@ -441,7 +524,9 @@ struct ChatView: View {
                                         .frame(maxWidth: .infinity)
                                     }
                                     
-                                    if auth.isPartnerTyping {
+                                    let isTypingCurrentRoom: Bool = auth.isPartnerTyping
+                                        && auth.partnerTypingRoomId == (selectedRoom?.is_main == true ? Optional(0) : selectedRoom?.id)
+                                    if isTypingCurrentRoom {
                                         HStack {
                                             TypingIndicatorView()
                                             Spacer()
@@ -451,7 +536,7 @@ struct ChatView: View {
                                     }
                                     
                                     ForEach(pendingMessages) { msg in
-                                        chatBubble(msg: msg, isPending: true)
+                                        ChatBubbleView(msg: msg, isPending: true, auth: auth, activeRoomThemeColor: activeRoomThemeColor, highlightedMessageId: $highlightedMessageId, latestSeenId: nil, scrollProxy: nil, newlySentMessageIds: newlySentMessageIds, newlyReceivedMessageIds: newlyReceivedMessageIds, starredMessageIds: starredMessageIds, pinnedMessageIds: pinnedMessageIds, getGlowProperties: getGlowProperties, onReply: { withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) { replyMessage = msg } }, onPin: { togglePinMessage(msg) }, onStar: { toggleStarMessage(msg) }, onCopy: { copyMessageToClipboard(msg) })
                                     }
                                 }
                                 .padding(.horizontal, 16)
@@ -459,16 +544,20 @@ struct ChatView: View {
                                 .frame(maxWidth: .infinity)
                                 
                                 Color.clear
-                                    .frame(height: 1)
+                                    .frame(height: 12)
                                     .id("bottom_anchor")
                                     .background(
                                         GeometryReader { geo in
                                             let frame = geo.frame(in: .global)
                                             Color.clear
                                                 .onChange(of: frame.minY) { _, newValue in
+                                                    guard !isKeyboardTransitioning else { return }
                                                     guard newValue > 0 else { return }
                                                     let screenHeight = UIScreen.main.bounds.height
-                                                    let isOff = newValue > (screenHeight + 300)
+                                                    let keyboardOffset: CGFloat = isInputFocused ? 340 : 100
+                                                    let visibleBottom = screenHeight - keyboardOffset
+                                                    // Only show scroll-to-bottom button when scrolled up significantly (180+ pt)
+                                                    let isOff = newValue > (visibleBottom + 180)
                                                     if isShowingScrollToBottomButton != isOff {
                                                         withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
                                                             isShowingScrollToBottomButton = isOff
@@ -478,24 +567,10 @@ struct ChatView: View {
                                         }
                                     )
                             }
-                            .background(
-                                Color.black.opacity(0.001)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        isInputFocused = false
-                                        if isSearchingChat {
-                                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                                                isSearchingChat = false
-                                                searchQuery = ""
-                                            }
-                                            isInsideChatSearchFocused = false
-                                            hideKeyboard()
-                                        }
-                                    }
-                            )
                         }
                         .defaultScrollAnchor(.bottom)
                         .scrollDismissesKeyboard(.interactively)
+                        .scrollBounceBehavior(.always, axes: .vertical)
                         .onAppear {
                             if let highlightId = highlightedMessageId {
                                 // Scroll straight to targeted search result message!
@@ -515,15 +590,13 @@ struct ChatView: View {
                                     }
                                 }
                             } else {
-                                // Immediate scroll to bottom on room open
                                 self.isShowingScrollToBottomButton = false
-                                proxy.scrollTo("bottom_anchor", anchor: .bottom)
-                                // Extra delayed scrolls to catch async cache/fetch loads
-                                for delay in [0.08, 0.20, 0.40] {
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                                        self.isShowingScrollToBottomButton = false
-                                        proxy.scrollTo("bottom_anchor", anchor: .bottom)
-                                    }
+                                // Backup manual scroll because defaultScrollAnchor sometimes fails and causes blank screen on initial layout
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                    proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                    proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                 }
                             }
                         }
@@ -544,11 +617,9 @@ struct ChatView: View {
                             }
                             
                             if oldMessages.isEmpty || oldMessages.count < 3 {
-                                // Initial/cache load: scroll instantly to bottom
                                 self.isShowingScrollToBottomButton = false
-                                proxy.scrollTo("bottom_anchor", anchor: .bottom)
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-                                    self.isShowingScrollToBottomButton = false
+                                // Backup manual scroll
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                     proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                 }
                                 return
@@ -577,12 +648,15 @@ struct ChatView: View {
                             // Snappy layout sync when adding pending messages
                             if newPending.count > oldPending.count {
                                 DispatchQueue.main.async {
-                                    proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                    withAnimation(.easeOut(duration: 0.15)) {
+                                        proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                    }
                                 }
                             }
                         }
                         .onChange(of: auth.isPartnerTyping) { _, isTyping in
-                            if isTyping {
+                            let isCurrentRoom: Bool = auth.partnerTypingRoomId == (selectedRoom?.is_main == true ? Optional(0) : selectedRoom?.id)
+                            if isTyping && isCurrentRoom {
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                     withAnimation(.easeOut(duration: 0.2)) {
                                         proxy.scrollTo("bottom_anchor", anchor: .bottom)
@@ -591,21 +665,26 @@ struct ChatView: View {
                             }
                         }
                         .onChange(of: isInputFocused) { _, isFocused in
+                            isKeyboardTransitioning = true
                             if isFocused {
-                                // Scroll to bottom when keyboard appears — use keyboard animation duration
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                    proxy.scrollTo("bottom_anchor", anchor: .bottom)
-                                }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                                    withAnimation(.easeOut(duration: 0.18)) {
+                                // Single, clean scroll when keyboard appears to match the slide animation
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                                    withAnimation(.easeOut(duration: 0.2)) {
                                         proxy.scrollTo("bottom_anchor", anchor: .bottom)
                                     }
                                 }
-                                if !messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    auth.sendTypingStatus(isTyping: true)
+                                 if !messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    auth.sendTypingStatus(isTyping: true, roomId: selectedRoom?.is_main == true ? 0 : selectedRoom?.id)
                                 }
                             } else {
-                                auth.sendTypingStatus(isTyping: false)
+                                auth.sendTypingStatus(isTyping: false, roomId: selectedRoom?.is_main == true ? 0 : selectedRoom?.id)
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                    isShowingScrollToBottomButton = false
+                                }
+                            }
+                            // Reset transitioning flag after keyboard animation completes
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                isKeyboardTransitioning = false
                             }
                         }
                         .onChange(of: triggerJumpToDate) { _, newValue in
@@ -659,56 +738,13 @@ struct ChatView: View {
                     }
                 }
                 chatHeader(partner: partner, room: room)
-                    .opacity(max(0.0, 1.0 - Double(swipeProgress) * 1.3))
                     .zIndex(10)
 
             }
-            
-            // Transparent Left-Edge Swipe Back Interception Zone (width: 42)
-            Color.clear
-                .frame(width: 42)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 8, coordinateSpace: .global)
-                        .onChanged { value in
-                            guard value.startLocation.x < 50 else { return }
-                            guard value.translation.width > 0 else { return }
-                            dragOffset = value.translation.width
-                        }
-                        .onEnded { value in
-                            guard value.startLocation.x < 50 else { return }
-                            let screenWidth = UIScreen.main.bounds.width
-                            if value.translation.width > 105 {
-                                // Dismiss smoothly
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
-                                    dragOffset = screenWidth
-                                }
-                                // Re-assign selectedRoom to nil after transition finishes
-                                // Load from cache instantly if available to prevent 1s blank screen on next tap
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
-                                    withAnimation(.spring(response: 0.22, dampingFraction: 0.8)) {
-                                        selectedRoom = nil
-                                    }
-                                    dragOffset = 0
-                                    // Don't clear messages — keep auth cache so next entry is instant
-                                    messages = []
-                                    pendingMessages = []
-                                }
-                            } else {
-                                // Snap back to zero
-                                withAnimation(.spring(response: 0.25, dampingFraction: 0.78)) {
-                                    dragOffset = 0
-                                }
-                            }
-                        }
-                )
-                .padding(.top, 100) // Avoid blocking the back button in the header!
         }
-        .offset(x: dragOffset)
         .sheet(isPresented: $showDatePickerForJump) {
             ZStack {
-                Color.deepVelvet.ignoresSafeArea()
+                Color.adaptiveBackground.ignoresSafeArea()
                 
                 VStack(spacing: 20) {
                     HStack {
@@ -773,53 +809,13 @@ struct ChatView: View {
     
     @ViewBuilder
     private func chatRoomsListView(partner: GlimpseUser) -> some View {
-        let progress = min(1.0, max(0.0, dragOffset / UIScreen.main.bounds.width))
-        let scale: CGFloat = selectedRoom == nil ? 1.0 : (0.96 + (0.04 * progress))
-        let opacity: Double = selectedRoom == nil ? 1.0 : (0.8 + (0.2 * Double(progress)))
-        
-        return ZStack(alignment: .top) {
+        ZStack(alignment: .top) {
+            Color.adaptiveBackground.ignoresSafeArea()
+            iOS26Background().opacity(0.4)
+            
             VStack(spacing: 0) {
                 // Header spacer (clears the blurred top header precisely)
                 Spacer().frame(height: 104)
-                
-                // Sleek premium WhatsApp-style search bar
-                if !chatRooms.isEmpty {
-                    HStack(spacing: 8) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundColor(.white.opacity(0.4))
-                                .font(.system(size: 14, weight: .bold))
-                            
-                            TextField("Search rooms or messages...", text: $searchQuery)
-                                .focused($isSearchFocused)
-                                .font(.system(size: 14, design: .rounded))
-                                .foregroundColor(.white)
-                                .autocorrectionDisabled()
-                                .textInputAutocapitalization(.never)
-                            
-                            if !searchQuery.isEmpty {
-                                Button {
-                                    searchQuery = ""
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.white.opacity(0.4))
-                                        .font(.system(size: 14))
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Color.white.opacity(0.06))
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(searchQuery.isEmpty ? Color.clear : Color.activeCyan.opacity(0.4), lineWidth: 1)
-                        )
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 6)
-                }
                 
                 if isLoadingRooms {
                     VStack {
@@ -844,7 +840,50 @@ struct ChatView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    List {
+                    ScrollViewReader { listProxy in
+                        List {
+                            // Sleek premium WhatsApp-style search bar inside List
+                            if !chatRooms.isEmpty {
+                                HStack(spacing: 8) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "magnifyingglass")
+                                            .foregroundColor(.white.opacity(0.4))
+                                            .font(.system(size: 14, weight: .bold))
+                                        
+                                        TextField("Search rooms or messages...", text: $searchQuery)
+                                            .focused($isSearchFocused)
+                                            .font(.system(size: 14, design: .rounded))
+                                            .foregroundColor(.white)
+                                            .autocorrectionDisabled()
+                                            .textInputAutocapitalization(.never)
+                                        
+                                        if !searchQuery.isEmpty {
+                                            Button {
+                                                searchQuery = ""
+                                            } label: {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .foregroundColor(.white.opacity(0.4))
+                                                    .font(.system(size: 14))
+                                            }
+                                        }
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.white.opacity(0.06))
+                                    .cornerRadius(10)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(searchQuery.isEmpty ? Color.clear : Color.activeCyan.opacity(0.4), lineWidth: 1)
+                                    )
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.top, 12)
+                                .padding(.bottom, 6)
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                                .id("list_search_bar")
+                            }
                         if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             // --- 🔍 SEARCH RESULTS VIEW ---
                             let matchedRooms = sortedChatRooms.filter { $0.name.localizedCaseInsensitiveContains(debouncedSearchQuery) }
@@ -959,24 +998,26 @@ struct ChatView: View {
                                         .tint(room.is_main ? (isCurrentUserRequesting ? .orange : (isPartnerRequesting ? .activeCyan : .red)) : .red)
                                     }
                                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                        let isPinned = pinnedRoomIds.contains(room.id)
-                                        Button {
-                                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                            togglePinRoom(room)
-                                        } label: {
-                                            Label(isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash.fill" : "pin.fill")
+                                        if !room.is_main {
+                                            let isPinned = pinnedRoomIds.contains(room.id)
+                                            Button {
+                                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                                togglePinRoom(room)
+                                            } label: {
+                                                Label(isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash.fill" : "pin.fill")
+                                            }
+                                            .tint(.orange)
+                                            
+                                            Button {
+                                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                                roomToRename = room
+                                                renameRoomName = room.name
+                                                showRenameRoomAlert = true
+                                            } label: {
+                                                Label("Rename", systemImage: "square.and.pencil")
+                                            }
+                                            .tint(.blue)
                                         }
-                                        .tint(.orange)
-                                        
-                                        Button {
-                                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                            roomToRename = room
-                                            renameRoomName = room.name
-                                            showRenameRoomAlert = true
-                                        } label: {
-                                            Label("Rename", systemImage: "square.and.pencil")
-                                        }
-                                        .tint(.blue)
                                     }
                             }
                         }
@@ -992,14 +1033,17 @@ struct ChatView: View {
                             hideKeyboard()
                         }
                     )
+                    .onReceive(auth.chatTabDoubleTapPublisher) { _ in
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            listProxy.scrollTo("list_search_bar", anchor: .top)
+                        }
+                    }
                 }
             }
-            .ignoresSafeArea(edges: .top)
-            .scaleEffect(scale, anchor: .top)
-            .opacity(opacity)
+        }
+        .ignoresSafeArea(edges: .top)
             
             roomsListHeader(partner: partner)
-                .opacity(selectedRoom == nil ? 1.0 : Double(swipeProgress))
                 .zIndex(10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1151,8 +1195,8 @@ struct ChatView: View {
                             let senderName = reply.sender_id == auth.currentUser?.id ? "You" : (auth.partner?.name ?? "Partner")
                             Text("Replying to \(senderName)")
                                 .font(.system(size: 11.5, weight: .bold))
-                                .foregroundColor(.activeCyan)
-                            let displayParent = reply.replyInfo?.actualMessage ?? reply.message
+                                .foregroundColor(activeRoomThemeColor)
+                            let displayParent = formatReplyPreview(text: reply.replyInfo?.actualMessage ?? reply.message)
                             Text(displayParent)
                                 .font(.system(size: 12))
                                 .foregroundColor(.white.opacity(0.65))
@@ -1162,7 +1206,7 @@ struct ChatView: View {
                         .overlay(
                             HStack {
                                 Rectangle()
-                                    .fill(Color.activeCyan)
+                                    .fill(activeRoomThemeColor)
                                     .frame(width: 3.5)
                                 Spacer()
                             }
@@ -1194,9 +1238,9 @@ struct ChatView: View {
                 }
                 
                 floatingInputBar(proxy: proxy)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 12)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 6)
+                    .padding(.bottom, 6)
             }
         }
         .background(
@@ -1209,15 +1253,12 @@ struct ChatView: View {
     private func roomsListHeader(partner: GlimpseUser) -> some View {
         Color.clear
             .frame(height: 95)
-            .background(
-                Color.white.opacity(0.01)
-                    .background(.ultraThinMaterial)
-            )
             .ignoresSafeArea(edges: .top)
     }
     
     private func roomRow(_ room: GlimpseChatRoom) -> some View {
-        VStack(spacing: 0) {
+        let _ = relativeTimeRefreshTrigger
+        return VStack(spacing: 0) {
             HStack(spacing: 14) {
                 // Room Icon Container
                 ZStack {
@@ -1251,7 +1292,13 @@ struct ChatView: View {
                     }
                     
                     HStack {
-                        if let latest = room.latest_message {
+                        let isTyping: Bool = auth.isPartnerTyping && auth.partnerTypingRoomId == Optional(room.is_main ? 0 : room.id)
+                        if isTyping {
+                            Text("typing...")
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundColor(Color(hex: "00FF88"))
+                                .lineLimit(1)
+                        } else if let latest = room.latest_message {
                             let senderName = latest.sender_id == auth.currentUser?.id ? "You: " : ""
                             Text("\(senderName)\(latest.cleanDisplayContent)")
                                 .font(.system(size: 13, weight: room.unread_count > 0 ? .medium : .regular))
@@ -1407,7 +1454,8 @@ struct ChatView: View {
     }
 
     private func chatHeader(partner: GlimpseUser, room: GlimpseChatRoom) -> some View {
-        VStack(spacing: 0) {
+        let _ = relativeTimeRefreshTrigger
+        return VStack(spacing: 0) {
             HStack(spacing: 12) {
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -1443,15 +1491,25 @@ struct ChatView: View {
                                 .foregroundColor(.white)
                                 .lineLimit(1)
                             
+                            let isTyping: Bool = auth.isPartnerTyping && auth.partnerTypingRoomId == Optional(room.is_main ? 0 : room.id)
+                            let isOnline = !partner.isOffline
                             Circle()
-                                .fill(partner.isOffline ? Color.gray : Color.green)
+                                .fill(isTyping ? Color(hex: "00FF88") : (isOnline ? Color.green : Color.gray))
                                 .frame(width: 5, height: 5)
                         }
                         
                         HStack(spacing: 6) {
-                            Text(partner.isOffline ? partner.timeAgoString : "Online")
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(.white.opacity(0.5))
+                            let isTyping: Bool = auth.isPartnerTyping && auth.partnerTypingRoomId == Optional(room.is_main ? 0 : room.id)
+                            let isOnline = !partner.isOffline
+                            if isTyping {
+                                Text("typing...")
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .foregroundColor(Color(hex: "00FF88"))
+                            } else {
+                                Text(isOnline ? "Online" : partner.timeAgoString)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(isOnline ? Color.green.opacity(0.9) : .white.opacity(0.5))
+                            }
                             
                             Text("•")
                                 .font(.system(size: 10))
@@ -1639,373 +1697,383 @@ struct ChatView: View {
         .ignoresSafeArea(edges: .top)
     }
     
-    // FLOATING MESSAGE INPUT BAR (Fully floating, glassmorphic, separate rounded capsule and button)
     private func floatingInputBar(proxy: ScrollViewProxy) -> some View {
         let isMultiLine = messageInput.contains("\n") || messageInput.count > 26
-        let currentRadius: CGFloat = isMultiLine ? 16 : 22
+        let currentRadius: CGFloat = isMultiLine ? 14 : 18
+        let hasText = !messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         
-        return HStack(spacing: 10) {
-            HStack {
-                TextField("Type a message...", text: $messageInput, axis: .vertical)
-                    .font(.system(size: 15))
-                    .foregroundColor(.white)
-                    .lineLimit(1...4)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .focused($isInputFocused)
-                    .onChange(of: messageInput) { oldValue, newValue in
-                        if newValue.count > 500 {
-                            messageInput = String(newValue.prefix(500))
+        return HStack(spacing: 8) {
+            // LEFT SIDE: Content changes based on the recording state
+            if isRecordingLocked {
+                // Hands-free locked state: Trash/Delete button, then Recording Status
+                Button(action: {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    audioRecorder.cancelRecording()
+                    isRecordingLocked = false
+                    dragOffset = 0.0
+                }) {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(.red)
+                        .frame(width: 36, height: 36)
+                        .background(Color.red.opacity(0.12))
+                        .clipShape(Circle())
+                }
+                
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 8, height: 8)
+                        .opacity(blinkOpacity)
+                        .onAppear {
+                            withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                                blinkOpacity = 0.2
+                            }
                         }
-                    }
-            }
-            .frame(minHeight: 44)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: currentRadius))
-            .overlay(
-                RoundedRectangle(cornerRadius: currentRadius)
-                    .stroke(Color.white.opacity(0.15), lineWidth: 1.2)
-            )
-            .shadow(color: Color.black.opacity(0.15), radius: 8, y: 4)
-            
-            Button {
-                sendMessage(scrollProxy: proxy)
-            } label: {
-                Image(systemName: "paperplane.fill")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.deepVelvet)
-                    .frame(width: 44, height: 44)
-                    .background(messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.white.opacity(0.3) : activeRoomThemeColor)
-                    .clipShape(Circle())
-                    .shadow(color: messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.clear : activeRoomThemeColor.opacity(0.3), radius: 8, y: 3)
-            }
-            .disabled(messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        }
-    }
-    
-    private func bubbleBackground(isMe: Bool) -> Color {
-        if isMe {
-            return Color.activeCyan.opacity(0.18)
-        } else {
-            return Color.white.opacity(0.08)
-        }
-    }
-
-    @ViewBuilder
-    private func flashAttachmentBubble(msg: ChatMessage, isMe: Bool, timeStr: String, corners: UIRectCorner) -> some View {
-        let glow = getGlowProperties(msg: msg, isMe: isMe, isHighlighted: false)
-        
-        return Button {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                auth.selectedTab = 0
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
-                    Image(systemName: "camera.shutter.button.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.activeCyan)
-                    Text("Sent a Flash!")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
-                }
-                
-                HStack {
-                    Text("Tap to view on Dashboard")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                    Spacer(minLength: 8)
-                    if !timeStr.isEmpty {
-                        Text(timeStr)
-                            .font(.system(size: 7.5, weight: .medium))
-                            .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
-                    }
-                }
-            }
-            .padding(.horizontal, 11)
-            .padding(.vertical, 7)
-            .frame(width: 175)
-            .background(
-                isMe ? Color.activeCyan.opacity(0.18) : Color.white.opacity(0.12)
-            )
-            .clipShape(RoundedCorner(radius: 18, corners: corners))
-            .overlay(
-                RoundedCorner(radius: 18, corners: corners)
-                    .stroke(glow.strokeColor, lineWidth: glow.strokeWidth)
-            )
-            .scaleEffect(glow.scale)
-            .shadow(color: glow.glowColor, radius: glow.glowRadius, y: 3)
-            .animation(.spring(response: 0.35, dampingFraction: 0.72), value: newlySentMessageIds.contains(msg.id))
-            .animation(.spring(response: 0.35, dampingFraction: 0.72), value: newlyReceivedMessageIds.contains(msg.id))
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-
-    @ViewBuilder
-    private func kencanInvitationBubble(msg: ChatMessage, isMe: Bool, timeStr: String, corners: UIRectCorner) -> some View {
-        let glow = getGlowProperties(msg: msg, isMe: isMe, isHighlighted: false)
-        
-        return Button {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                auth.showScheduleSheet = true
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Image(systemName: "calendar.badge.plus")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.activeCyan)
-                    Text("New Kencan Invite!")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
-                }
-                
-                let cleanMsg = msg.message.replacingOccurrences(of: "[KENCAN_INVITATION] ", with: "")
-                Text(cleanMsg)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white.opacity(0.85))
-                    .multilineTextAlignment(.leading)
-                
-                HStack {
-                    Text("Tap to respond & set Alarm")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(.activeCyan)
-                    Spacer(minLength: 8)
-                    if !timeStr.isEmpty {
-                        Text(timeStr)
-                            .font(.system(size: 7.5, weight: .medium))
-                            .foregroundColor(isMe ? .activeCyan.opacity(0.65) : .white.opacity(0.4))
-                    }
-                }
-                .padding(.top, 2)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .frame(width: 220)
-            .background(
-                isMe ? Color.activeCyan.opacity(0.18) : Color.white.opacity(0.12)
-            )
-            .clipShape(RoundedCorner(radius: 18, corners: corners))
-            .overlay(
-                RoundedCorner(radius: 18, corners: corners)
-                    .stroke(glow.strokeColor, lineWidth: glow.strokeWidth)
-            )
-            .scaleEffect(glow.scale)
-            .shadow(color: glow.glowColor, radius: glow.glowRadius, y: 3)
-            .animation(.spring(response: 0.35, dampingFraction: 0.72), value: newlySentMessageIds.contains(msg.id))
-            .animation(.spring(response: 0.35, dampingFraction: 0.72), value: newlyReceivedMessageIds.contains(msg.id))
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-
-    @ViewBuilder
-    private func standardTextChatBubble(msg: ChatMessage, isMe: Bool, isPending: Bool, timeStr: String, corners: UIRectCorner, scrollProxy: ScrollViewProxy?, isHighlighted: Bool) -> some View {
-        let glow = getGlowProperties(msg: msg, isMe: isMe, isHighlighted: isHighlighted)
-        let displayText = msg.replyInfo?.actualMessage ?? msg.message
-        let isShort = displayText.count < 35 && !displayText.contains("\n") && msg.replyInfo == nil && !displayText.containsURL
-        
-        return Group {
-            if isShort {
-                HStack(alignment: .bottom, spacing: 8) {
-                    LinkedTextView(text: displayText, fontSize: chatTextSize, foregroundColor: .white)
-                        .multilineTextAlignment(.leading)
                     
-                    HStack(spacing: 3) {
-                        if starredMessageIds.contains(msg.id) {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 8.0))
-                                .foregroundColor(.yellow)
+                    Text(formatDuration(audioRecorder.duration))
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    
+                    Spacer()
+                    
+                    Text("Recording...")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundColor(.white.opacity(0.4))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .frame(height: 36)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(activeRoomThemeColor.opacity(0.4), lineWidth: 1.0)
+                )
+                .transition(.move(edge: .leading).combined(with: .opacity))
+                
+            } else if audioRecorder.isRecording {
+                // Active sliding state: Pulsing recording duration + Slide to Cancel instruction
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 8, height: 8)
+                        .opacity(blinkOpacity)
+                        .onAppear {
+                            withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                                blinkOpacity = 0.2
+                            }
                         }
-                        
-                        if !timeStr.isEmpty {
-                            Text(timeStr)
-                                .font(.system(size: 8.0, weight: .medium))
-                                .foregroundColor(isMe ? activeRoomThemeColor.opacity(0.65) : .white.opacity(0.4))
+                    
+                    Text(formatDuration(audioRecorder.duration))
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    
+                    Spacer()
+                    
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("Swipe left to cancel")
+                    }
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.5))
+                    .offset(x: dragOffset)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .frame(height: 36)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(activeRoomThemeColor.opacity(0.4), lineWidth: 1.0)
+                )
+                .transition(.move(edge: .leading).combined(with: .opacity))
+                
+            } else {
+                // Default State: Normal text message input field
+                HStack {
+                    TextField("Type a message...", text: $messageInput, axis: .vertical)
+                        .font(.system(size: 16))
+                        .foregroundColor(.white)
+                        .lineLimit(1...5)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .focused($isInputFocused)
+                        .onChange(of: messageInput) { oldValue, newValue in
+                            if newValue.count > 500 {
+                                messageInput = String(newValue.prefix(500))
+                            }
                         }
+                }
+                .frame(minHeight: 36)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: currentRadius))
+                .overlay(
+                    RoundedRectangle(cornerRadius: currentRadius)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1.0)
+                )
+                .transition(.move(edge: .leading).combined(with: .opacity))
+            }
+            
+            // RIGHT SIDE: Persisted button that retains structural identity to preserve touch gestures
+            ZStack {
+                if hasText {
+                    // Send normal text message button
+                    Button(action: {
+                        sendMessage(scrollProxy: proxy)
+                    }) {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.deepVelvet)
+                            .frame(width: 36, height: 36)
+                            .background(activeRoomThemeColor)
+                            .clipShape(Circle())
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                } else if isRecordingLocked {
+                    // Send voice note button (hands-free)
+                    Button(action: {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        stopAndSendRecording()
+                        isRecordingLocked = false
+                        dragOffset = 0.0
+                    }) {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.deepVelvet)
+                            .frame(width: 36, height: 36)
+                            .background(activeRoomThemeColor)
+                            .clipShape(Circle())
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                } else {
+                    // Persistent microphone button supporting tap-down recording & drag gestures
+                    ZStack {
+                        Circle()
+                            .fill(audioRecorder.isRecording ? activeRoomThemeColor : Color.white.opacity(0.12))
+                            .frame(width: 36, height: 36)
                         
-                        if isPending {
-                            Image(systemName: "clock")
-                                .font(.system(size: 8.0))
-                                .foregroundColor(isMe ? activeRoomThemeColor.opacity(0.65) : .white.opacity(0.4))
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(audioRecorder.isRecording ? .deepVelvet : .white)
+                            .scaleEffect(audioRecorder.isRecording ? (1.15 + CGFloat(sin(audioRecorder.duration * 8)) * 0.05) : 1.0)
+                        
+                        // Floating lock icon above the mic button during active recording
+                        if audioRecorder.isRecording {
+                            VStack(spacing: 2) {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 10, weight: .bold))
+                                Image(systemName: "chevron.up")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .offset(y: blinkOpacity > 0.5 ? -1 : 1)
+                            }
+                            .foregroundColor(.white.opacity(0.7))
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 5)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Capsule())
+                            .offset(y: -48)
+                            .transition(.opacity.combined(with: .scale))
                         }
                     }
-                    .padding(.bottom, 0.5)
-                }
-            } else {
-                VStack(alignment: .trailing, spacing: 4) {
-                    if let reply = msg.replyInfo {
-                        Button {
-                            if let proxy = scrollProxy {
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                withAnimation(.easeInOut(duration: 0.45)) {
-                                    proxy.scrollTo(reply.parentId, anchor: .center)
+                    .offset(x: dragOffset)
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                if isRecordingCancelled {
+                                    return
                                 }
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                    highlightedMessageId = reply.parentId
-                                }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                                    withAnimation(.easeOut(duration: 0.5)) {
-                                        if highlightedMessageId == reply.parentId {
-                                            highlightedMessageId = nil
+                                
+                                if !hasInitiatedRecording {
+                                    isRecordingCancelled = false
+                                    hasInitiatedRecording = true
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    audioRecorder.startRecording()
+                                    isRecordingLocked = false
+                                    dragOffset = 0.0
+                                    
+                                    withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                                        blinkOpacity = 0.2
+                                    }
+                                } else if isRecordingLocked {
+                                    // Already locked — ignore all further drag events, don't re-trigger animations
+                                    return
+                                } else {
+                                    // Track horizontal dragging left for cancellation
+                                    if value.translation.width < 0 {
+                                        dragOffset = value.translation.width
+                                    }
+                                    
+                                    // Track vertical dragging up for locking recording (one-shot: triggered once then locked)
+                                    if value.translation.height < -60 {
+                                        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                            isRecordingLocked = true
                                         }
+                                        dragOffset = 0.0
+                                        return // Return immediately so we don't also check the cancel threshold
+                                    }
+                                    
+                                    // If dragged past the threshold, cancel the voice note
+                                    if dragOffset < -100 {
+                                        isRecordingCancelled = true
+                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                        audioRecorder.cancelRecording()
+                                        isRecordingLocked = false
+                                        hasInitiatedRecording = false
+                                        dragOffset = 0.0
                                     }
                                 }
                             }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(reply.senderName)
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundColor(activeRoomThemeColor)
-                                Text(reply.parentMessage)
-                                    .font(.system(size: 11))
-                                    .foregroundColor(.white.opacity(0.65))
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.leading)
-                            }
-                            .padding(.vertical, 5)
-                            .padding(.horizontal, 8)
-                            .background(Color.white.opacity(0.06))
-                            .cornerRadius(6)
-                            .overlay(
-                                HStack {
-                                    Rectangle()
-                                        .fill(activeRoomThemeColor)
-                                        .frame(width: 3)
-                                    Spacer()
+                            .onEnded { value in
+                                hasInitiatedRecording = false
+                                if isRecordingCancelled {
+                                    isRecordingCancelled = false
+                                    isRecordingLocked = false
+                                    dragOffset = 0.0
+                                } else if isRecordingLocked {
+                                    // Hands-free state stays active
+                                } else if dragOffset < -100 {
+                                    // Discarded (already handled in onChanged)
+                                    isRecordingLocked = false
+                                    dragOffset = 0.0
+                                } else {
+                                    // Send voice note
+                                    stopAndSendRecording()
+                                    isRecordingLocked = false
+                                    dragOffset = 0.0
                                 }
-                            )
-                            .padding(.bottom, 2)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                    
-                    LinkedTextView(text: displayText, fontSize: chatTextSize, foregroundColor: .white)
-                        .multilineTextAlignment(.leading)
-
-                    // Link preview card
-                    if let url = displayText.firstURL {
-                        ChatLinkPreviewCard(url: url, themeColor: activeRoomThemeColor)
-                            .padding(.top, 2)
-                    }
-                    
-                    HStack(spacing: 3) {
-                        if starredMessageIds.contains(msg.id) {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 8.0))
-                                .foregroundColor(.yellow)
-                        }
-                        
-                        if !timeStr.isEmpty {
-                            Text(timeStr)
-                                .font(.system(size: 8.0, weight: .medium))
-                                .foregroundColor(isMe ? activeRoomThemeColor.opacity(0.65) : .white.opacity(0.4))
-                        }
-                        
-                        if isPending {
-                            Image(systemName: "clock")
-                                .font(.system(size: 8.0))
-                                .foregroundColor(isMe ? activeRoomThemeColor.opacity(0.65) : .white.opacity(0.4))
-                        }
-                    }
+                            }
+                    )
+                    .transition(.scale.combined(with: .opacity))
                 }
             }
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5.5)
-        .background(isHighlighted ? activeRoomThemeColor.opacity(0.35) : bubbleBackground(isMe: isMe))
-        .clipShape(RoundedCorner(radius: 12, corners: corners))
-        .overlay(
-            RoundedCorner(radius: 12, corners: corners)
-                .stroke(glow.strokeColor, lineWidth: glow.strokeWidth)
-        )
-        .scaleEffect(glow.scale)
-        .shadow(color: glow.glowColor, radius: glow.glowRadius, y: 2)
-        .animation(.spring(response: 0.35, dampingFraction: 0.72), value: newlySentMessageIds.contains(msg.id))
-        .animation(.spring(response: 0.35, dampingFraction: 0.72), value: newlyReceivedMessageIds.contains(msg.id))
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isRecordingLocked)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: audioRecorder.isRecording)
+        .animation(.spring(response: 0.25, dampingFraction: 0.75), value: hasText)
     }
     
-    // WHATSAPP STYLE CHAT BUBBLES WITH INDIVIDUAL TIME STAMPS & SWIPE TO REPLY
-    private func chatBubble(msg: ChatMessage, isPending: Bool = false, scrollProxy: ScrollViewProxy? = nil) -> some View {
-        let isMe = msg.sender_id == auth.currentUser?.id
-        let isHighlighted = highlightedMessageId == msg.id
-        let corners: UIRectCorner = isMe ? [.topLeft, .topRight, .bottomLeft] : [.topLeft, .topRight, .bottomRight]
-        let timeStr = formatMessageTime(msg.created_at)
+    private func stopAndSendRecording() {
+        guard let recordingResult = audioRecorder.stopRecording() else { return }
         
-        return VStack(alignment: .trailing, spacing: 2) {
-            HStack {
-                if isMe {
-                    Spacer()
-                }
+        let fileUrl = recordingResult.url
+        let duration = recordingResult.duration
+        
+        guard duration >= 1.0 else {
+            print("Recording too short, discarding")
+            try? FileManager.default.removeItem(at: fileUrl)
+            return
+        }
+        
+        let tempId = Int.random(in: -100000...(-1))
+        let formatter = ISO8601DateFormatter()
+        let createdAtStr = formatter.string(from: Date())
+        let roomIdKey = selectedRoom?.id ?? 0
+        
+        let tempMsg = ChatMessage(
+            id: tempId,
+            couple_id: auth.currentUser?.couple_id ?? 0,
+            sender_id: auth.currentUser?.id ?? 0,
+            message: "🎵 Sent a voice note",
+            room_id: selectedRoom?.id,
+            created_at: createdAtStr,
+            updated_at: createdAtStr,
+            is_audio: true,
+            audio_url: nil,
+            audio_duration: duration,
+            audio_expired: false
+        )
+        
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.72)) {
+            self.pendingMessages.append(tempMsg)
+        }
+        
+        Task {
+            do {
+                let sentMsg = try await auth.uploadAudioMessage(fileUrl: fileUrl, duration: duration, roomId: selectedRoom?.id)
                 
-                SwipeableBubbleView(msg: msg, isMe: isMe, onReplyTriggered: {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
-                        replyMessage = msg
+                // Copy to local play cache so sender can replay without downloading from server
+                AudioPlayManager.shared.cacheLocalRecording(from: fileUrl, messageId: sentMsg.id)
+                
+                AudioServicesPlaySystemSound(1104)
+                try? FileManager.default.removeItem(at: fileUrl)
+                
+                let sentId = sentMsg.id
+                await MainActor.run {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.72)) {
+                        self.newlySentMessageIds.insert(sentId)
                     }
-                }) {
-                    Group {
-                        if msg.message.contains("[FLASH_ATTACHMENT]") {
-                            flashAttachmentBubble(msg: msg, isMe: isMe, timeStr: timeStr, corners: corners)
-                        } else if msg.message.contains("[KENCAN_INVITATION]") {
-                            kencanInvitationBubble(msg: msg, isMe: isMe, timeStr: timeStr, corners: corners)
-                        } else {
-                            standardTextChatBubble(msg: msg, isMe: isMe, isPending: isPending, timeStr: timeStr, corners: corners, scrollProxy: scrollProxy, isHighlighted: isHighlighted)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        withAnimation(.easeOut(duration: 1.0)) {
+                            _ = self.newlySentMessageIds.remove(sentId)
                         }
                     }
-                }
-                .contextMenu {
-                    Button {
-                        toggleStarMessage(msg)
-                    } label: {
-                        Label(starredMessageIds.contains(msg.id) ? "Unstar" : "Star", systemImage: starredMessageIds.contains(msg.id) ? "star.slash" : "star")
-                    }
-
-                    Button {
-                        togglePinMessage(msg)
-                    } label: {
-                        Label(pinnedMessageIds.contains(msg.id) ? "Unpin" : "Pin", systemImage: pinnedMessageIds.contains(msg.id) ? "pin.slash" : "pin")
-                    }
-
-                    Button {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
-                            replyMessage = msg
+                    
+                    self.pendingMessages.removeAll { $0.id == tempMsg.id }
+                    
+                    var cachedArray = self.messagesCache[roomIdKey] ?? auth.roomMessagesCache[roomIdKey] ?? []
+                    if !cachedArray.contains(where: { $0.id == sentMsg.id }) {
+                        cachedArray.append(sentMsg)
+                        self.messagesCache[roomIdKey] = cachedArray
+                        if roomIdKey > 0 {
+                            auth.roomMessagesCache[roomIdKey] = cachedArray
                         }
-                    } label: {
-                        Label("Reply", systemImage: "arrowshape.turn.up.left")
                     }
-
-                    Button {
-                        copyMessageToClipboard(msg)
-                    } label: {
-                        Label("Copy", systemImage: "doc.on.doc")
+                    
+                    let isMainActive = selectedRoom?.is_main ?? false
+                    let isSameRoomActive = selectedRoom?.id == roomIdKey
+                    if isSameRoomActive || (isMainActive && roomIdKey == 0) {
+                        self.messages = cachedArray
+                    }
+                    
+                    if let idx = self.chatRooms.firstIndex(where: { $0.id == roomIdKey || ($0.is_main && roomIdKey == 0) }) {
+                        var updatedRoom = self.chatRooms[idx]
+                        updatedRoom.latest_message = RoomLatestMessage(
+                            id: sentMsg.id,
+                            message: sentMsg.message,
+                            sender_id: sentMsg.sender_id,
+                            created_at: sentMsg.created_at
+                        )
+                        updatedRoom.unread_count = 0
+                        self.chatRooms[idx] = updatedRoom
+                        self.auth.chatRooms = self.chatRooms
+                        self.auth.updateUnreadCount()
                     }
                 }
-                
-                if !isMe {
-                    Spacer()
+            } catch {
+                print("❌ Failed to upload audio message: \(error)")
+                await MainActor.run {
+                    self.pendingMessages.removeAll { $0.id == tempMsg.id }
                 }
-            }
-            
-            let isLatestSeen = isMe && msg.id == messages.last(where: {
-                $0.sender_id == (auth.currentUser?.id ?? 0) &&
-                $0.id <= (auth.partner?.last_seen_message_id ?? 0)
-            })?.id
-            
-            if isLatestSeen {
-                HStack(spacing: 3.5) {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 8))
-                    Text("Seen")
-                        .font(.system(size: 9.5, weight: .semibold))
-                }
-                .foregroundColor(.activeCyan.opacity(0.85))
-                .padding(.trailing, 6)
-                .padding(.top, 1)
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
             }
         }
-        .id(msg.id)
     }
+
+struct RecordButtonStyle: ButtonStyle {
+    let activeColor: Color
+    let onRecordStarted: () -> Void
+    let onRecordEnded: () -> Void
     
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundColor(configuration.isPressed ? .deepVelvet : .white)
+            .frame(width: 36, height: 36)
+            .background(configuration.isPressed ? activeColor : Color.white.opacity(0.12))
+            .clipShape(Circle())
+            .scaleEffect(configuration.isPressed ? 1.2 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { oldValue, newValue in
+                if newValue {
+                    onRecordStarted()
+                } else {
+                    onRecordEnded()
+                }
+            }
+    }
+}
     // WHATSAPP STYLE DYNAMIC CENTERED DATE BADGE
     private func dateHeaderBadge(for msg: ChatMessage) -> some View {
         guard let raw = msg.created_at else { return AnyView(EmptyView()) }
@@ -2037,15 +2105,26 @@ struct ChatView: View {
         let roomId = selectedRoom?.id
         
         // 1. Load from SQLite database (or memory cache) transparently
-        let cached = auth.getCachedMessages(for: roomId)
-        self.messages = cached
-        if let rId = roomId {
-            self.messagesCache[rId] = cached
+        Task {
+            let cached = await auth.getCachedMessages(for: roomId)
+            await MainActor.run {
+                self.messages = cached
+                if let rId = roomId {
+                    self.messagesCache[rId] = cached
+                }
+            }
         }
         
         // 2. Fetch fresh from server, MERGE with local state
         Task { @MainActor in
             if let serverMsgs = try? await auth.fetchMessages(roomId: roomId) {
+                // Pre-download audio messages that are not expired yet
+                for msg in serverMsgs {
+                    if msg.is_audio == true, msg.audio_expired == false {
+                        let audioUrl = "\(auth.baseURL)/glimpse/chat/audio/\(msg.id)"
+                        AudioPlayManager.shared.preDownloadAudio(messageId: msg.id, urlString: audioUrl)
+                    }
+                }
                 let localMsgs = self.messagesCache[roomId ?? 0] ?? self.messages
                 var merged = serverMsgs
                 for localMsg in localMsgs {
@@ -2117,6 +2196,13 @@ struct ChatView: View {
         Task { @MainActor in
             do {
                 let msgs = try await auth.fetchMessages(roomId: activeRoom.id)
+                // Pre-download audio messages that are not expired yet
+                for msg in msgs {
+                    if msg.is_audio == true, msg.audio_expired == false {
+                        let audioUrl = "\(auth.baseURL)/glimpse/chat/audio/\(msg.id)"
+                        AudioPlayManager.shared.preDownloadAudio(messageId: msg.id, urlString: audioUrl)
+                    }
+                }
                 // Merge with any locally-added messages to avoid losing them
                 var merged = msgs
                 let localMsgs = self.messagesCache[activeRoom.id] ?? []
@@ -2367,7 +2453,7 @@ struct ChatView: View {
         
         messageInput = ""
         UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-        
+            
         // Instantly clear unread message divider baseline when sending a message
         roomInitialLastReadId = nil
         
@@ -2508,6 +2594,12 @@ struct ChatView: View {
         }
     }
     
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+    
     private func toggleStarMessage(_ msg: ChatMessage) {
         guard let roomId = selectedRoom?.id else { return }
         let starredKey = "glimpse_starred_messages_room_\(roomId)"
@@ -2546,29 +2638,15 @@ struct ChatView: View {
 
     private func formatMessageTime(_ rawDate: String?) -> String {
         guard let rawDate = rawDate else { return "" }
-        let formatter = ISO8601DateFormatter()
-        
-        // Try parsing with fractional seconds first
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        var date = formatter.date(from: rawDate)
-        
-        // Try parsing without fractional seconds as fallback
+        var date: Date? = ChatDateFormatter.isoFormatterWithMS.date(from: rawDate)
         if date == nil {
-            formatter.formatOptions = [.withInternetDateTime]
-            date = formatter.date(from: rawDate)
+            date = ChatDateFormatter.isoFormatter.date(from: rawDate)
         }
-        
         if date == nil {
-            let fallbackFormatter = DateFormatter()
-            fallbackFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-            fallbackFormatter.timeZone = TimeZone(secondsFromGMT: 0)
-            date = fallbackFormatter.date(from: rawDate)
+            date = ChatDateFormatter.dbFormatter.date(from: rawDate)
         }
         guard let validDate = date else { return "" }
-        let outputFormatter = DateFormatter()
-        outputFormatter.dateFormat = "HH:mm"
-        outputFormatter.timeZone = TimeZone.current
-        return outputFormatter.string(from: validDate)
+        return ChatDateFormatter.timeOutputFormatter.string(from: validDate)
     }
     
     struct BubbleGlowProperties {
@@ -2610,27 +2688,28 @@ struct ChatView: View {
         let scale: CGFloat
         
         if isHighlighted {
-            glowColor = Color.activeCyan.opacity(0.4)
+            glowColor = activeRoomThemeColor.opacity(0.4)
             glowRadius = 8
-            strokeColor = Color.activeCyan
+            strokeColor = activeRoomThemeColor
             strokeWidth = 2.0
             scale = 1.03
         } else if newlySent {
-            glowColor = Color.activeCyan.opacity(0.85)
+            glowColor = activeRoomThemeColor.opacity(0.85)
             glowRadius = 12
-            strokeColor = Color.activeCyan
+            strokeColor = activeRoomThemeColor
             strokeWidth = 1.5
             scale = 1.02
         } else if newlyReceived {
-            glowColor = Color.electricPurple.opacity(0.85)
+            glowColor = activeRoomThemeColor.opacity(0.85)
             glowRadius = 12
-            strokeColor = Color.electricPurple
+            strokeColor = activeRoomThemeColor
             strokeWidth = 1.5
             scale = 1.02
         } else {
-            glowColor = isMe ? Color.activeCyan.opacity(0.1) : Color.clear
-            glowRadius = isMe ? 4 : 0
-            strokeColor = isMe ? Color.activeCyan.opacity(0.35) : Color.white.opacity(0.05)
+            let isVN = msg.is_audio == true
+            glowColor = activeRoomThemeColor.opacity(isVN ? 0.35 : 0.25)
+            glowRadius = isVN ? 6 : 5
+            strokeColor = activeRoomThemeColor.opacity(isVN ? 0.6 : 0.4)
             strokeWidth = 1.0
             scale = 1.0
         }
@@ -2651,23 +2730,12 @@ struct ChatView: View {
     }
     
     private func formatMessageDayString(_ rawDate: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        
-        // Try parsing with fractional seconds first
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        var date = formatter.date(from: rawDate)
-        
-        // Try parsing without fractional seconds as fallback
+        var date: Date? = ChatDateFormatter.isoFormatterWithMS.date(from: rawDate)
         if date == nil {
-            formatter.formatOptions = [.withInternetDateTime]
-            date = formatter.date(from: rawDate)
+            date = ChatDateFormatter.isoFormatter.date(from: rawDate)
         }
-        
         if date == nil {
-            let fallbackFormatter = DateFormatter()
-            fallbackFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-            fallbackFormatter.timeZone = TimeZone(secondsFromGMT: 0)
-            date = fallbackFormatter.date(from: rawDate)
+            date = ChatDateFormatter.dbFormatter.date(from: rawDate)
         }
         guard let validDate = date else { return "" }
         let calendar = Calendar.current
@@ -2676,9 +2744,7 @@ struct ChatView: View {
         } else if calendar.isDateInYesterday(validDate) {
             return "Yesterday"
         } else {
-            let outputFormatter = DateFormatter()
-            outputFormatter.dateFormat = "d MMMM yyyy"
-            return outputFormatter.string(from: validDate)
+            return ChatDateFormatter.dayOutputFormatter.string(from: validDate)
         }
     }
     
@@ -2731,6 +2797,31 @@ struct ChatView: View {
     
     private func handleChatRoomDeleted(_ notification: Notification) {
         guard let deletedId = notification.object as? Int else { return }
+        
+        // If the room being deleted/cleared is the main/general room, it means its messages were cleared.
+        // We must NOT remove the main room from the list, but instead clear its messages and latest_message status.
+        if let idx = chatRooms.firstIndex(where: { $0.id == deletedId }), chatRooms[idx].is_main {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                chatRooms[idx].delete_requested_by = nil
+                chatRooms[idx].latest_message = nil
+                chatRooms[idx].unread_count = 0
+                auth.chatRooms = chatRooms
+                
+                self.messagesCache[deletedId] = []
+                self.auth.roomMessagesCache[deletedId] = []
+                
+                if selectedRoom?.id == deletedId {
+                    self.messages = []
+                    if var updatedSelected = selectedRoom {
+                        updatedSelected.delete_requested_by = nil
+                        updatedSelected.latest_message = nil
+                        selectedRoom = updatedSelected
+                    }
+                }
+            }
+            return
+        }
+        
         var shouldResetSelected = false
         if let activeRoom = selectedRoom {
             shouldResetSelected = activeRoom.id == deletedId
@@ -2846,26 +2937,16 @@ struct ChatView: View {
                         }
                     }
                     if !foundTemp {
-                        var alreadyExists = false
-                        for m in self.messages {
-                            if m.id == newMsg.id {
-                                alreadyExists = true
-                                break
-                            }
-                        }
-                        if !alreadyExists {
+                        if let idx = self.messages.firstIndex(where: { $0.id == newMsg.id }) {
+                            self.messages[idx] = newMsg
+                        } else {
                             self.messages.append(newMsg)
                         }
                     }
                 } else {
-                    var alreadyExists = false
-                    for m in self.messages {
-                        if m.id == newMsg.id {
-                            alreadyExists = true
-                            break
-                        }
-                    }
-                    if !alreadyExists {
+                    if let idx = self.messages.firstIndex(where: { $0.id == newMsg.id }) {
+                        self.messages[idx] = newMsg
+                    } else {
                         self.messages.append(newMsg)
                     }
                     
@@ -2942,6 +3023,29 @@ struct ChatView: View {
             }
         }
     }
+
+    private func handleAudioPlaybackDidFinish(_ notification: Notification) {
+        guard selectedRoom != nil else { return }
+        guard let finishedId = notification.userInfo?["messageId"] as? Int else { return }
+        
+        // Find the index of the finished message
+        guard let currentIndex = messages.firstIndex(where: { $0.id == finishedId }) else { return }
+        
+        // Search forward for the next audio message that is not expired
+        for idx in (currentIndex + 1)..<messages.count {
+            let msg = messages[idx]
+            if msg.is_audio == true {
+                let isExpired = msg.audio_expired == true && !AudioPlayManager.shared.hasLocalCache(for: msg.id)
+                if !isExpired {
+                    // Found next playable VN! Let's play it!
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    let audioUrl = "\(auth.baseURL)/glimpse/chat/audio/\(msg.id)"
+                    audioPlayerManager.playAudio(messageId: msg.id, urlString: audioUrl, message: msg)
+                    break
+                }
+            }
+        }
+    }
     
     private func handleMessageInputChanged(oldValue: String, newValue: String) {
         let cleanNew = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2949,10 +3053,11 @@ struct ChatView: View {
         
         guard isInputFocused else { return }
         
+        let targetRoomId = selectedRoom?.is_main == true ? 0 : selectedRoom?.id
         if !cleanNew.isEmpty && cleanOld.isEmpty {
-            auth.sendTypingStatus(isTyping: true)
+            auth.sendTypingStatus(isTyping: true, roomId: targetRoomId)
         } else if cleanNew.isEmpty && !cleanOld.isEmpty {
-            auth.sendTypingStatus(isTyping: false)
+            auth.sendTypingStatus(isTyping: false, roomId: targetRoomId)
         }
     }
     
@@ -3124,29 +3229,18 @@ struct ChatView: View {
 }
 
 struct TypingIndicatorView: View {
-    @State private var animateDot1 = false
-    @State private var animateDot2 = false
-    @State private var animateDot3 = false
+    @State private var offsetIndex = 0
+    private let timer = Timer.publish(every: 0.3, on: .main, in: .common).autoconnect()
     
     var body: some View {
         HStack(spacing: 4) {
-            Circle()
-                .fill(Color.white.opacity(0.7))
-                .frame(width: 5, height: 5)
-                .scaleEffect(animateDot1 ? 1.4 : 0.8)
-                .offset(y: animateDot1 ? -3 : 0)
-            
-            Circle()
-                .fill(Color.white.opacity(0.7))
-                .frame(width: 5, height: 5)
-                .scaleEffect(animateDot2 ? 1.4 : 0.8)
-                .offset(y: animateDot2 ? -3 : 0)
-            
-            Circle()
-                .fill(Color.white.opacity(0.7))
-                .frame(width: 5, height: 5)
-                .scaleEffect(animateDot3 ? 1.4 : 0.8)
-                .offset(y: animateDot3 ? -3 : 0)
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(Color.white.opacity(0.7))
+                    .frame(width: 5, height: 5)
+                    .offset(y: offsetIndex == index ? -4 : 0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: offsetIndex)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -3156,16 +3250,8 @@ struct TypingIndicatorView: View {
             RoundedCorner(radius: 14, corners: [.topLeft, .topRight, .bottomRight])
                 .stroke(Color.white.opacity(0.05), lineWidth: 1)
         )
-        .onAppear {
-            withAnimation(Animation.easeInOut(duration: 0.55).repeatForever(autoreverses: true).delay(0.0)) {
-                animateDot1 = true
-            }
-            withAnimation(Animation.easeInOut(duration: 0.55).repeatForever(autoreverses: true).delay(0.15)) {
-                animateDot2 = true
-            }
-            withAnimation(Animation.easeInOut(duration: 0.55).repeatForever(autoreverses: true).delay(0.3)) {
-                animateDot3 = true
-            }
+        .onReceive(timer) { _ in
+            offsetIndex = (offsetIndex + 1) % 4
         }
     }
 }
@@ -3192,109 +3278,3 @@ struct FlatLinkButtonStyle: ButtonStyle {
     }
 }
 
-struct SwipeableBubbleView<Content: View>: View {
-    let msg: ChatMessage
-    let isMe: Bool
-    let onReplyTriggered: () -> Void
-    let content: Content
-    
-    @State private var localSwipeOffset: CGFloat = 0
-    @State private var isSwiping = false
-    
-    init(msg: ChatMessage, isMe: Bool, onReplyTriggered: @escaping () -> Void, @ViewBuilder content: () -> Content) {
-        self.msg = msg
-        self.isMe = isMe
-        self.onReplyTriggered = onReplyTriggered
-        self.content = content()
-    }
-    
-    var body: some View {
-        HStack(spacing: 0) {
-            if isMe {
-                // MY bubble: slides LEFT (localSwipeOffset < 0) towards the center of the screen
-                ZStack(alignment: .trailing) {
-                    if localSwipeOffset < -5 {
-                        Image(systemName: "arrow.uturn.left.circle.fill")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(.activeCyan)
-                            .shadow(color: .activeCyan.opacity(0.35), radius: 6)
-                            .opacity(min(1.0, Double(abs(localSwipeOffset) / 45.0)))
-                            .scaleEffect(min(1.0, 0.5 + 0.5 * (abs(localSwipeOffset) / 50.0)))
-                            .offset(x: 28 + (localSwipeOffset * 0.12))
-                    }
-                    
-                    content
-                        .offset(x: localSwipeOffset)
-                }
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 8, coordinateSpace: .local)
-                        .onChanged { value in
-                            let width = value.translation.width
-                            guard width < 0 else { return }
-                            isSwiping = true
-                            let limit: CGFloat = -60
-                            if width < limit {
-                                let excess = width - limit
-                                localSwipeOffset = limit + excess * 0.35
-                            } else {
-                                localSwipeOffset = width
-                            }
-                        }
-                        .onEnded { value in
-                            if value.translation.width < -35 {
-                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                onReplyTriggered()
-                            }
-                            withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
-                                localSwipeOffset = 0
-                            }
-                            isSwiping = false
-                        }
-                )
-            } else {
-                // PARTNER bubble: slides RIGHT (localSwipeOffset > 0) towards the center of the screen
-                ZStack(alignment: .leading) {
-                    if localSwipeOffset > 5 {
-                        Image(systemName: "arrow.uturn.left.circle.fill")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(.activeCyan)
-                            .shadow(color: .activeCyan.opacity(0.35), radius: 6)
-                            .opacity(min(1.0, Double(localSwipeOffset / 45.0)))
-                            .scaleEffect(min(1.0, 0.5 + 0.5 * (localSwipeOffset / 50.0)))
-                            .offset(x: -28 + (localSwipeOffset * 0.12))
-                    }
-                    
-                    content
-                        .offset(x: localSwipeOffset)
-                }
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 8, coordinateSpace: .local)
-                        .onChanged { value in
-                            let width = value.translation.width
-                            guard width > 0 else { return }
-                            isSwiping = true
-                            let limit: CGFloat = 60
-                            if width > limit {
-                                let excess = width - limit
-                                localSwipeOffset = limit + excess * 0.35
-                            } else {
-                                localSwipeOffset = width
-                            }
-                        }
-                        .onEnded { value in
-                            if value.translation.width > 35 {
-                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                onReplyTriggered()
-                            }
-                            withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
-                                localSwipeOffset = 0
-                            }
-                            isSwiping = false
-                        }
-                )
-            }
-        }
-    }
-}

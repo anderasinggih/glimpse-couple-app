@@ -6,7 +6,8 @@ extension Color {
     static let electricPurple = Color(hex: "BF80FF")
     
     static var activeCyan: Color {
-        let hex = UserDefaults.standard.string(forKey: "glimpse_theme_accent") ?? "00FFFF"
+        let suite = UserDefaults(suiteName: "group.glimpse.app")
+        let hex = suite?.string(forKey: "glimpse_theme_accent") ?? "00FFFF"
         return Color(hex: hex)
     }
     
@@ -15,8 +16,12 @@ extension Color {
     static let royalPurple = Color(hex: "7A28FF")
     static let vividMint = Color(hex: "00FF88")
     
-    // Adaptive Colors - Static for performance
-    static let adaptiveBackground = Color.deepVelvet
+    // Adaptive Colors
+    static var adaptiveBackground: Color {
+        let suite = UserDefaults(suiteName: "group.glimpse.app")
+        let theme = suite?.string(forKey: "glimpse_background_theme") ?? "default"
+        return theme == "dark" ? Color.black : Color.deepVelvet
+    }
     static var adaptiveAccent: Color { Color.activeCyan }
 }
 
@@ -63,32 +68,35 @@ struct GlassmorphicModifier: ViewModifier {
 }
 
 struct iOS26Background: View {
-    @AppStorage("glimpse_dynamic_orbs") var dynamicOrbsEnabled = true
+    @AppStorage("glimpse_dynamic_orbs", store: UserDefaults(suiteName: "group.glimpse.app")) var dynamicOrbsEnabled = true
+    @AppStorage("glimpse_background_theme", store: UserDefaults(suiteName: "group.glimpse.app")) var backgroundTheme = "default"
     @State private var animateOrbs = false
     
     var body: some View {
         ZStack {
-            Color.deepVelvet.ignoresSafeArea()
+            Color.adaptiveBackground.ignoresSafeArea()
             
-            // Orb 1 (Adapts to Active Theme Accent!)
-            Circle()
-                .fill(Color.activeCyan.opacity(0.12))
-                .frame(width: 400, height: 400)
-                .blur(radius: 80)
-                .offset(
-                    x: dynamicOrbsEnabled ? (animateOrbs ? -40 : -120) : -80,
-                    y: dynamicOrbsEnabled ? (animateOrbs ? -160 : -260) : -220
-                )
-            
-            // Orb 2 (Complementary royal purple)
-            Circle()
-                .fill(Color.royalPurple.opacity(0.08))
-                .frame(width: 300, height: 300)
-                .blur(radius: 60)
-                .offset(
-                    x: dynamicOrbsEnabled ? (animateOrbs ? 160 : 70) : 120,
-                    y: dynamicOrbsEnabled ? (animateOrbs ? 220 : 130) : 180
-                )
+            if backgroundTheme != "dark" {
+                // Orb 1 (Adapts to Active Theme Accent!)
+                Circle()
+                    .fill(Color.activeCyan.opacity(0.12))
+                    .frame(width: 400, height: 400)
+                    .blur(radius: 80)
+                    .offset(
+                        x: dynamicOrbsEnabled ? (animateOrbs ? -40 : -120) : -80,
+                        y: dynamicOrbsEnabled ? (animateOrbs ? -160 : -260) : -220
+                    )
+                
+                // Orb 2 (Complementary royal purple)
+                Circle()
+                    .fill(Color.royalPurple.opacity(0.08))
+                    .frame(width: 300, height: 300)
+                    .blur(radius: 60)
+                    .offset(
+                        x: dynamicOrbsEnabled ? (animateOrbs ? 160 : 70) : 120,
+                        y: dynamicOrbsEnabled ? (animateOrbs ? 220 : 130) : 180
+                    )
+            }
         }
         .drawingGroup()
         .ignoresSafeArea()

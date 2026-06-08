@@ -11,180 +11,235 @@ class GlimpseController extends Controller
     public function getState(Request $request)
     {
         $user = $request->user();
-        $cacheKey = "glimpse_state_user_{$user->id}";
+        \Illuminate\Support\Facades\Log::info("getState: Request received for user {$user->id}");
 
-        $responseData = \Illuminate\Support\Facades\Cache::remember($cacheKey, 120, function() use ($user) {
-            // Find partner if in a couple
-            $partner = null;
-            $couple = null;
-            if ($user->couple_id) {
-                $partner = \App\Models\User::where('couple_id', $user->couple_id)
-                    ->where('id', '!=', $user->id)
-                    ->first();
-                
-                $couple = \App\Models\Couple::find($user->couple_id);
+        try {
+            $cacheKey = "glimpse_state_user_{$user->id}";
+
+            // Allow clients to force a fresh read (e.g. after profile/anniversary update)
+            if ($request->boolean('fresh')) {
+                \Illuminate\Support\Facades\Cache::forget($cacheKey);
+                \Illuminate\Support\Facades\Log::info("getState: Cleared cache key {$cacheKey} (forced fresh request)");
             }
 
-            // Apply temp coordinates from cache if available to prevent database lag reads
-            if ($tempUserCoord = \Cache::get("user_{$user->id}_temp_coordinate")) {
-                if (isset($tempUserCoord['latitude'])) $user->latitude = $tempUserCoord['latitude'];
-                if (isset($tempUserCoord['longitude'])) $user->longitude = $tempUserCoord['longitude'];
-                if (isset($tempUserCoord['location_name'])) $user->location_name = $tempUserCoord['location_name'];
-                if (isset($tempUserCoord['battery_level'])) $user->battery_level = $tempUserCoord['battery_level'];
-                if (isset($tempUserCoord['is_charging'])) $user->is_charging = $tempUserCoord['is_charging'];
-                if (isset($tempUserCoord['status_note'])) $user->status_note = $tempUserCoord['status_note'];
-            }
-            if ($partner && ($tempPartnerCoord = \Cache::get("user_{$partner->id}_temp_coordinate"))) {
-                if (isset($tempPartnerCoord['latitude'])) $partner->latitude = $tempPartnerCoord['latitude'];
-                if (isset($tempPartnerCoord['longitude'])) $partner->longitude = $tempPartnerCoord['longitude'];
-                if (isset($tempPartnerCoord['location_name'])) $partner->location_name = $tempPartnerCoord['location_name'];
-                if (isset($tempPartnerCoord['battery_level'])) $partner->battery_level = $tempPartnerCoord['battery_level'];
-                if (isset($tempPartnerCoord['is_charging'])) $partner->is_charging = $tempPartnerCoord['is_charging'];
-                if (isset($tempPartnerCoord['status_note'])) $partner->status_note = $tempPartnerCoord['status_note'];
-            }
-
-            $photoUrl = $user->profile_photo_url;
-            if ($photoUrl && !str_starts_with($photoUrl, 'http')) {
-                $photoUrl = url($photoUrl);
-            }
-
-            $latestPhotoUrl = $user->latest_photo_url;
-            if ($latestPhotoUrl && !str_starts_with($latestPhotoUrl, 'http')) {
-                $latestPhotoUrl = url($latestPhotoUrl);
-            }
-
-            $partnerLatestPhotoUrl = null;
-            if ($partner) {
-                $partnerPhotoUrl = $partner->profile_photo_url;
-                if ($partnerPhotoUrl && !str_starts_with($partnerPhotoUrl, 'http')) {
-                    $partnerPhotoUrl = url($partnerPhotoUrl);
-                }
-                $partnerLatestPhotoUrl = $partner->latest_photo_url;
-                if ($partnerLatestPhotoUrl && !str_starts_with($partnerLatestPhotoUrl, 'http')) {
-                    $partnerLatestPhotoUrl = url($partnerLatestPhotoUrl);
-                }
-                $partnerData = $partner->toArray();
-                $partnerData['profile_photo_url'] = $partnerPhotoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($partner->name);
-            }
-
-            $togetherStreak = 0;
-            $totalMeetings = 0;
-            $isTogether = false;
-
-            if ($couple) {
-                $today = now()->toDateString();
-                $yesterday = now()->subDay()->toDateString();
-
-                // Reset streak if last meeting was before yesterday and not today
-                if ($couple->last_meeting_date && $couple->last_meeting_date !== $today && $couple->last_meeting_date !== $yesterday) {
-                    $couple->together_streak = 0;
-                    $couple->save();
+            $responseData = \Illuminate\Support\Facades\Cache::remember($cacheKey, 5, function() use ($user) {
+                \Illuminate\Support\Facades\Log::info("getState: Cache miss for user {$user->id}. Building state.");
+                // Find partner if in a couple
+                $partner = null;
+                $couple = null;
+                if ($user->couple_id) {
+                    $couple = \App\Models\Couple::find($user->couple_id);
+                    
+                    // Self-healing: if couple record doesn't exist, reset the ghost reference
+                    if (!$couple) {
+                        \Illuminate\Support\Facades\Log::warning("getState: Ghost couple reference detected for user {$user->id}. Resetting couple_id.");
+                        $user->update(['couple_id' => null]);
+                        $user->refresh();
+                    } else {
+                        $partner = \App\Models\User::where('couple_id', $user->couple_id)
+                            ->where('id', '!=', $user->id)
+                            ->first();
+                        \Illuminate\Support\Facades\Log::info("getState: User {$user->id} belongs to couple {$user->couple_id}. Partner ID: " . ($partner ? $partner->id : 'none'));
+                    }
+                } else {
+                    \Illuminate\Support\Facades\Log::info("getState: User {$user->id} is not in a couple.");
                 }
 
-                $togetherStreak = $couple->together_streak;
-                $totalMeetings = $couple->total_meetings;
+                // Apply temp coordinates from cache if available to prevent database lag reads
+                if ($tempUserCoord = \Cache::get("user_{$user->id}_temp_coordinate")) {
+                    if (isset($tempUserCoord['latitude'])) $user->latitude = $tempUserCoord['latitude'];
+                    if (isset($tempUserCoord['longitude'])) $user->longitude = $tempUserCoord['longitude'];
+                    if (isset($tempUserCoord['location_name'])) $user->location_name = $tempUserCoord['location_name'];
+                    if (isset($tempUserCoord['battery_level'])) $user->battery_level = $tempUserCoord['battery_level'];
+                    if (isset($tempUserCoord['is_charging'])) $user->is_charging = $tempUserCoord['is_charging'];
+                    if (isset($tempUserCoord['status_note'])) $user->status_note = $tempUserCoord['status_note'];
+                }
+                if ($partner && ($tempPartnerCoord = \Cache::get("user_{$partner->id}_temp_coordinate"))) {
+                    if (isset($tempPartnerCoord['latitude'])) $partner->latitude = $tempPartnerCoord['latitude'];
+                    if (isset($tempPartnerCoord['longitude'])) $partner->longitude = $tempPartnerCoord['longitude'];
+                    if (isset($tempPartnerCoord['location_name'])) $partner->location_name = $tempPartnerCoord['location_name'];
+                    if (isset($tempPartnerCoord['battery_level'])) $partner->battery_level = $tempPartnerCoord['battery_level'];
+                    if (isset($tempPartnerCoord['is_charging'])) $partner->is_charging = $tempPartnerCoord['is_charging'];
+                    if (isset($tempPartnerCoord['status_note'])) $partner->status_note = $tempPartnerCoord['status_note'];
+                }
 
+                $photoUrl = $user->profile_photo_url;
+                if ($photoUrl && !str_starts_with($photoUrl, 'http')) {
+                    $photoUrl = url($photoUrl);
+                }
+
+                $latestPhotoUrl = $user->latest_photo_url;
+                if ($latestPhotoUrl && !str_starts_with($latestPhotoUrl, 'http')) {
+                    $latestPhotoUrl = url($latestPhotoUrl);
+                }
+
+                $partnerLatestPhotoUrl = null;
                 if ($partner) {
-                    $isTogether = $this->checkAndRecordMeeting($user, $partner);
-                    $couple->refresh();
+                    $partnerPhotoUrl = $partner->profile_photo_url;
+                    if ($partnerPhotoUrl && !str_starts_with($partnerPhotoUrl, 'http')) {
+                        $partnerPhotoUrl = url($partnerPhotoUrl);
+                    }
+                    $partnerLatestPhotoUrl = $partner->latest_photo_url;
+                    if ($partnerLatestPhotoUrl && !str_starts_with($partnerLatestPhotoUrl, 'http')) {
+                        $partnerLatestPhotoUrl = url($partnerLatestPhotoUrl);
+                    }
+                    $partnerData = $partner->toArray();
+                    $partnerData['profile_photo_url'] = $partnerPhotoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($partner->name);
+                }
+
+                $togetherStreak = 0;
+                $totalMeetings = 0;
+                $isTogether = false;
+
+                if ($couple) {
+                    $today = now()->toDateString();
+                    $yesterday = now()->subDay()->toDateString();
+
+                    // Reset streak if last meeting was before yesterday and not today
+                    if ($couple->last_meeting_date && $couple->last_meeting_date !== $today && $couple->last_meeting_date !== $yesterday) {
+                        $couple->together_streak = 0;
+                        $couple->save();
+                    }
+
                     $togetherStreak = $couple->together_streak;
                     $totalMeetings = $couple->total_meetings;
+
+                    if ($partner) {
+                        $isTogether = $this->checkAndRecordMeeting($user, $partner);
+                        $couple->refresh();
+                        $togetherStreak = $couple->together_streak;
+                        $totalMeetings = $couple->total_meetings;
+                    }
                 }
-            }
 
-            $loveBurstInfo = \Illuminate\Support\Facades\Cache::get("couple_{$user->couple_id}_love_burst");
-            $loveBurstTimestamp = 0.0;
-            if ($loveBurstInfo && $loveBurstInfo['sender_id'] !== $user->id) {
-                $loveBurstTimestamp = (double)$loveBurstInfo['timestamp'];
-            }
+                $loveBurstInfo = \Illuminate\Support\Facades\Cache::get("couple_{$user->couple_id}_love_burst");
+                $loveBurstTimestamp = 0.0;
+                if ($loveBurstInfo && $loveBurstInfo['sender_id'] !== $user->id) {
+                    $loveBurstTimestamp = (double)$loveBurstInfo['timestamp'];
+                }
 
-            $activeSchedule = null;
-            $pendingInvitation = null;
-            if ($user->couple_id) {
-                // Get the closest accepted upcoming schedule
-                $activeSchedule = \App\Models\Schedule::where('couple_id', $user->couple_id)
-                    ->where('scheduled_at', '>=', now())
-                    ->where('status', 'accepted')
-                    ->orderBy('scheduled_at', 'asc')
-                    ->first();
-                
-                // Get the closest pending invitation from the partner
-                $pendingInvitation = \App\Models\Schedule::where('couple_id', $user->couple_id)
-                    ->where('scheduled_at', '>=', now())
-                    ->where('status', 'pending')
-                    ->where('creator_id', '!=', $user->id)
-                    ->orderBy('scheduled_at', 'asc')
-                    ->first();
-
-                // Fallback: if no accepted schedule, show pending schedule created by the user
-                if (!$activeSchedule) {
+                $activeSchedule = null;
+                $pendingInvitation = null;
+                if ($user->couple_id) {
+                    // Get the closest accepted upcoming schedule
                     $activeSchedule = \App\Models\Schedule::where('couple_id', $user->couple_id)
                         ->where('scheduled_at', '>=', now())
-                        ->where('status', 'pending')
-                        ->where('creator_id', $user->id)
+                        ->where('status', 'accepted')
                         ->orderBy('scheduled_at', 'asc')
                         ->first();
+                    
+                    // Get the closest pending invitation from the partner
+                    $pendingInvitation = \App\Models\Schedule::where('couple_id', $user->couple_id)
+                        ->where('scheduled_at', '>=', now())
+                        ->where('status', 'pending')
+                        ->where('creator_id', '!=', $user->id)
+                        ->orderBy('scheduled_at', 'asc')
+                        ->first();
+
+                    // Fallback: if no accepted schedule, show pending schedule created by the user
+                    if (!$activeSchedule) {
+                        $activeSchedule = \App\Models\Schedule::where('couple_id', $user->couple_id)
+                            ->where('scheduled_at', '>=', now())
+                            ->where('status', 'pending')
+                            ->where('creator_id', $user->id)
+                            ->orderBy('scheduled_at', 'asc')
+                            ->first();
+                    }
                 }
-            }
 
-            return [
-                'user' => [
-                    'id' => (int)$user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'invite_code' => $user->invite_code,
-                    'profile_photo_url' => $photoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($user->name),
-                    'born_date' => $user->born_date,
-                    'gender' => $user->gender,
-                    'couple_id' => $user->couple_id !== null ? (int)$user->couple_id : null,
-                    'latitude' => $user->latitude !== null ? (double)$user->latitude : null,
-                    'longitude' => $user->longitude !== null ? (double)$user->longitude : null,
-                    'location_name' => $user->location_name,
-                    'battery_level' => $user->battery_level !== null ? (int)$user->battery_level : null,
-                    'is_charging' => (bool)$user->is_charging,
-                    'is_sleeping' => (bool)\Cache::get("user_{$user->id}_is_sleeping", false),
-                    'status_note' => $user->status_note,
-                    'latest_photo_url' => $latestPhotoUrl,
-                    'last_updated' => $user->updated_at->toIso8601String(),
-                    'last_seen_message_id' => $user->last_seen_message_id !== null ? (int)$user->last_seen_message_id : null,
-                    'location_history' => $this->getFilteredHistory($user->location_history),
-                ],
-                'partner_data' => $partner ? [
-                    'id' => (int)$partner->id,
-                    'name' => $partner->name,
-                    'email' => $partner->email,
-                    'profile_photo_url' => $partnerPhotoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($partner->name),
-                    'born_date' => $partner->born_date,
-                    'gender' => $partner->gender,
-                    'couple_id' => $partner->couple_id !== null ? (int)$partner->couple_id : null,
-                    'latitude' => $partner->latitude !== null ? (double)$partner->latitude : null,
-                    'longitude' => $partner->longitude !== null ? (double)$partner->longitude : null,
-                    'location_name' => $partner->location_name,
-                    'battery_level' => $partner->battery_level !== null ? (int)$partner->battery_level : null,
-                    'is_charging' => (bool)$partner->is_charging,
-                    'is_sleeping' => (bool)\Cache::get("user_{$partner->id}_is_sleeping", false),
-                    'status_note' => $partner->status_note,
-                    'latest_photo_url' => $partnerLatestPhotoUrl,
-                    'last_updated' => $partner->updated_at->toIso8601String(),
-                    'last_seen_message_id' => $partner->last_seen_message_id !== null ? (int)$partner->last_seen_message_id : null,
-                    'location_history' => $this->getFilteredHistory($partner->location_history),
-                ] : null,
-                'anniversary_start_date' => $couple ? $couple->anniversary_start_date : null,
-                'paired_at' => $couple && $couple->created_at ? $couple->created_at->toIso8601String() : null,
-                'disconnect_requested_by' => $couple && $couple->disconnect_requested_by !== null ? (int)$couple->disconnect_requested_by : null,
-                'couple_active' => $couple ? (bool) $couple->is_active : false,
-                'invited_by' => $couple && $couple->invited_by !== null ? (int)$couple->invited_by : null,
-                'is_together' => $isTogether,
-                'together_streak' => (int)$togetherStreak,
-                'highest_together_streak' => $couple ? (int)$couple->highest_together_streak : 0,
-                'total_meetings' => (int)$totalMeetings,
-                'love_burst_timestamp' => $loveBurstTimestamp,
-                'active_schedule' => $this->formatSchedule($activeSchedule),
-                'pending_invitation' => $this->formatSchedule($pendingInvitation),
-            ];
-        });
+                $userLatestFlash = null;
+                if ($user->latest_photo_url) {
+                    $userLatestFlash = \App\Models\Flash::where('sender_id', $user->id)->latest()->first();
+                }
+                
+                $partnerLatestFlash = null;
+                if ($partner && $partner->latest_photo_url) {
+                    $partnerLatestFlash = \App\Models\Flash::where('sender_id', $partner->id)->latest()->first();
+                }
 
-        return response()->json($responseData);
+                return [
+                    'user' => [
+                        'id' => (int)$user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'email_verified_at' => $user->email_verified_at ? (\Carbon\Carbon::parse($user->email_verified_at)->toIso8601String()) : null,
+                        'invite_code' => $user->invite_code,
+                        'profile_photo_url' => $photoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($user->name),
+                        'born_date' => $user->born_date,
+                        'gender' => $user->gender,
+                        'couple_id' => $user->couple_id !== null ? (int)$user->couple_id : null,
+                        'latitude' => $user->latitude !== null ? (double)$user->latitude : null,
+                        'longitude' => $user->longitude !== null ? (double)$user->longitude : null,
+                        'location_name' => $user->location_name,
+                        'battery_level' => $user->battery_level !== null ? (int)$user->battery_level : null,
+                        'is_charging' => (bool)$user->is_charging,
+                        'is_sleeping' => (bool)\Cache::get("user_{$user->id}_is_sleeping", false),
+                        'status_note' => $user->status_note,
+                        'latest_photo_url' => $latestPhotoUrl,
+                        'latest_photo_latitude' => $userLatestFlash ? (double)$userLatestFlash->latitude : null,
+                        'latest_photo_longitude' => $userLatestFlash ? (double)$userLatestFlash->longitude : null,
+                        'latest_photo_location_name' => $userLatestFlash ? $userLatestFlash->location_name : null,
+                        'latest_photo_status_note' => $userLatestFlash ? $userLatestFlash->status_note : null,
+                        'latest_photo_battery_level' => $userLatestFlash ? ($userLatestFlash->battery_level !== null ? (int)$userLatestFlash->battery_level : null) : null,
+                        'latest_photo_created_at' => $userLatestFlash && $userLatestFlash->created_at ? $userLatestFlash->created_at->toIso8601String() : null,
+                        'last_updated' => $user->updated_at->toIso8601String(),
+                        'last_active_at' => $user->last_active_at ? ($user->last_active_at instanceof \Carbon\Carbon ? $user->last_active_at->toIso8601String() : \Carbon\Carbon::parse($user->last_active_at)->toIso8601String()) : null,
+                        'last_seen_message_id' => $user->last_seen_message_id !== null ? (int)$user->last_seen_message_id : null,
+                        'location_history' => $this->getFilteredHistory($this->getUserLocationHistory($user)),
+                    ],
+                    'partner_data' => $partner ? [
+                        'id' => (int)$partner->id,
+                        'name' => $partner->name,
+                        'email' => $partner->email,
+                        'email_verified_at' => $partner->email_verified_at ? (\Carbon\Carbon::parse($partner->email_verified_at)->toIso8601String()) : null,
+                        'profile_photo_url' => $partnerPhotoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($partner->name),
+                        'born_date' => $partner->born_date,
+                        'gender' => $partner->gender,
+                        'couple_id' => $partner->couple_id !== null ? (int)$partner->couple_id : null,
+                        'latitude' => $partner->latitude !== null ? (double)$partner->latitude : null,
+                        'longitude' => $partner->longitude !== null ? (double)$partner->longitude : null,
+                        'location_name' => $partner->location_name,
+                        'battery_level' => $partner->battery_level !== null ? (int)$partner->battery_level : null,
+                        'is_charging' => (bool)$partner->is_charging,
+                        'is_sleeping' => (bool)\Cache::get("user_{$partner->id}_is_sleeping", false),
+                        'status_note' => $partner->status_note,
+                        'latest_photo_url' => $partnerLatestPhotoUrl,
+                        'latest_photo_latitude' => $partnerLatestFlash ? (double)$partnerLatestFlash->latitude : null,
+                        'latest_photo_longitude' => $partnerLatestFlash ? (double)$partnerLatestFlash->longitude : null,
+                        'latest_photo_location_name' => $partnerLatestFlash ? $partnerLatestFlash->location_name : null,
+                        'latest_photo_status_note' => $partnerLatestFlash ? $partnerLatestFlash->status_note : null,
+                        'latest_photo_battery_level' => $partnerLatestFlash ? ($partnerLatestFlash->battery_level !== null ? (int)$partnerLatestFlash->battery_level : null) : null,
+                        'latest_photo_created_at' => $partnerLatestFlash && $partnerLatestFlash->created_at ? $partnerLatestFlash->created_at->toIso8601String() : null,
+                        'last_updated' => $partner->updated_at->toIso8601String(),
+                        'last_active_at' => $partner->last_active_at ? ($partner->last_active_at instanceof \Carbon\Carbon ? $partner->last_active_at->toIso8601String() : \Carbon\Carbon::parse($partner->last_active_at)->toIso8601String()) : null,
+                        'last_seen_message_id' => $partner->last_seen_message_id !== null ? (int)$partner->last_seen_message_id : null,
+                        'location_history' => $this->getFilteredHistory($this->getUserLocationHistory($partner)),
+                    ] : null,
+                    'anniversary_start_date' => $couple ? $couple->anniversary_start_date : null,
+                    'paired_at' => $couple && $couple->created_at ? $couple->created_at->toIso8601String() : null,
+                    'disconnect_requested_by' => $couple && $couple->disconnect_requested_by !== null ? (int)$couple->disconnect_requested_by : null,
+                    'couple_active' => $couple ? (bool) $couple->is_active : false,
+                    'invited_by' => $couple && $couple->invited_by !== null ? (int)$couple->invited_by : null,
+                    'is_together' => $isTogether,
+                    'together_streak' => (int)$togetherStreak,
+                    'highest_together_streak' => $couple ? (int)$couple->highest_together_streak : 0,
+                    'total_meetings' => (int)$totalMeetings,
+                    'daily_bumps' => $couple ? (int)\Cache::get("couple_{$couple->id}_bumps_on_" . now()->toDateString(), 0) : 0,
+                    'love_burst_timestamp' => $loveBurstTimestamp,
+                    'active_schedule' => $this->formatSchedule($activeSchedule),
+                    'pending_invitation' => $this->formatSchedule($pendingInvitation),
+                ];
+            });
+
+            return response()->json($responseData);
+
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("getState exception for user {$user->id}: " . $e->getMessage() . "\n" . $e->getTraceAsString());
+            return response()->json([
+                'message' => 'Internal server error in getState',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function updateProfile(Request $request)
@@ -195,11 +250,10 @@ class GlimpseController extends Controller
             'email' => 'sometimes|email|max:100|unique:users,email,' . $user->id,
             'born_date' => 'sometimes|nullable|date',
             'gender' => 'sometimes|nullable|string|in:male,female',
-            'profile_photo' => 'sometimes|image|max:5120'
+            'profile_photo' => 'sometimes|file|mimes:jpeg,png,jpg,gif,svg,webp|max:5120'
         ]);
 
         if ($request->has('name')) $user->name = $request->name;
-        if ($request->has('email')) $user->email = $request->email;
         if ($request->has('born_date')) $user->born_date = $request->born_date;
         if ($request->has('gender')) $user->gender = $request->gender;
         
@@ -211,12 +265,46 @@ class GlimpseController extends Controller
             $user->profile_photo_url = Storage::url($path);
         }
 
+        $emailChangePending = false;
+        if ($request->has('email') && $request->email !== $user->email) {
+            $emailChangePending = true;
+            $newEmail = $request->email;
+            
+            // Generate and cache OTP for new email
+            $otp = sprintf("%06d", mt_rand(100000, 999999));
+            \Illuminate\Support\Facades\Cache::put("pending_email_{$user->id}", $newEmail, 900);
+            \Illuminate\Support\Facades\Cache::put("pending_email_otp_{$user->id}", $otp, 900);
+            
+            // Send verification email to the new address
+            try {
+                \Illuminate\Support\Facades\Mail::to($newEmail)->send(new \App\Mail\EmailVerificationMail($user, $otp));
+                \Illuminate\Support\Facades\Log::info("Profile email change verification sent to {$newEmail}");
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("SMTP ERROR sending profile email verification: " . $e->getMessage());
+            }
+        }
+
         $user->save();
         $this->clearGlimpseCache($user->id);
         
         $photoUrl = $user->profile_photo_url;
         if ($photoUrl && !str_starts_with($photoUrl, 'http')) {
             $photoUrl = url($photoUrl);
+        }
+
+        if ($emailChangePending) {
+            return response()->json([
+                'message' => 'Profile updated. Verification code sent to your new email.',
+                'email_change_pending' => true,
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email, // keep current email
+                    'born_date' => $user->born_date,
+                    'gender' => $user->gender,
+                    'profile_photo_url' => $photoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($user->name),
+                ]
+            ]);
         }
 
         return response()->json([
@@ -230,6 +318,72 @@ class GlimpseController extends Controller
                 'profile_photo_url' => $photoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($user->name),
             ]
         ]);
+    }
+
+    public function verifyEmailChange(Request $request)
+    {
+        $request->validate([
+            'otp' => 'required|string|size:6'
+        ]);
+
+        $user = $request->user();
+        $pendingEmail = \Illuminate\Support\Facades\Cache::get("pending_email_{$user->id}");
+        $cachedOtp = \Illuminate\Support\Facades\Cache::get("pending_email_otp_{$user->id}");
+
+        if (!$pendingEmail || !$cachedOtp) {
+            return response()->json(['message' => 'No pending email change request found or verification code has expired.'], 422);
+        }
+
+        if ($cachedOtp !== $request->otp) {
+            return response()->json(['message' => 'Invalid or expired verification code'], 422);
+        }
+
+        // Save the new email and mark as verified
+        $user->email = $pendingEmail;
+        $user->email_verified_at = now();
+        $user->save();
+
+        // Clear cache
+        \Illuminate\Support\Facades\Cache::forget("pending_email_{$user->id}");
+        \Illuminate\Support\Facades\Cache::forget("pending_email_otp_{$user->id}");
+        $this->clearGlimpseCache($user->id);
+
+        $photoUrl = $user->profile_photo_url;
+        if ($photoUrl && !str_starts_with($photoUrl, 'http')) {
+            $photoUrl = url($photoUrl);
+        }
+
+        return response()->json([
+            'message' => 'Email updated successfully!',
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'born_date' => $user->born_date,
+                'gender' => $user->gender,
+                'profile_photo_url' => $photoUrl ?? "https://ui-avatars.com/api/?name=" . urlencode($user->name),
+            ]
+        ]);
+    }
+
+    public function resendEmailChangeVerification(Request $request)
+    {
+        $user = $request->user();
+        $pendingEmail = \Illuminate\Support\Facades\Cache::get("pending_email_{$user->id}");
+
+        if (!$pendingEmail) {
+            return response()->json(['message' => 'No pending email change request found.'], 422);
+        }
+
+        $otp = sprintf("%06d", mt_rand(100000, 999999));
+        \Illuminate\Support\Facades\Cache::put("pending_email_otp_{$user->id}", $otp, 900);
+
+        try {
+            \Illuminate\Support\Facades\Mail::to($pendingEmail)->send(new \App\Mail\EmailVerificationMail($user, $otp));
+            return response()->json(['message' => 'Verification code resent successfully to ' . $pendingEmail]);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Failed to send verification code. Please try again.'], 500);
+        }
     }
 
     public function updateRelationship(Request $request)
@@ -253,10 +407,26 @@ class GlimpseController extends Controller
         $request->validate(['invite_code' => 'required|string']);
         $user = $request->user();
         
+        // Self-healing: Clear ghost couple references for current user
+        if ($user->couple_id) {
+            if (!\App\Models\Couple::where('id', $user->couple_id)->exists()) {
+                $user->update(['couple_id' => null]);
+                \Illuminate\Support\Facades\Cache::forget("glimpse_state_user_{$user->id}");
+            }
+        }
+        
         $targetUser = \App\Models\User::where('invite_code', $request->invite_code)->first();
         
         if (!$targetUser) {
             return response()->json(['message' => 'Invalid invite code'], 404);
+        }
+        
+        // Self-healing: Clear ghost couple references for target user
+        if ($targetUser->couple_id) {
+            if (!\App\Models\Couple::where('id', $targetUser->couple_id)->exists()) {
+                $targetUser->update(['couple_id' => null]);
+                \Illuminate\Support\Facades\Cache::forget("glimpse_state_user_{$targetUser->id}");
+            }
         }
         
         if ($targetUser->id === $user->id) {
@@ -276,6 +446,17 @@ class GlimpseController extends Controller
         $user->update(['couple_id' => $coupleId]);
         $targetUser->update(['couple_id' => $coupleId]);
 
+        // Evict caches immediately so targetUser sees the invitation without any delay
+        $this->clearGlimpseCache($user->id);
+        $this->clearGlimpseCache($targetUser->id);
+
+        // Broadcast so the target user's app gets the pending invite instantly via WebSocket
+        try {
+            broadcast(new \App\Events\CoupleStatusChanged($coupleId, null, false));
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Connect broadcast failed: " . $e->getMessage());
+        }
+
         return response()->json(['message' => 'Invite sent successfully!', 'couple_id' => $coupleId]);
     }
 
@@ -287,6 +468,14 @@ class GlimpseController extends Controller
             if ($couple && $couple->is_active == 0) {
                 $couple->update(['is_active' => 1]);
                 $this->clearGlimpseCache($user->id);
+
+                // Broadcast to notify the inviter that their request was accepted
+                try {
+                    broadcast(new \App\Events\CoupleStatusChanged($user->couple_id, null, true));
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::warning("Accept connect broadcast failed: " . $e->getMessage());
+                }
+
                 return response()->json(['message' => 'Connected successfully!']);
             }
         }
@@ -298,9 +487,26 @@ class GlimpseController extends Controller
         $user = $request->user();
         if ($user->couple_id) {
             $coupleId = $user->couple_id;
+            
+            // Find ALL users in this couple BEFORE clearing anything
+            $coupleUsers = \App\Models\User::where('couple_id', $coupleId)->get();
+            
+            // Clear cache for ALL couple members
+            foreach ($coupleUsers as $u) {
+                \Illuminate\Support\Facades\Cache::forget("glimpse_state_user_{$u->id}");
+            }
+            
+            // Now break the relationship
             \App\Models\User::where('couple_id', $coupleId)->update(['couple_id' => null]);
             \App\Models\Couple::where('id', $coupleId)->delete();
-            $this->clearGlimpseCache($user->id);
+            
+            // Broadcast so partner's app reacts instantly
+            try {
+                broadcast(new \App\Events\CoupleStatusChanged($coupleId, null, false));
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::warning("Decline connect broadcast failed: " . $e->getMessage());
+            }
+            
             return response()->json(['message' => 'Connect request declined']);
         }
         return response()->json(['message' => 'No request found'], 400);
@@ -314,6 +520,11 @@ class GlimpseController extends Controller
             if ($couple) {
                 $couple->update(['disconnect_requested_by' => $user->id]);
                 $this->clearGlimpseCache($user->id);
+                try {
+                    broadcast(new \App\Events\CoupleStatusChanged($user->couple_id, $user->id, true))->toOthers();
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::warning("Disconnect broadcast failed: " . $e->getMessage());
+                }
             }
         }
         return response()->json(['message' => 'Disconnect request sent']);
@@ -324,9 +535,17 @@ class GlimpseController extends Controller
         $user = $request->user();
         if ($user->couple_id) {
             $coupleId = $user->couple_id;
+            try {
+                broadcast(new \App\Events\CoupleStatusChanged($coupleId, null, false))->toOthers();
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::warning("Approve disconnect broadcast failed: " . $e->getMessage());
+            }
+            
+            // CRITICAL: Clear cache BEFORE breaking relationship! Otherwise partner cannot be found!
+            $this->clearGlimpseCache($user->id);
+            
             \App\Models\User::where('couple_id', $coupleId)->update(['couple_id' => null]);
             \App\Models\Couple::where('id', $coupleId)->delete();
-            $this->clearGlimpseCache($user->id);
         }
         return response()->json(['message' => 'Partner disconnected']);
     }
@@ -339,6 +558,11 @@ class GlimpseController extends Controller
             if ($couple) {
                 $couple->update(['disconnect_requested_by' => null]);
                 $this->clearGlimpseCache($user->id);
+                try {
+                    broadcast(new \App\Events\CoupleStatusChanged($user->couple_id, null, true))->toOthers();
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::warning("Cancel disconnect broadcast failed: " . $e->getMessage());
+                }
             }
         }
         return response()->json(['message' => 'Disconnect request cancelled']);
@@ -347,7 +571,7 @@ class GlimpseController extends Controller
     public function uploadPhoto(Request $request)
     {
         $request->validate([
-            'photo' => 'required|image|max:10240', // Max 10MB
+            'photo' => 'required|file|mimes:jpeg,png,jpg,gif,svg,webp|max:10240', // Max 10MB
             'latitude' => 'nullable|numeric',
             'longitude' => 'nullable|numeric',
             'battery_level' => 'nullable|integer',
@@ -410,12 +634,10 @@ class GlimpseController extends Controller
             return response()->json([]);
         }
 
-        // Clean up flashes older than 7 days along with their images
-        $oldFlashes = \App\Models\Flash::where('created_at', '<', now()->subDays(7))->get();
+        // Clean up flashes older than 24 hours along with their images
+        $oldFlashes = \App\Models\Flash::where('created_at', '<', now()->subDays(1))->get();
         foreach ($oldFlashes as $oldFlash) {
-            if ($oldFlash->photo_url) {
-                \Illuminate\Support\Facades\Storage::disk('public')->delete(str_replace('/storage/', '', $oldFlash->photo_url));
-            }
+            $this->deleteFlashFile($oldFlash->photo_url);
             $oldFlash->delete();
         }
 
@@ -617,6 +839,20 @@ class GlimpseController extends Controller
         ]);
     }
 
+    public function requestSyncLocation(Request $request)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No couple ID found'], 400);
+        }
+        
+        $targetUserId = $request->input('target_user_id', $user->id);
+        
+        event(new \App\Events\SyncLocationRequested($user->couple_id, $targetUserId));
+
+        return response()->json(['message' => 'Sync location requested']);
+    }
+
     public function updateStatus(Request $request)
     {
         $isProtobuf = $request->header('Content-Type') === 'application/x-protobuf';
@@ -661,7 +897,7 @@ class GlimpseController extends Controller
             
             // Check if stationary (within ~30 meters of last coordinate in history)
             $isStationary = false;
-            $history = $user->location_history ?? [];
+            $history = $this->getUserLocationHistory($user);
             if (!empty($history)) {
                 $last = end($history);
                 $latDiff = abs($last['latitude'] - $lat);
@@ -802,11 +1038,9 @@ class GlimpseController extends Controller
         $lastDbWrite = (int)\Cache::get("user_{$user->id}_last_db_write", 0);
         $currentTime = time();
         $shouldSaveToDb = ($currentTime - $lastDbWrite) >= 10; // Save to DB at most once every 10 seconds
-
         if ($shouldSaveToDb) {
             $user->save();
             \Cache::put("user_{$user->id}_last_db_write", $currentTime, 3600);
-            $this->clearGlimpseCache($user->id);
         } else {
             // If throttling DB, we still save the coordinate in Cache to prevent stale reads
             \Cache::put("user_{$user->id}_temp_coordinate", [
@@ -819,6 +1053,9 @@ class GlimpseController extends Controller
                 'updated_at' => now()->toIso8601String()
             ], 60);
         }
+
+        // Always invalidate state caches so clients fetch fresh temp coordinates instantly
+        $this->clearGlimpseCache($user->id);
 
         // Broadcast live state updates to the partner instantly over WebSockets (ALWAYS broadcast!)
         try {
@@ -853,7 +1090,7 @@ class GlimpseController extends Controller
         $angle = 2 * asin(sqrt(pow(sin($latDelta / 2), 2) + cos($latFrom) * cos($latTo) * pow(sin($lonDelta / 2), 2)));
         $distance = $angle * $earthRadius;
 
-        $isTogether = ($distance <= 100); // 100 meters threshold
+        $isTogether = ($distance <= 250); // 250 meters threshold for GPS drift stability
 
         if ($isTogether) {
             $couple = \App\Models\Couple::find($user->couple_id);
@@ -889,11 +1126,22 @@ class GlimpseController extends Controller
         return $isTogether;
     }
 
+    private function getUserLocationHistory($user)
+    {
+        $cacheKey = "user_{$user->id}_location_history";
+        $history = \Cache::get($cacheKey);
+        if ($history === null) {
+            $history = is_array($user->location_history) ? $user->location_history : [];
+            \Cache::put($cacheKey, $history, 10800); // 3 hours cache
+        }
+        return $history;
+    }
+
     private function appendLocationHistory($user, $lat, $lng)
     {
         if ($lat === null || $lng === null) return;
 
-        $history = $user->location_history ?? [];
+        $history = $this->getUserLocationHistory($user);
         
         // Prevent duplicate consecutive updates
         if (!empty($history)) {
@@ -916,12 +1164,12 @@ class GlimpseController extends Controller
         });
         $history = array_values($history);
 
-        // Keep last 30 coordinates for the footprints trail
-        if (count($history) > 30) {
-            array_shift($history);
+        // Keep last 2 coordinates for the dead-reckoning (speed & heading extrapolation)
+        if (count($history) > 2) {
+            $history = array_slice($history, -2);
         }
 
-        $user->location_history = $history;
+        \Cache::put("user_{$user->id}_location_history", $history, 10800);
     }
 
     private function getFilteredHistory($history)
@@ -963,19 +1211,118 @@ class GlimpseController extends Controller
         ]);
     }
 
+    public function triggerBump(Request $request)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active relationship'], 400);
+        }
+
+        $couple = \App\Models\Couple::find($user->couple_id);
+        if (!$couple) {
+            return response()->json(['message' => 'Couple not found'], 404);
+        }
+
+        $partner = \App\Models\User::where('couple_id', $user->couple_id)
+            ->where('id', '!=', $user->id)
+            ->first();
+
+        if (!$partner) {
+            return response()->json(['message' => 'Partner not found'], 404);
+        }
+
+        // Cache handshake keys
+        $partnerShakeKey = "couple_{$couple->id}_shake_by_{$partner->id}";
+        $myShakeKey = "couple_{$couple->id}_shake_by_{$user->id}";
+
+        if (\Cache::has($partnerShakeKey)) {
+            // Both shook at the same time! Register the bump!
+            \Cache::forget($partnerShakeKey);
+            \Cache::forget($myShakeKey);
+
+            $today = now()->toDateString();
+            $yesterday = now()->subDay()->toDateString();
+
+            // Track daily bump count in cache
+            $cacheKey = "couple_{$couple->id}_bumps_on_{$today}";
+            $dailyBumps = (int)\Cache::get($cacheKey, 0);
+            $dailyBumps++;
+            \Cache::put($cacheKey, $dailyBumps, 86400); // 1 day TTL
+
+            if ($couple->last_meeting_date !== $today) {
+                // First bump/meetup of the day!
+                if ($couple->last_meeting_date === $yesterday) {
+                    $couple->together_streak += 1;
+                } else {
+                    $couple->together_streak = 1;
+                }
+                
+                if ($couple->together_streak > $couple->highest_together_streak) {
+                    $couple->highest_together_streak = $couple->together_streak;
+                }
+                
+                $couple->total_meetings += 1;
+                $couple->last_meeting_date = $today;
+                $couple->save();
+            }
+
+            $this->clearGlimpseCache($user->id);
+
+            // Broadcast bump count and total meetings
+            try {
+                broadcast(new \App\Events\LoveBumpSent($user->couple_id, $user->id, (int)$couple->total_meetings, $dailyBumps))->toOthers();
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Bump registered!',
+                'total_meetings' => (int)$couple->total_meetings,
+                'daily_bumps' => $dailyBumps
+            ]);
+        } else {
+            // Record current user shake and wait for partner (10 seconds timeout)
+            \Cache::put($myShakeKey, true, 10);
+
+            return response()->json([
+                'status' => 'waiting',
+                'message' => 'Waiting for partner to shake'
+            ]);
+        }
+    }
+
     public function broadcastTyping(Request $request)
     {
-        $request->validate(['is_typing' => 'required|boolean']);
+        $request->validate([
+            'is_typing' => 'required|boolean',
+            'room_id' => 'nullable|integer'
+        ]);
         $user = $request->user();
         if (!$user->couple_id) {
             return response()->json(['message' => 'No active couple'], 400);
         }
 
-        // Broadcast typing status with 0 database queries
+        // Update user's last active timestamp because they are active in the app (removed DB writes for performance)
         try {
-            broadcast(new \App\Events\PartnerTyping($user->couple_id, $user->id, $request->is_typing))->toOthers();
+            broadcast(new \App\Events\PartnerTyping($user->couple_id, $user->id, $request->is_typing, $request->room_id))->toOthers();
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+        }
+
+        return response()->json(['status' => 'ok']);
+    }
+
+    public function ping(Request $request)
+    {
+        $user = $request->user();
+        $user->last_active_at = now();
+        $user->save();
+
+        try {
+            broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed in ping: " . $e->getMessage());
         }
 
         return response()->json(['status' => 'ok']);
@@ -986,11 +1333,9 @@ class GlimpseController extends Controller
         \Illuminate\Support\Facades\Cache::forget("glimpse_state_user_{$userId}");
         $user = \App\Models\User::find($userId);
         if ($user && $user->couple_id) {
-            $partner = \App\Models\User::where('couple_id', $user->couple_id)
-                ->where('id', '!=', $userId)
-                ->first();
-            if ($partner) {
-                \Illuminate\Support\Facades\Cache::forget("glimpse_state_user_{$partner->id}");
+            $users = \App\Models\User::where('couple_id', $user->couple_id)->get();
+            foreach ($users as $u) {
+                \Illuminate\Support\Facades\Cache::forget("glimpse_state_user_{$u->id}");
             }
         }
     }
@@ -1073,6 +1418,34 @@ class GlimpseController extends Controller
         });
 
         return response()->json($formatted);
+    }
+
+    public function deleteSchedule(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'Not in a couple relationship'], 400);
+        }
+
+        $schedule = \App\Models\Schedule::where('couple_id', $user->couple_id)
+            ->where('id', $id)
+            ->first();
+
+        if (!$schedule) {
+            return response()->json(['message' => 'Schedule not found'], 404);
+        }
+
+        if ($schedule->creator_id !== $user->id) {
+            return response()->json(['message' => 'Only the creator can delete this invitation'], 403);
+        }
+
+        $schedule->delete();
+
+        try {
+            broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
+        } catch (\Exception $e) {}
+
+        return response()->json(['message' => 'Schedule successfully deleted']);
     }
 
     private function formatSchedule($schedule)
@@ -1171,6 +1544,9 @@ class GlimpseController extends Controller
                 'couple_id' => (int)$room->couple_id,
                 'name' => (string)$room->name,
                 'is_main' => (bool)$room->is_main,
+                'theme_color' => $room->theme_color,
+                'background_color' => $room->background_color,
+                'delete_requested_by' => $room->delete_requested_by ? (int)$room->delete_requested_by : null,
                 'latest_message' => $latestMessage ? [
                     'id' => (int)$latestMessage->id,
                     'message' => (string)$latestMessage->message,
@@ -1210,6 +1586,7 @@ class GlimpseController extends Controller
             'couple_id' => (int)$room->couple_id,
             'name' => (string)$room->name,
             'is_main' => (bool)$room->is_main,
+            'delete_requested_by' => null,
             'latest_message' => null,
             'unread_count' => 0,
             'created_at' => \Carbon\Carbon::parse($room->created_at)->toIso8601String(),
@@ -1302,5 +1679,396 @@ class GlimpseController extends Controller
                 'name' => $newName
             ]
         ]);
+    }
+
+    public function updateChatRoomTheme(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        $request->validate([
+            'theme_color' => 'nullable|string|max:20',
+            'background_color' => 'nullable|string|max:20'
+        ]);
+
+        $room = \DB::table('chat_rooms')
+            ->where('couple_id', $user->couple_id)
+            ->where('id', $id)
+            ->first();
+
+        if (!$room) {
+            return response()->json(['message' => 'Chat room not found'], 404);
+        }
+
+        $themeColor = $request->input('theme_color');
+        $backgroundColor = $request->input('background_color');
+
+        \DB::table('chat_rooms')->where('id', $id)->update([
+            'theme_color' => $themeColor,
+            'background_color' => $backgroundColor,
+            'updated_at' => now()
+        ]);
+
+        try {
+            broadcast(new \App\Events\ChatRoomThemeUpdated($user->couple_id, (int)$id, $themeColor, $backgroundColor))->toOthers();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+        }
+
+        return response()->json([
+            'status' => 'ok',
+            'room' => [
+                'id' => (int)$id,
+                'theme_color' => $themeColor,
+                'background_color' => $backgroundColor
+            ]
+        ]);
+    }
+
+    public function acknowledgeFlash(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        $flash = \App\Models\Flash::where('couple_id', $user->couple_id)
+            ->where('id', $id)
+            ->first();
+
+        if ($flash) {
+            $this->deleteFlashFile($flash->photo_url);
+            $flash->delete();
+        }
+
+        return response()->json(['status' => 'ok']);
+    }
+
+    private function deleteFlashFile($photoUrl)
+    {
+        if (!$photoUrl) return;
+        $path = parse_url($photoUrl, PHP_URL_PATH);
+        $path = preg_replace('/^\/?storage\//', '', $path);
+        \Illuminate\Support\Facades\Storage::disk('public')->delete($path);
+    }
+
+    public function clearChatRoom(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        $room = \DB::table('chat_rooms')
+            ->where('id', $id)
+            ->where('couple_id', $user->couple_id)
+            ->first();
+
+        if (!$room) {
+            return response()->json(['message' => 'Room not found'], 404);
+        }
+
+        // Fetch all audio messages in this room to delete their files from storage
+        $audioMessages = \App\Models\Message::where('couple_id', $user->couple_id)
+            ->where(function($q) use ($id, $room) {
+                $q->where('room_id', $id);
+                if ($room->is_main) {
+                    $q->orWhereNull('room_id');
+                }
+            })
+            ->where('is_audio', true)
+            ->whereNotNull('audio_path')
+            ->get();
+
+        foreach ($audioMessages as $msg) {
+            if (\Illuminate\Support\Facades\Storage::disk('public')->exists($msg->audio_path)) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($msg->audio_path);
+            }
+        }
+
+        // Delete all messages in this room
+        \App\Models\Message::where('room_id', $id)
+            ->where('couple_id', $user->couple_id)
+            ->delete();
+
+        // Also delete messages with null room_id if it's the main room just in case
+        if ($room->is_main) {
+            \App\Models\Message::whereNull('room_id')
+                ->where('couple_id', $user->couple_id)
+                ->delete();
+        }
+
+        return response()->json(['status' => 'ok']);
+    }
+
+    public function requestDeleteChatRoom(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        $room = \DB::table('chat_rooms')
+            ->where('couple_id', $user->couple_id)
+            ->where('id', $id)
+            ->first();
+
+        if (!$room) {
+            return response()->json(['message' => 'Chat room not found'], 404);
+        }
+
+        \DB::table('chat_rooms')->where('id', $id)->update([
+            'delete_requested_by' => $user->id,
+            'updated_at' => now()
+        ]);
+
+        try {
+            broadcast(new \App\Events\ChatRoomDeleteStatusChanged($user->couple_id, (int)$id, (int)$user->id))->toOthers();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+        }
+
+        return response()->json(['status' => 'ok', 'delete_requested_by' => $user->id]);
+    }
+
+    public function declineDeleteChatRoom(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        $room = \DB::table('chat_rooms')
+            ->where('couple_id', $user->couple_id)
+            ->where('id', $id)
+            ->first();
+
+        if (!$room) {
+            return response()->json(['message' => 'Chat room not found'], 404);
+        }
+
+        \DB::table('chat_rooms')->where('id', $id)->update([
+            'delete_requested_by' => null,
+            'updated_at' => now()
+        ]);
+
+        try {
+            broadcast(new \App\Events\ChatRoomDeleteStatusChanged($user->couple_id, (int)$id, null))->toOthers();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+        }
+
+        return response()->json(['status' => 'ok']);
+    }
+
+    public function confirmDeleteChatRoom(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        $room = \DB::table('chat_rooms')
+            ->where('couple_id', $user->couple_id)
+            ->where('id', $id)
+            ->first();
+
+        if (!$room) {
+            return response()->json(['message' => 'Chat room not found'], 404);
+        }
+
+        if ($room->delete_requested_by === null) {
+            return response()->json(['message' => 'No delete request active for this room'], 400);
+        }
+
+        if ($room->is_main) {
+            // Delete all audio files from storage first
+            $audioMessages = \App\Models\Message::where('couple_id', $user->couple_id)
+                ->where(function($q) use ($room) {
+                    $q->where('room_id', $room->id)
+                      ->orWhereNull('room_id');
+                })
+                ->where('is_audio', true)
+                ->whereNotNull('audio_path')
+                ->get();
+
+            foreach ($audioMessages as $msg) {
+                if (\Illuminate\Support\Facades\Storage::disk('public')->exists($msg->audio_path)) {
+                    \Illuminate\Support\Facades\Storage::disk('public')->delete($msg->audio_path);
+                }
+            }
+
+            // Delete all messages in this room
+            \DB::table('messages')
+                ->where('couple_id', $user->couple_id)
+                ->where(function($q) use ($room) {
+                    $q->where('room_id', $room->id)
+                      ->orWhereNull('room_id');
+                })
+                ->delete();
+
+            \DB::table('chat_rooms')->where('id', $id)->update([
+                'delete_requested_by' => null,
+                'updated_at' => now()
+            ]);
+
+            try {
+                broadcast(new \App\Events\ChatRoomDeleteStatusChanged($user->couple_id, (int)$id, null))->toOthers();
+                broadcast(new \App\Events\ChatRoomDeleted($user->couple_id, (int)$id))->toOthers();
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+            }
+
+            return response()->json(['status' => 'cleared']);
+        } else {
+            // Delete all audio files from storage first for the non-main room
+            $audioMessages = \App\Models\Message::where('couple_id', $user->couple_id)
+                ->where('room_id', $id)
+                ->where('is_audio', true)
+                ->whereNotNull('audio_path')
+                ->get();
+
+            foreach ($audioMessages as $msg) {
+                if (\Illuminate\Support\Facades\Storage::disk('public')->exists($msg->audio_path)) {
+                    \Illuminate\Support\Facades\Storage::disk('public')->delete($msg->audio_path);
+                }
+            }
+
+            \DB::table('chat_rooms')->where('id', $id)->delete();
+
+            try {
+                broadcast(new \App\Events\ChatRoomDeleted($user->couple_id, (int)$id))->toOthers();
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+            }
+
+            return response()->json(['status' => 'deleted']);
+        }
+    }
+
+    public function uploadAudio(Request $request)
+    {
+        $request->validate([
+            'audio' => 'required|file|mimes:m4a,mp4,audio/mp4,audio/x-m4a,application/octet-stream|max:5120',
+            'duration' => 'required|numeric',
+            'room_id' => 'nullable|integer'
+        ]);
+
+        $user = $request->user();
+
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        $couple = \App\Models\Couple::find($user->couple_id);
+        if (!$couple || $couple->is_active == 0) {
+            return response()->json(['message' => 'Relationship is not active'], 400);
+        }
+
+        $roomId = $request->input('room_id');
+        if (!$roomId) {
+            $mainRoom = \DB::table('chat_rooms')
+                ->where('couple_id', $user->couple_id)
+                ->where('is_main', true)
+                ->first();
+                
+            if (!$mainRoom) {
+                $roomId = \DB::table('chat_rooms')->insertGetId([
+                    'couple_id' => $user->couple_id,
+                    'name' => 'General Chat',
+                    'is_main' => true,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            } else {
+                $roomId = $mainRoom->id;
+            }
+        }
+
+        $path = $request->file('audio')->store('chat_audios', 'public');
+
+        $msg = \App\Models\Message::create([
+            'couple_id' => $user->couple_id,
+            'sender_id' => $user->id,
+            'message' => '🎵 Sent a voice note',
+            'room_id' => $roomId,
+            'is_audio' => true,
+            'audio_path' => $path,
+            'audio_duration' => (double)$request->input('duration'),
+            'audio_expired' => false
+        ]);
+
+        if ($msg->id > $user->last_seen_message_id) {
+            $user->last_seen_message_id = $msg->id;
+        }
+        $map = json_decode($user->last_seen_room_messages ?: '{}', true) ?: [];
+        $map[$roomId ?: 0] = (int)$msg->id;
+        $user->last_seen_room_messages = json_encode($map);
+        $user->save();
+        $this->clearGlimpseCache($user->id);
+
+        try {
+            broadcast(new \App\Events\MessageSent($msg))->toOthers();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+        }
+
+        if ($request->header('Accept') === 'application/x-protobuf') {
+            $protobufBinary = \App\Helpers\GlimpseProtobuf::encodeMessage($msg);
+            return response($protobufBinary)->header('Content-Type', 'application/x-protobuf');
+        }
+
+        return response()->json($msg);
+    }
+
+    public function downloadAudio(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        $msg = \App\Models\Message::where('id', $id)
+            ->where('couple_id', $user->couple_id)
+            ->first();
+
+        if (!$msg || !$msg->is_audio) {
+            return response()->json(['message' => 'Audio message not found'], 404);
+        }
+
+        if ($msg->audio_expired || !$msg->audio_path) {
+            return response()->json(['message' => 'Voice note has expired'], 410);
+        }
+
+        $filePath = $msg->audio_path;
+
+        if (!\Storage::disk('public')->exists($filePath)) {
+            $msg->update([
+                'audio_expired' => true,
+                'audio_path' => null
+            ]);
+            return response()->json(['message' => 'Audio file missing'], 404);
+        }
+
+        $fileContent = \Storage::disk('public')->get($filePath);
+        $mimeType = \Storage::disk('public')->mimeType($filePath) ?: 'audio/x-m4a';
+
+        // Delete from server storage disk only if downloaded by the partner (not the sender)
+        if ((int)$user->id !== (int)$msg->sender_id) {
+            $deleted = \Storage::disk('public')->delete($filePath);
+            if (!$deleted) {
+                \Illuminate\Support\Facades\Log::warning("Failed to delete audio file from public storage: {$filePath}");
+            }
+            $msg->update([
+                'audio_path' => null,
+                'audio_expired' => true
+            ]);
+        }
+
+        return response($fileContent)
+            ->header('Content-Type', $mimeType)
+            ->header('Content-Disposition', 'attachment; filename="voice_whisper_' . $id . '.m4a"');
     }
 }

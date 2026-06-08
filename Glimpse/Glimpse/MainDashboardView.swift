@@ -5,6 +5,7 @@ import MapKit
 
 struct MainDashboardView: View {
     @State private var auth = AuthManager.shared
+    @ObservedObject private var audioPlayerManager = AudioPlayManager.shared
     @State private var togetherAnimation = false
     @State private var streakPulse = false
     @State private var lastSeenLoveBurstTimestamp: Double = 0.0
@@ -38,6 +39,13 @@ struct MainDashboardView: View {
     @State private var dashboardToastMessage = ""
     @State private var showDashboardToast = false
     @State private var isDashboardToastSuccess = true
+    
+    // Bump Animation State
+    @State private var isShowingBumpAnimation = false
+    @State private var lastSeenLoveBumpTimestamp: Double = 0.0
+    @State private var playerDragOffset: CGFloat = 0
+    @State private var isPlayerDismissing = false
+    @AppStorage("glimpse_theme_accent", store: UserDefaults(suiteName: "group.glimpse.app")) private var themeAccentHex = "00FFFF"
     
     private var headerOpacity: Double {
         if auth.selectedTab == 0 {
@@ -120,7 +128,7 @@ struct MainDashboardView: View {
         @Bindable var bindableAuth = auth
         return ZStack(alignment: .top) {
             // GLOBAL BACKGROUND to fill safe areas
-            Color.deepVelvet.ignoresSafeArea()
+            Color.adaptiveBackground.ignoresSafeArea()
             
             // Standard Native TabView
             TabView(selection: $bindableAuth.selectedTab) {
@@ -145,7 +153,7 @@ struct MainDashboardView: View {
                                 .foregroundColor(.white.opacity(0.8))
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.deepVelvet)
+                        .background(Color.adaptiveBackground)
                     }
                 }
                 .tabItem {
@@ -208,21 +216,7 @@ struct MainDashboardView: View {
             // GLOBAL POP HEARTS OVERLAY (BOTTOM TO TOP FLOATERS)
             ZStack {
                 ForEach(popHearts) { heart in
-                    Group {
-                        if let emoji = heart.emojiString {
-                            Text(emoji)
-                                .font(.system(size: 32))
-                                .scaleEffect(heart.scale)
-                        } else if let sysName = heart.systemName {
-                            Image(systemName: sysName)
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(.red)
-                                .scaleEffect(heart.scale)
-                        }
-                    }
-                    .rotationEffect(.degrees(heart.rotation))
-                    .opacity(heart.opacity)
-                    .offset(x: heart.x, y: heart.y)
+                    PopHeartView(heart: heart)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -262,8 +256,188 @@ struct MainDashboardView: View {
                 .zIndex(9999)
             }
             
+            // Premium Bump Popup overlay
+            if isShowingBumpAnimation {
+                PremiumBumpPopup(
+                    totalMeetings: auth.totalMeetings,
+                    dailyBumps: auth.dailyBumps,
+                    onDismiss: {
+                        withAnimation {
+                            isShowingBumpAnimation = false
+                        }
+                    }
+                )
+                .zIndex(10000)
+            }
             
-            // Empty placeholder for sheet trigger, detail logic is now in a sheet presentation.
+            // FLOATING AUDIO PLAYER OVERLAY
+            if let playingMsg = audioPlayerManager.playingMessage,
+               audioPlayerManager.playingMessageId != nil,
+               !isInsideActiveChatRoomOfPlayingMessage {
+                
+                VStack {
+                    Spacer()
+                    
+                    HStack(spacing: 12) {
+                        // Play/Pause button
+                        Button {
+                            if audioPlayerManager.isPlaying {
+                                audioPlayerManager.pause()
+                            } else {
+                                audioPlayerManager.resume()
+                            }
+                        } label: {
+                            Image(systemName: audioPlayerManager.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 36, height: 36)
+                                .background(Color.white.opacity(0.15))
+                                .clipShape(Circle())
+                        }
+                        
+                        // Text & Progress Bar (Tap to Navigate)
+                        VStack(alignment: .leading, spacing: 4) {
+                            let isMe = playingMsg.sender_id == auth.currentUser?.id
+                            let displayName = isMe ? "You" : (auth.partner?.name ?? "Partner")
+                            Text("Voice Note from \(displayName)")
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                            
+                            // Simple linear progress bar
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    RoundedRectangle(cornerRadius: 2)
+                                        .fill(Color.white.opacity(0.2))
+                                        .frame(height: 4)
+                                    
+                                    let progress = audioPlayerManager.totalDuration > 0 ? CGFloat(audioPlayerManager.currentTime / audioPlayerManager.totalDuration) : 0.0
+                                    RoundedRectangle(cornerRadius: 2)
+                                        .fill(Color(hex: themeAccentHex))
+                                        .frame(width: geo.size.width * progress, height: 4)
+                                }
+                            }
+                            .frame(height: 4)
+                        }
+                        
+                        // Speed Adjustment Button (1x / 1.5x / 2x)
+                        Button {
+                            let currentSpeed = audioPlayerManager.playbackSpeed
+                            let nextSpeed: Float
+                            if currentSpeed == 1.0 {
+                                nextSpeed = 1.5
+                            } else if currentSpeed == 1.5 {
+                                nextSpeed = 2.0
+                            } else {
+                                nextSpeed = 1.0
+                            }
+                            audioPlayerManager.setSpeed(nextSpeed)
+                        } label: {
+                            let speedText = audioPlayerManager.playbackSpeed == 1.5 ? "1.5x" : (audioPlayerManager.playbackSpeed == 2.0 ? "2x" : "1x")
+                            Text(speedText)
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                                .frame(width: 38, height: 26)
+                                .background(Color.white.opacity(0.15))
+                                .cornerRadius(6)
+                        }
+                        
+                        // Close/Stop button
+                        Button {
+                            audioPlayerManager.stop()
+                            audioPlayerManager.playingMessage = nil
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color(hex: themeAccentHex).opacity(0.4), lineWidth: 1.5)
+                    )
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 64)
+                    .shadow(color: Color.black.opacity(0.4), radius: 10, y: 5)
+                    .offset(y: playerDragOffset)
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                if isPlayerDismissing { return }
+                                
+                                playerDragOffset = value.translation.height
+                                
+                                let threshold: CGFloat = 80
+                                if value.translation.height > threshold {
+                                    isPlayerDismissing = true
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                        playerDragOffset = 300
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                        audioPlayerManager.stop()
+                                        audioPlayerManager.playingMessage = nil
+                                        playerDragOffset = 0
+                                        isPlayerDismissing = false
+                                    }
+                                } else if value.translation.height < -threshold {
+                                    isPlayerDismissing = true
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                        playerDragOffset = -300
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                        audioPlayerManager.stop()
+                                        audioPlayerManager.playingMessage = nil
+                                        playerDragOffset = 0
+                                        isPlayerDismissing = false
+                                    }
+                                }
+                            }
+                            .onEnded { value in
+                                if isPlayerDismissing { return }
+                                
+                                let threshold: CGFloat = 70
+                                let velocity = value.predictedEndTranslation.height - value.translation.height
+                                
+                                if value.translation.height > threshold || velocity > 150 {
+                                    isPlayerDismissing = true
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                        playerDragOffset = 300
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                        audioPlayerManager.stop()
+                                        audioPlayerManager.playingMessage = nil
+                                        playerDragOffset = 0
+                                        isPlayerDismissing = false
+                                    }
+                                } else if value.translation.height < -threshold || velocity < -150 {
+                                    isPlayerDismissing = true
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                        playerDragOffset = -300
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                        audioPlayerManager.stop()
+                                        audioPlayerManager.playingMessage = nil
+                                        playerDragOffset = 0
+                                        isPlayerDismissing = false
+                                    }
+                                } else {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                        playerDragOffset = 0
+                                    }
+                                }
+                            }
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(500)
+                }
+            }
         }
         .onAppear {
             LiveLocationManager.shared.startTracking()
@@ -275,7 +449,14 @@ struct MainDashboardView: View {
         .onReceive(dashboardPollTimer) { _ in
             currentTime = Date()
             pollCounter += 1
-            // 100% relying on WebSockets for real-time data sync!
+            
+            // WebSockets are not connected when coupleActive is false.
+            // Poll state periodically (every 4 seconds) to detect partner connections and pending invite status changes in real-time.
+            if !auth.coupleActive && pollCounter % 4 == 0 {
+                Task {
+                    try? await auth.fetchState()
+                }
+            }
         }
         // React instantly to real-time Love Burst triggers via WebSocket
         .onChange(of: auth.lastLoveBurstTimestamp) { oldValue, newValue in
@@ -337,6 +518,31 @@ struct MainDashboardView: View {
                 toastMessage: $dashboardToastMessage,
                 toastSuccess: $isDashboardToastSuccess
             )
+        }
+        .onShake {
+            if auth.isTogether && auth.coupleActive {
+                UISelectionFeedbackGenerator().selectionChanged()
+                Task {
+                    try? await auth.triggerServerBump()
+                }
+            }
+        }
+        .onChange(of: auth.lastLoveBumpTimestamp) { oldValue, newValue in
+            if newValue > lastSeenLoveBumpTimestamp {
+                lastSeenLoveBumpTimestamp = newValue
+                if auth.isTogether && auth.coupleActive {
+                    withAnimation {
+                        isShowingBumpAnimation = true
+                    }
+                    
+                    // Auto-dismiss after 4.0 seconds
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+                        withAnimation {
+                            isShowingBumpAnimation = false
+                        }
+                    }
+                }
+            }
         }
     }
     
@@ -1186,124 +1392,7 @@ struct MainDashboardView: View {
                                     
                                     VStack(spacing: 12) {
                                         ForEach(visibleFlashes) { flash in
-                                            let isExpanded = expandedFlashId == flash.id
-                                            let isMe = flash.sender_id == auth.currentUser?.id
-                                            
-                                            VStack(spacing: 0) {
-                                                // HEADER ROW
-                                                Button {
-                                                    UISelectionFeedbackGenerator().selectionChanged()
-                                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-                                                        if isExpanded {
-                                                            expandedFlashId = nil
-                                                        } else {
-                                                            expandedFlashId = flash.id
-                                                        }
-                                                    }
-                                                } label: {
-                                                    HStack {
-                                                        VStack(alignment: .leading, spacing: 4) {
-                                                            HStack(spacing: 6) {
-                                                                Circle()
-                                                                    .fill(Color.activeCyan)
-                                                                    .frame(width: 6, height: 6)
-                                                                    .shadow(color: Color.activeCyan, radius: 4)
-                                                                
-                                                                Text(isMe ? "You" : flash.sender_name)
-                                                                    .font(.system(size: 13, weight: .bold))
-                                                                    .foregroundColor(.white)
-                                                            }
-                                                            
-                                                            Text(formatFlashTime(flash.createdDate))
-                                                                .font(.system(size: 11))
-                                                                .foregroundColor(.white.opacity(0.5))
-                                                        }
-                                                        
-                                                        Spacer()
-                                                        
-                                                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                                                            .font(.system(size: 12, weight: .bold))
-                                                            .foregroundColor(.white.opacity(0.5))
-                                                    }
-                                                    .padding(.horizontal, 14)
-                                                    .padding(.vertical, 12)
-                                                    .background(Color.white.opacity(0.03))
-                                                }
-                                                .buttonStyle(PlainButtonStyle())
-                                                
-                                                // CONTENT BODY (EXPANDABLE)
-                                                if isExpanded {
-                                                    VStack(alignment: .leading, spacing: 12) {
-                                                        HStack(spacing: 8) {
-                                                            // Left side: Photo (1:1 Ratio - Sebelahan)
-                                                            CachedImageView(urlString: flash.photo_url)
-                                                                .aspectRatio(contentMode: .fill)
-                                                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                                                .aspectRatio(1.0, contentMode: .fit)
-                                                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                                                .overlay(
-                                                                    RoundedRectangle(cornerRadius: 12)
-                                                                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                                                                )
-                                                            
-                                                            // Right side: Map View (1:1 Ratio - Sebelahan)
-                                                            if let lat = flash.latitude, lat != 0.0,
-                                                               let lon = flash.longitude, lon != 0.0 {
-                                                                Map(initialPosition: .region(MKCoordinateRegion(
-                                                                    center: flash.coordinate,
-                                                                    span: MKCoordinateSpan(latitudeDelta: 0.003, longitudeDelta: 0.003)
-                                                                ))) {
-                                                                    Annotation(flash.sender_name, coordinate: flash.coordinate) {
-                                                                        ZStack {
-                                                                            Circle()
-                                                                                .fill(Color.activeCyan.opacity(0.3))
-                                                                                .frame(width: 32, height: 32)
-                                                                            
-                                                                            Circle()
-                                                                                .stroke(Color.activeCyan, lineWidth: 2)
-                                                                                .frame(width: 18, height: 18)
-                                                                                .shadow(color: Color.activeCyan, radius: 4)
-                                                                        }
-                                                                    }
-                                                                }
-                                                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                                                .aspectRatio(1.0, contentMode: .fit)
-                                                                .cornerRadius(12)
-                                                                .overlay(
-                                                                    RoundedRectangle(cornerRadius: 12)
-                                                                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                                                                )
-                                                            }
-                                                        }
-                                                        .frame(height: 155)
-                                                        
-                                                        // Location Detail Row (with background fallback resolver)
-                                                        FlashLocationRow(flash: flash)
-                                                        
-                                                        // Kabar / Status Note Row
-                                                        if let note = flash.status_note, !note.isEmpty {
-                                                            Text("\"\(note)\"")
-                                                                .font(.system(size: 13, weight: .regular, design: .rounded))
-                                                                .italic()
-                                                                .foregroundColor(.white.opacity(0.8))
-                                                                .padding(.horizontal, 10)
-                                                                .padding(.vertical, 8)
-                                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                                                .background(Color.white.opacity(0.04))
-                                                                .cornerRadius(8)
-                                                        }
-                                                    }
-                                                    .padding(14)
-                                                    .background(Color.white.opacity(0.01))
-                                                    .transition(.opacity.combined(with: .move(edge: .top)))
-                                                }
-                                            }
-                                            .background(Color.black.opacity(0.2))
-                                            .cornerRadius(12)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                                            )
+                                            flashRow(for: flash)
                                         }
                                     }
                                     
@@ -1392,7 +1481,20 @@ struct MainDashboardView: View {
                                         .padding(.horizontal, 20)
                                     
                                     Button {
-                                        Task { try? await auth.declineConnectRequest() }
+                                        Task {
+                                            do {
+                                                try await auth.declineConnectRequest()
+                                            } catch {
+                                                await MainActor.run {
+                                                    dashboardToastMessage = error.localizedDescription
+                                                    isDashboardToastSuccess = false
+                                                    withAnimation { showDashboardToast = true }
+                                                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                                        withAnimation { showDashboardToast = false }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     } label: {
                                         Text("Cancel Request")
                                             .font(.headline)
@@ -1514,6 +1616,9 @@ struct MainDashboardView: View {
             .refreshable {
                 try? await auth.fetchState()
                 _ = try? await auth.fetchFlashes()
+                await MainActor.run {
+                    auth.dashboardRefreshTrigger.toggle()
+                }
             }
             .onChange(of: auth.selectedTab) { oldValue, newValue in
                 if newValue == 0 { // Home tab
@@ -1659,6 +1764,8 @@ struct MainDashboardView: View {
         // System pop sound effect
         AudioServicesPlaySystemSound(1306)
         
+        var newHearts: [PopHeart] = []
+        
         // 5 elegant lightweight floating hearts
         for _ in 0..<5 {
             let heartId = UUID()
@@ -1673,36 +1780,33 @@ struct MainDashboardView: View {
             let screenHeight = UIScreen.main.bounds.height
             let endY = -screenHeight - 100
             
+            let duration = Double.random(in: 1.8...2.5)
+            
             let particle = PopHeart(
                 id: heartId,
-                x: startX,
-                y: startY,
-                scale: CGFloat.random(in: 0.6...1.1),
+                startX: startX,
+                endX: endX,
+                startY: startY,
+                endY: endY,
+                startScale: CGFloat.random(in: 0.6...1.1),
+                targetScale: CGFloat.random(in: 0.6...1.1) * 1.2,
                 color: .red,
-                opacity: 1.0,
-                rotation: Double.random(in: -20...20),
+                startRotation: Double.random(in: -20...20),
+                targetRotation: Double.random(in: -20...20) + Double.random(in: -40...40),
                 systemName: "heart.fill",
-                emojiString: nil
+                emojiString: nil,
+                duration: duration
             )
             
-            self.popHearts.append(particle)
-            
-            // Animate floats upward beautifully
-            withAnimation(.easeOut(duration: CGFloat.random(in: 1.8...2.5))) {
-                if let idx = self.popHearts.firstIndex(where: { $0.id == heartId }) {
-                    self.popHearts[idx].x = endX
-                    self.popHearts[idx].y = endY
-                    self.popHearts[idx].opacity = 0.0
-                    self.popHearts[idx].scale *= 1.2
-                    self.popHearts[idx].rotation += Double.random(in: -40...40)
-                }
-            }
+            newHearts.append(particle)
             
             // Clean up when animation ends
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.1) {
                 self.popHearts.removeAll(where: { $0.id == heartId })
             }
         }
+        
+        self.popHearts.append(contentsOf: newHearts)
     }
     
     private func triggerEmojiBurst(_ emoji: String) {
@@ -1711,6 +1815,8 @@ struct MainDashboardView: View {
         
         // System pop sound effect
         AudioServicesPlaySystemSound(1306)
+        
+        var newEmojis: [PopHeart] = []
         
         // 8 elegant floating emojis
         for _ in 0..<8 {
@@ -1726,36 +1832,33 @@ struct MainDashboardView: View {
             let screenHeight = UIScreen.main.bounds.height
             let endY = -screenHeight - 100
             
+            let duration = Double.random(in: 2.2...3.0)
+            
             let particle = PopHeart(
                 id: heartId,
-                x: startX,
-                y: startY,
-                scale: CGFloat.random(in: 0.6...1.2),
+                startX: startX,
+                endX: endX,
+                startY: startY,
+                endY: endY,
+                startScale: CGFloat.random(in: 0.6...1.2),
+                targetScale: CGFloat.random(in: 0.6...1.2) * 1.3,
                 color: .clear,
-                opacity: 1.0,
-                rotation: Double.random(in: -30...30),
+                startRotation: Double.random(in: -30...30),
+                targetRotation: Double.random(in: -30...30) + Double.random(in: -60...60),
                 systemName: nil,
-                emojiString: emoji
+                emojiString: emoji,
+                duration: duration
             )
             
-            self.popHearts.append(particle)
-            
-            // Animate floats upward beautifully
-            withAnimation(.easeOut(duration: CGFloat.random(in: 2.2...3.0))) {
-                if let idx = self.popHearts.firstIndex(where: { $0.id == heartId }) {
-                    self.popHearts[idx].x = endX
-                    self.popHearts[idx].y = endY
-                    self.popHearts[idx].opacity = 0.0
-                    self.popHearts[idx].scale *= 1.3
-                    self.popHearts[idx].rotation += Double.random(in: -60...60)
-                }
-            }
+            newEmojis.append(particle)
             
             // Clean up when animation ends
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.1) {
                 self.popHearts.removeAll(where: { $0.id == heartId })
             }
         }
+        
+        self.popHearts.append(contentsOf: newEmojis)
     }
     
     private func triggerEdgeReactionAnimation(_ emoji: String) {
@@ -1865,15 +1968,50 @@ struct MainDashboardView: View {
 
 struct PopHeart: Identifiable {
     let id: UUID
-    var x: CGFloat
-    var y: CGFloat
-    var scale: CGFloat
-    var color: Color
-    var opacity: Double
-    var rotation: Double
-    var systemName: String?
-    var emojiString: String?
+    let startX: CGFloat
+    let endX: CGFloat
+    let startY: CGFloat
+    let endY: CGFloat
+    let startScale: CGFloat
+    let targetScale: CGFloat
+    let color: Color
+    let startRotation: Double
+    let targetRotation: Double
+    let systemName: String?
+    let emojiString: String?
+    let duration: Double
 }
+
+struct PopHeartView: View {
+    let heart: PopHeart
+    @State private var animate = false
+    
+    var body: some View {
+        Group {
+            if let emoji = heart.emojiString {
+                Text(emoji)
+                    .font(.system(size: 32))
+            } else if let sysName = heart.systemName {
+                Image(systemName: sysName)
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(heart.color)
+            }
+        }
+        .scaleEffect(animate ? heart.targetScale : heart.startScale)
+        .rotationEffect(.degrees(animate ? heart.targetRotation : heart.startRotation))
+        .opacity(animate ? 0.0 : 1.0)
+        .offset(
+            x: animate ? heart.endX : heart.startX,
+            y: animate ? heart.endY : heart.startY
+        )
+        .onAppear {
+            withAnimation(.easeOut(duration: heart.duration)) {
+                animate = true
+            }
+        }
+    }
+}
+
 
 struct FlashLocationRow: View {
     let flash: GlimpseFlash
@@ -1953,7 +2091,7 @@ struct ScheduleDetailSheetView: View {
         let alarmTime = schedule.scheduledDate.addingTimeInterval(TimeInterval(-schedule.reminder_minutes * 60))
         
         ZStack {
-            Color.deepVelvet.ignoresSafeArea()
+            Color.adaptiveBackground.ignoresSafeArea()
             
             VStack(alignment: .leading, spacing: 22) {
                 // Drag indicator spacer
@@ -2183,6 +2321,177 @@ struct ScheduleDetailSheetView: View {
             .padding(.bottom, 34)
         }
         .presentationDetents([.fraction(0.55)])
-        .presentationDragIndicator(.hidden)
+    }
+}
+
+extension MainDashboardView {
+    private var isInsideActiveChatRoomOfPlayingMessage: Bool {
+        guard auth.selectedTab == 3, let activeRoom = auth.selectedChatRoom else { return false }
+        if let playingMsg = audioPlayerManager.playingMessage {
+            if activeRoom.id == playingMsg.room_id {
+                return true
+            }
+            if activeRoom.is_main && (playingMsg.room_id == nil || playingMsg.room_id == 0) {
+                return true
+            }
+        }
+        return false
+    }
+    
+    private func activeRoomThemeColorForMsg(_ msg: ChatMessage) -> Color {
+        if let roomId = msg.room_id, roomId > 0 {
+            if let room = auth.chatRooms.first(where: { $0.id == roomId }),
+               let hex = room.theme_color, !hex.isEmpty {
+                return Color(hex: hex)
+            }
+        } else {
+            if let mainRoom = auth.chatRooms.first(where: { $0.is_main }),
+               let hex = mainRoom.theme_color, !hex.isEmpty {
+                return Color(hex: hex)
+            }
+        }
+        return Color.activeCyan
+    }
+    
+    private func navigateToMessageRoom(_ msg: ChatMessage) {
+        auth.selectedTab = 3
+        
+        if let roomId = msg.room_id, roomId > 0 {
+            if let room = auth.chatRooms.first(where: { $0.id == roomId }) {
+                auth.selectedChatRoom = room
+            }
+        } else {
+            if let mainRoom = auth.chatRooms.first(where: { $0.is_main }) {
+                auth.selectedChatRoom = mainRoom
+            }
+        }
+        
+        audioPlayerManager.navigateToMessageIdTrigger = msg.id
+    }
+    
+    private func flashMapView(flash: GlimpseFlash) -> some View {
+        Map(initialPosition: .region(MKCoordinateRegion(
+            center: flash.coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.003, longitudeDelta: 0.003)
+        ))) {
+            Annotation(flash.sender_name, coordinate: flash.coordinate) {
+                ZStack {
+                    Circle()
+                        .fill(Color.activeCyan.opacity(0.3))
+                        .frame(width: 32, height: 32)
+                    
+                    Circle()
+                        .stroke(Color.activeCyan, lineWidth: 2)
+                        .frame(width: 18, height: 18)
+                        .shadow(color: Color.activeCyan, radius: 4)
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func flashRow(for flash: GlimpseFlash) -> some View {
+        let isExpanded = expandedFlashId == flash.id
+        let isMe = flash.sender_id == auth.currentUser?.id
+        
+        VStack(spacing: 0) {
+            // HEADER ROW
+            Button {
+                UISelectionFeedbackGenerator().selectionChanged()
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                    if isExpanded {
+                        expandedFlashId = nil
+                    } else {
+                        expandedFlashId = flash.id
+                    }
+                }
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(Color.activeCyan)
+                                .frame(width: 6, height: 6)
+                                .shadow(color: Color.activeCyan, radius: 4)
+                            
+                            Text(isMe ? "You" : flash.sender_name)
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                        
+                        Text(formatFlashTime(flash.createdDate))
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.5))
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white.opacity(0.5))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(Color.white.opacity(0.03))
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // CONTENT BODY (EXPANDABLE)
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        // Left side: Photo (1:1 Ratio - Sebelahan)
+                        CachedImageView(urlString: flash.photo_url)
+                            .aspectRatio(contentMode: .fill)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .aspectRatio(1.0, contentMode: .fit)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                            )
+                        
+                        // Right side: Map View (1:1 Ratio - Sebelahan)
+                        if let lat = flash.latitude, lat != 0.0,
+                           let lon = flash.longitude, lon != 0.0 {
+                            flashMapView(flash: flash)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .aspectRatio(1.0, contentMode: .fit)
+                                .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                            )
+                        }
+                    }
+                    .frame(height: 155)
+                    
+                    // Location Detail Row (with background fallback resolver)
+                    FlashLocationRow(flash: flash)
+                    
+                    // Kabar / Status Note Row
+                    if let note = flash.status_note, !note.isEmpty {
+                        Text("\"\(note)\"")
+                            .font(.system(size: 13, weight: .regular, design: .rounded))
+                            .italic()
+                            .foregroundColor(.white.opacity(0.8))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.white.opacity(0.04))
+                            .cornerRadius(8)
+                    }
+                }
+                .padding(14)
+                .background(Color.white.opacity(0.01))
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .background(Color.black.opacity(0.2))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
     }
 }

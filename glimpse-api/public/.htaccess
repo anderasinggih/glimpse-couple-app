@@ -5,7 +5,7 @@
 
     RewriteEngine On
 
-    # Handle WebSockets Reverse Proxy
+    # 1. Handle WebSockets Reverse Proxy (Laravel Reverb - Port 8080)
     RewriteCond %{HTTP:Upgrade} websocket [NC]
     RewriteCond %{HTTP:Connection} upgrade [NC]
     RewriteRule ^app/(.*) ws://127.0.0.1:8080/app/$1 [P,L]
@@ -23,8 +23,12 @@
     RewriteCond %{REQUEST_URI} (.+)/$
     RewriteRule ^ %1 [L,R=301]
 
-    # Send Requests To Front Controller...
+    # 2. Handle Web Traffic Reverse Proxy (Laravel Octane - Port 8001)
+    # Jika request bukan file nyata dan bukan folder, lempar ke Octane, BUKAN ke index.php
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteRule ^ index.php [L]
+    RewriteRule ^(.*)$ http://127.0.0.1:8001/$1 [P,L]
+
+    # Handle untuk halaman utama (root domain) agar masuk ke Octane
+    RewriteRule ^$ http://127.0.0.1:8001/ [P,L]
 </IfModule>

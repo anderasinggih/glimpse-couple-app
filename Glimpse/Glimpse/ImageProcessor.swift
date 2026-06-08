@@ -28,4 +28,30 @@ struct ImageProcessor {
         // 2. JPEG Compression Quality 0.75
         return resizedImage.jpegData(compressionQuality: 0.75)
     }
+    
+    static func compressForWidget(data: Data) -> Data? {
+        guard let image = UIImage(data: data) else { return nil }
+        let maxDimension: CGFloat = 500
+        let size = image.size
+        
+        var targetSize: CGSize
+        if size.width > size.height {
+            let ratio = maxDimension / size.width
+            targetSize = CGSize(width: maxDimension, height: size.height * ratio)
+        } else {
+            let ratio = maxDimension / size.height
+            targetSize = CGSize(width: size.width * ratio, height: maxDimension)
+        }
+        
+        if size.width <= maxDimension && size.height <= maxDimension {
+            targetSize = size
+        }
+        
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        let resizedImage = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+        
+        return resizedImage.jpegData(compressionQuality: 0.6)
+    }
 }

@@ -106,7 +106,7 @@ struct CameraPlaceholderView: View {
 
 #Preview {
     ZStack {
-        Color.deepVelvet.ignoresSafeArea()
+        Color.adaptiveBackground.ignoresSafeArea()
         KabarPanel()
             .padding()
     }

@@ -61,7 +61,7 @@ struct DebugLoggerOverlay: View {
                         }
                     }
                     .padding(14)
-                    .background(Color.deepVelvet.opacity(0.95))
+                    .background(Color.adaptiveBackground.opacity(0.95))
                     
                     Divider()
                         .background(Color.white.opacity(0.1))

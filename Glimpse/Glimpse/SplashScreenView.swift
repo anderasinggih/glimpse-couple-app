@@ -6,7 +6,7 @@ struct SplashScreenView: View {
     
     var body: some View {
         ZStack {
-            Color.deepVelvet.ignoresSafeArea()
+            Color.adaptiveBackground.ignoresSafeArea()
             
             VStack(spacing: 20) {
                 Spacer()

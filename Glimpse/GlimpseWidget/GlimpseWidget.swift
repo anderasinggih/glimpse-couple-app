@@ -44,7 +44,10 @@ struct GlimpseWidgetProvider: TimelineProvider {
                 if let data = partnerData {
                     finalPartner = try? JSONDecoder().decode(GlimpseUser.self, from: data)
                 }
-                
+            }
+            
+            // Image Fallback if network image download fails (e.g. because file was deleted on the server after client ACK)
+            if finalImage == nil {
                 if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
                     let fileURL = groupURL.appendingPathComponent("widget_photo.jpg")
                     if let data = try? Data(contentsOf: fileURL), let cachedImage = data.downsampledForWidget() {
@@ -70,7 +73,8 @@ struct GlimpseWidgetProvider: TimelineProvider {
             return (nil, nil)
         }
         
-        let urlString = "https://api.galleryfortwo.my.id/api/glimpse/state"
+        let apiBase = sharedDefaults?.string(forKey: "api_base_url") ?? "https://api.galleryfortwo.my.id/api"
+        let urlString = "\(apiBase)/glimpse/state"
         guard let url = URL(string: urlString) else {
             return (nil, nil)
         }
@@ -102,7 +106,15 @@ struct GlimpseWidgetProvider: TimelineProvider {
             var photoURLString = partner.latest_photo_url ?? partner.profile_photo_url
             if !photoURLString.hasPrefix("http") {
                 let cleanPath = photoURLString.hasPrefix("/") ? String(photoURLString.dropFirst()) : photoURLString
-                let base = "https://api.galleryfortwo.my.id"
+                var base = "https://api.galleryfortwo.my.id"
+                if let apiURL = URL(string: apiBase),
+                   let host = apiURL.host,
+                   let scheme = apiURL.scheme {
+                    base = "\(scheme)://\(host)"
+                    if let port = apiURL.port {
+                        base += ":\(port)"
+                    }
+                }
                 photoURLString = cleanPath.contains("storage/") ? "\(base)/\(cleanPath)" : "\(base)/storage/\(cleanPath)"
             }
             
@@ -111,10 +123,15 @@ struct GlimpseWidgetProvider: TimelineProvider {
                let (imageData, _) = try? await URLSession.shared.data(from: photoURL) {
                 loadedImage = imageData.downsampledForWidget()
                 
-                // Persist the image to App Group container for Widget filesystem access
+                // Persist the downsampled compressed image to App Group container for Widget filesystem access
                 if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
                     let fileURL = groupURL.appendingPathComponent("widget_photo.jpg")
-                    try? imageData.write(to: fileURL)
+                    if let downsampledImage = loadedImage,
+                       let compressedData = downsampledImage.jpegData(compressionQuality: 0.6) {
+                        try? compressedData.write(to: fileURL, options: .atomic)
+                    } else {
+                        try? imageData.write(to: fileURL, options: .atomic)
+                    }
                 }
             }
             
@@ -199,23 +216,41 @@ struct GlimpseWidgetView : View {
             // Teks Info Pasangan
             // Teks Info Pasangan
             if let partner = entry.partner {
+                let isFlash = partner.latest_photo_url != nil
+                let displayLocation = isFlash ? (partner.latest_photo_location_name ?? partner.location_name ?? "Somewhere") : (partner.location_name ?? "Somewhere")
+                let displayNote = isFlash ? (partner.latest_photo_status_note ?? partner.status_note) : partner.status_note
+                let displayDate: Date = {
+                    if isFlash, let created = partner.latest_photo_created_at {
+                        let formatter = ISO8601DateFormatter()
+                        return formatter.date(from: created) ?? partner.lastUpdatedDate
+                    }
+                    return partner.lastUpdatedDate
+                }()
+                
                 VStack(alignment: .leading, spacing: 2) {
                     Spacer()
                     
                     HStack(alignment: .bottom) {
-                        Text(partner.location_name ?? "Somewhere")
-                            .font(.system(size: locationFontSize, weight: .bold))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
+                        HStack(spacing: 4) {
+                            if isFlash {
+                                Image(systemName: "camera.shutter.button.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.activeCyan)
+                            }
+                            Text(displayLocation)
+                                .font(.system(size: locationFontSize, weight: .bold))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                        }
                         
                         Spacer()
                         
-                        Text(partner.lastUpdatedDate, style: .time)
+                        Text(displayDate, style: .time)
                             .font(.system(size: timeFontSize, weight: .semibold))
                             .foregroundColor(.white.opacity(0.8))
                     }
                     
-                    if let note = partner.status_note, !note.isEmpty {
+                    if let note = displayNote, !note.isEmpty {
                         Text(note)
                             .font(.system(size: noteFontSize))
                             .foregroundColor(.white.opacity(0.8))

@@ -12,7 +12,6 @@ struct FlashCameraView: View {
     @State private var errorMessage: String?
     @State private var isShowingError = false
     @State private var isUploadSuccess = false
-    @State private var isScreenFlashing = false
     @State private var animateCheckmark = false
     @State private var showNoInternetAlert = false
     @State private var auth = AuthManager.shared
@@ -36,16 +35,11 @@ struct FlashCameraView: View {
         let frameSize = screenWidth - 25
         
         ZStack {
-            // LAYER 1: Background - Fixated and Full Screen (Bright white screen flash filler ONLY during selfie snap!)
+            // LAYER 1: Background - Fixated and Full Screen
             ZStack {
-                if isScreenFlashing {
-                    Color.white.ignoresSafeArea()
-                } else {
-                    Color.deepVelvet.ignoresSafeArea()
-                    iOS26Background().opacity(0.4)
-                }
+                Color.adaptiveBackground.ignoresSafeArea()
+                iOS26Background().opacity(0.4)
             }
-            .animation(.easeInOut(duration: 0.15), value: isScreenFlashing)
             .ignoresSafeArea()
             .ignoresSafeArea(.keyboard)
             .onTapGesture {
@@ -392,26 +386,17 @@ struct FlashCameraView: View {
     private var captureButton: some View {
         Button {
             UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-            isProcessing = true
             
-            // Trigger quick screen flash if mode is ON!
-            if model.flashMode == .on {
-                withAnimation(.easeIn(duration: 0.05)) {
-                    isScreenFlashing = true
-                }
+            // If camera is still loading or off, act as a refresh/start button!
+            guard model.isRunning else {
+                model.startSession()
+                return
             }
+            
+            isProcessing = true
             
             model.capturePhoto { image in
                 model.stopSession()
-                
-                // Turn off screen flash after snap
-                if model.flashMode == .on {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            isScreenFlashing = false
-                        }
-                    }
-                }
                 
                 Task.detached(priority: .userInitiated) {
                     let processed = await processCapturedImage(image)
@@ -424,8 +409,18 @@ struct FlashCameraView: View {
         } label: {
             ZStack {
                 Circle().stroke(Color.white.opacity(0.3), lineWidth: 4).frame(width: 85, height: 85)
-                Circle().fill(Color.white).frame(width: 70, height: 70)
+                
+                if model.isRunning {
+                    Circle().fill(Color.white).frame(width: 70, height: 70)
+                } else {
+                    Circle().fill(Color.white.opacity(0.15)).frame(width: 70, height: 70)
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(.white)
+                }
             }
+            // Fast, responsive morphing animation between refresh and shutter states
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: model.isRunning)
         }
         .disabled(isProcessing)
     }
@@ -550,12 +545,12 @@ struct FlashCameraView: View {
             generator.notificationOccurred(.success)
         }
         
-        // 5. Dismiss camera after 1.5 seconds so they can see the glorious feedback
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+        // 5. Navigate to Home tab after 0.6 seconds for an extremely snappy feel!
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
             capturedImage = nil
             statusNote = ""
             isUploadSuccess = false
-            dismiss()
+            auth.selectedTab = 0
         }
         
         // 6. Process the Outbox queue to start uploading in the background
@@ -581,6 +576,7 @@ struct FlashCameraView: View {
 class GlimpseCameraModel: NSObject, AVCapturePhotoCaptureDelegate, CLLocationManagerDelegate {
     var session = AVCaptureSession()
     var isInitialized = false
+    var isRunning = false
     var permissionStatus: AVAuthorizationStatus = .notDetermined
     var isUsingFrontCamera = true // Tracking for flipping logic
     
@@ -596,7 +592,14 @@ class GlimpseCameraModel: NSObject, AVCapturePhotoCaptureDelegate, CLLocationMan
     
     override init() {
         super.init()
-        // DO NOTHING HERE - Keep it light to prevent startup lag
+        
+        NotificationCenter.default.addObserver(forName: .AVCaptureSessionDidStartRunning, object: session, queue: .main) { [weak self] _ in
+            self?.isRunning = true
+        }
+        
+        NotificationCenter.default.addObserver(forName: .AVCaptureSessionDidStopRunning, object: session, queue: .main) { [weak self] _ in
+            self?.isRunning = false
+        }
     }
     
     private func setupLocation() {
@@ -735,6 +738,21 @@ class GlimpseCameraModel: NSObject, AVCapturePhotoCaptureDelegate, CLLocationMan
             let image = UIImage(data: data)
             await MainActor.run {
                 self.completion?(image)
+            }
+        }
+    }
+
+    deinit {
+        let captureSession = self.session
+        sessionQueue.async {
+            if captureSession.isRunning {
+                captureSession.stopRunning()
+            }
+            for input in captureSession.inputs {
+                captureSession.removeInput(input)
+            }
+            for output in captureSession.outputs {
+                captureSession.removeOutput(output)
             }
         }
     }

@@ -29,11 +29,23 @@ struct GlimpseUser: Codable, Identifiable {
     var wifi_bssid: String?
     var activity: String?
     var latest_photo_url: String?
+    var latest_photo_latitude: Double? = nil
+    var latest_photo_longitude: Double? = nil
+    var latest_photo_location_name: String? = nil
+    var latest_photo_status_note: String? = nil
+    var latest_photo_battery_level: Int? = nil
+    var latest_photo_created_at: String? = nil
     var last_updated: String?
-    let invite_code: String?
-    let couple_id: Int?
+    var invite_code: String?
+    var couple_id: Int?
     var last_seen_message_id: Int?
     var location_history: [LocationHistoryEntry]?
+    var last_active_at: String?
+    var email_verified_at: String? = nil
+    
+    var isEmailVerified: Bool {
+        email_verified_at != nil
+    }
     
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude ?? 0, longitude: longitude ?? 0)
@@ -45,14 +57,20 @@ struct GlimpseUser: Codable, Identifiable {
         return formatter.date(from: last) ?? Date()
     }
     
+    var lastActiveDate: Date {
+        guard let last = last_active_at else { return lastUpdatedDate }
+        let formatter = ISO8601DateFormatter()
+        return formatter.date(from: last) ?? lastUpdatedDate
+    }
+    
     var isOffline: Bool {
-        guard last_updated != nil else { return true }
-        return Calendar.current.dateComponents([.minute], from: lastUpdatedDate, to: Date()).minute ?? 0 > 3
+        // If inactive for more than 11 minutes (matching stationary background update interval + 1m buffer), consider offline
+        let diffSeconds = Calendar.current.dateComponents([.second], from: lastActiveDate, to: Date()).second ?? 0
+        return diffSeconds > 660
     }
     
     var timeAgoString: String {
-        guard last_updated != nil else { return "Offline" }
-        let diff = Calendar.current.dateComponents([.minute, .hour, .day], from: lastUpdatedDate, to: Date())
+        let diff = Calendar.current.dateComponents([.second, .minute, .hour, .day], from: lastActiveDate, to: Date())
         if let days = diff.day, days > 0 {
             return "\(days)d ago"
         }
@@ -62,7 +80,10 @@ struct GlimpseUser: Codable, Identifiable {
         if let minutes = diff.minute, minutes > 0 {
             return "\(minutes)m ago"
         }
-        return "1m ago"
+        if let seconds = diff.second, seconds > 0 {
+            return "\(seconds)s ago"
+        }
+        return "1s ago"
     }
     
     var isBirthdayToday: Bool {
@@ -90,6 +111,7 @@ struct CoupleResponse: Codable {
     let together_streak: Int?
     let highest_together_streak: Int?
     let total_meetings: Int?
+    let daily_bumps: Int?
     let love_burst_timestamp: Double?
     let active_schedule: GlimpseSchedule?
     let pending_invitation: GlimpseSchedule?
@@ -98,6 +120,11 @@ struct CoupleResponse: Codable {
         guard let paired = paired_at else { return nil }
         let isoFormatter = ISO8601DateFormatter()
         if let date = isoFormatter.date(from: paired) {
+            return date
+        }
+        let isoFormatterMS = ISO8601DateFormatter()
+        isoFormatterMS.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = isoFormatterMS.date(from: paired) {
             return date
         }
         let dbFormatter = DateFormatter()
@@ -116,6 +143,13 @@ struct CoupleResponse: Codable {
         // 1. Try ISO8601 Date Formatter
         let isoFormatter = ISO8601DateFormatter()
         if let date = isoFormatter.date(from: start) {
+            return date
+        }
+        
+        // 1b. Try ISO8601 with fractional seconds (Laravel default)
+        let isoFormatterMS = ISO8601DateFormatter()
+        isoFormatterMS.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = isoFormatterMS.date(from: start) {
             return date
         }
         
@@ -200,20 +234,57 @@ struct ChatMessage: Codable, Identifiable, Equatable {
     let room_id: Int?
     let created_at: String?
     let updated_at: String?
+    var is_audio: Bool? = nil
+    var audio_url: String? = nil
+    var audio_duration: Double? = nil
+    var audio_expired: Bool? = nil
+
+    init(
+        id: Int,
+        couple_id: Int,
+        sender_id: Int,
+        message: String,
+        room_id: Int? = nil,
+        created_at: String? = nil,
+        updated_at: String? = nil,
+        is_audio: Bool? = nil,
+        audio_url: String? = nil,
+        audio_duration: Double? = nil,
+        audio_expired: Bool? = nil
+    ) {
+        self.id = id
+        self.couple_id = couple_id
+        self.sender_id = sender_id
+        self.message = message
+        self.room_id = room_id
+        self.created_at = created_at
+        self.updated_at = updated_at
+        self.is_audio = is_audio
+        self.audio_url = audio_url
+        self.audio_duration = audio_duration
+        self.audio_expired = audio_expired
+    }
 }
 
-struct GlimpseChatRoom: Codable, Identifiable, Equatable {
+struct GlimpseChatRoom: Codable, Identifiable, Equatable, Hashable {
     let id: Int
     let couple_id: Int
     var name: String
     let is_main: Bool
+    var theme_color: String?
+    var background_color: String?
     var latest_message: RoomLatestMessage?
     var unread_count: Int
+    var delete_requested_by: Int?
     let created_at: String
     let updated_at: String
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
 }
 
-struct RoomLatestMessage: Codable, Equatable {
+struct RoomLatestMessage: Codable, Equatable, Hashable {
     let id: Int
     let message: String
     let sender_id: Int

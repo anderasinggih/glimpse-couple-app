@@ -21,7 +21,7 @@ struct SignupView: View {
     var body: some View {
         ZStack {
             // Background tap to dismiss keyboard
-            Color.deepVelvet
+            Color.adaptiveBackground
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -114,20 +114,20 @@ struct SignupView: View {
                                 gender = "male"
                                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                             }) {
-                                HStack {
+                                HStack(spacing: 8) {
                                     Image(systemName: gender == "male" ? "checkmark.circle.fill" : "circle")
-                                        .foregroundColor(gender == "male" ? .activeCyan : .white.opacity(0.3))
-                                    Text("Male")
-                                        .font(.system(size: 15, weight: gender == "male" ? .bold : .regular))
-                                        .foregroundColor(gender == "male" ? .white : .white.opacity(0.6))
+                                        .foregroundColor(gender == "male" ? Color(hex: "3A86FF") : .white.opacity(0.3))
+                                    Text("♂ Male")
+                                        .font(.system(size: 15, weight: gender == "male" ? .bold : .semibold, design: .rounded))
+                                        .foregroundColor(gender == "male" ? Color(hex: "3A86FF") : .white.opacity(0.6))
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(gender == "male" ? Color.activeCyan.opacity(0.15) : Color.white.opacity(0.06))
+                                .background(gender == "male" ? Color(hex: "3A86FF").opacity(0.15) : Color.white.opacity(0.06))
                                 .cornerRadius(12)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .stroke(gender == "male" ? Color.activeCyan : Color.white.opacity(0.12), lineWidth: 1.2)
+                                        .stroke(gender == "male" ? Color(hex: "3A86FF") : Color.white.opacity(0.12), lineWidth: 1.2)
                                 )
                             }
                             .buttonStyle(PlainButtonStyle())
@@ -137,20 +137,20 @@ struct SignupView: View {
                                 gender = "female"
                                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                             }) {
-                                HStack {
+                                HStack(spacing: 8) {
                                     Image(systemName: gender == "female" ? "checkmark.circle.fill" : "circle")
-                                        .foregroundColor(gender == "female" ? .electricPurple : .white.opacity(0.3))
-                                    Text("Female")
-                                        .font(.system(size: 15, weight: gender == "female" ? .bold : .regular))
-                                        .foregroundColor(gender == "female" ? .white : .white.opacity(0.6))
+                                        .foregroundColor(gender == "female" ? Color(hex: "FF4DAD") : .white.opacity(0.3))
+                                    Text("♀ Female")
+                                        .font(.system(size: 15, weight: gender == "female" ? .bold : .semibold, design: .rounded))
+                                        .foregroundColor(gender == "female" ? Color(hex: "FF4DAD") : .white.opacity(0.6))
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(gender == "female" ? Color.electricPurple.opacity(0.15) : Color.white.opacity(0.06))
+                                .background(gender == "female" ? Color(hex: "FF4DAD").opacity(0.15) : Color.white.opacity(0.06))
                                 .cornerRadius(12)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
-                                        .stroke(gender == "female" ? Color.electricPurple : Color.white.opacity(0.12), lineWidth: 1.2)
+                                        .stroke(gender == "female" ? Color(hex: "FF4DAD") : Color.white.opacity(0.12), lineWidth: 1.2)
                                 )
                             }
                             .buttonStyle(PlainButtonStyle())
@@ -205,7 +205,7 @@ struct SignupView: View {
         .navigationBarBackButtonHidden(true)
         .sheet(isPresented: $showDatePicker) {
             ZStack {
-                Color.deepVelvet.ignoresSafeArea()
+                Color.adaptiveBackground.ignoresSafeArea()
                 
                 VStack(spacing: 20) {
                     HStack {
@@ -246,34 +246,40 @@ struct SignupView: View {
     }
     
     private func validate() -> Bool {
-        if name.count < 3 {
-            errorMessage = "Please enter your full name."
+        let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        guard trimmedName.count >= 3 else {
+            withAnimation { errorMessage = "Name must be at least 3 characters." }
             return false
         }
-        if !email.contains("@") || !email.contains(".") {
-            errorMessage = "Please enter a valid email address."
+        let trimmedEmail = email.trimmingCharacters(in: .whitespaces)
+        guard trimmedEmail.contains("@"), trimmedEmail.contains(".") else {
+            withAnimation { errorMessage = "Please enter a valid email address." }
             return false
         }
-        if password.count < 8 {
-            errorMessage = "Password must be at least 8 characters."
+        guard password.count >= 8 else {
+            withAnimation { errorMessage = "Password must be at least 8 characters." }
             return false
         }
-        if gender.isEmpty {
-            errorMessage = "Please select your gender."
+        guard password.count <= 32 else {
+            withAnimation { errorMessage = "Password must be at most 32 characters." }
+            return false
+        }
+        guard !gender.isEmpty else {
+            withAnimation { errorMessage = "Please select your gender." }
             return false
         }
         return true
     }
     
     private func register() async {
-        hideKeyboard()
+        focusedField = nil
         isLoading = true
         errorMessage = ""
-        
+
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         let dateStr = bornDateSelected ? formatter.string(from: bornDate) : nil
-        
+
         do {
             try await AuthManager.shared.register(
                 name: name.trimmingCharacters(in: .whitespaces),
@@ -283,7 +289,7 @@ struct SignupView: View {
                 password: password
             )
         } catch {
-            errorMessage = error.localizedDescription
+            withAnimation { errorMessage = error.localizedDescription }
         }
         isLoading = false
     }

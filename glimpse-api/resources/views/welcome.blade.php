@@ -100,7 +100,7 @@
                 <!-- Left Content -->
                 <div class="lg:col-span-7 space-y-6 text-left relative z-10">
                     <div class="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-electricPurple/10 border border-electricPurple/20 text-electricPurple text-xs font-semibold uppercase tracking-wider">
-                        <span>iOS 26 Liquid Glass · Protobuf Binary · WebSocket Realtime</span>
+                        <span>Native SwiftUI · Local SQLite3 · Smooth Interpolation · WebSocket Lock</span>
                     </div>
                     
                     <h2 class="text-4xl sm:text-6xl font-extrabold text-white tracking-tight leading-[1.1] mb-4">
@@ -108,7 +108,7 @@
                     </h2>
                     
                     <p class="text-white/60 text-lg sm:text-xl font-light max-w-2xl leading-relaxed">
-                        Glimpse is a zero-latency, private companion app designed for couples. Track your partner's live location on hybrid maps, monitor battery levels dynamically, and send instant, self-destructing flash attachments.
+                        Glimpse is a zero-latency, private companion app designed for couples. Experience gapless real-time location mapping, high-performance local SQLite3 message caching, and instant self-destructing flash attachments.
                     </p>
 
                     <div class="flex flex-wrap gap-4 pt-4">
@@ -129,9 +129,9 @@
 
                 <!-- Right Visual Mockup -->
                 <div class="lg:col-span-5 relative flex justify-center">
-                    <div class="w-80 h-[500px] rounded-[48px] border-4 border-white/20 bg-slate-900 shadow-2xl relative p-4 flex flex-col justify-between overflow-hidden">
+                    <div class="w-80 h-[660px] rounded-[48px] border-4 border-white/20 bg-slate-900 shadow-2xl relative p-4 flex flex-col justify-between overflow-hidden">
                         <!-- Camera notch -->
-                        <div class="absolute top-2 left-1/2 -translate-x-1/2 w-32 h-6 bg-black rounded-full z-20"></div>
+                        <div class="absolute top-3.5 left-1/2 -translate-x-1/2 w-24 h-5 bg-black rounded-full z-20"></div>
                         
                         <!-- Internal Screen Content -->
                         <div class="flex-grow flex flex-col justify-between pt-8 pb-4 relative z-10 space-y-4">
@@ -158,8 +158,8 @@
                             <div class="aspect-square w-full rounded-[32px] bg-white/5 border border-white/10 backdrop-blur-2xl relative overflow-hidden flex flex-col justify-between p-4 group">
                                 <div class="absolute inset-0 bg-gradient-to-b from-transparent to-black/80"></div>
                                 <div class="flex justify-between items-center z-10">
-                                    <span class="px-2 py-0.5 rounded bg-electricPurple/20 border border-electricPurple/30 text-[9px] font-bold text-electricPurple">Hybrid Mode</span>
-                                    <span class="text-[9px] text-white/50">Updated 2s ago</span>
+                                    <span class="px-2 py-0.5 rounded bg-electricPurple/20 border border-electricPurple/30 text-[9px] font-bold text-electricPurple">Smooth Glide</span>
+                                    <span class="text-[9px] text-white/50">Active Slide</span>
                                 </div>
                                 
                                 <!-- Pulse Dot -->
@@ -211,34 +211,33 @@
                     <div class="p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl relative overflow-hidden group hover:border-electricPurple/40 transition-all duration-300">
                         <div class="w-12 h-12 rounded-xl bg-electricPurple/10 border border-electricPurple/20 flex items-center justify-center text-electricPurple mb-6">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8m-3-4h.008v.008H12V11.25zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                         </div>
-                        <h4 class="text-lg font-bold text-white mb-2">Liquid Glass Lovelace</h4>
-                        <p class="text-white/50 text-xs leading-relaxed">Stunning 3D volumetric heart icons outlined with premium glowing glass light-reflections supporting automatic dark/light adaptive tinting.</p>
+                        <h4 class="text-lg font-bold text-white mb-2">Smooth Interpolation</h4>
+                        <p class="text-white/50 text-xs leading-relaxed">Smooth, gapless coordinate interpolation and dead-reckoning extrapolation for signal drops. Pure 60fps sliding without sudden jumps.</p>
                     </div>
 
                     <!-- Feature 2 -->
                     <div class="p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl relative overflow-hidden group hover:border-activeCyan/40 transition-all duration-300">
                         <div class="w-12 h-12 rounded-xl bg-activeCyan/10 border border-activeCyan/20 flex items-center justify-center text-activeCyan mb-6">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V10.125M12 14.25v3.75" />
                             </svg>
                         </div>
-                        <h4 class="text-lg font-bold text-white mb-2">Interactive GPS Pulse</h4>
-                        <p class="text-white/50 text-xs leading-relaxed">MapKit integration displaying real-time coordinate synchronization, pulsing indicators, and reverse geocoding to name locations without servers.</p>
+                        <h4 class="text-lg font-bold text-white mb-2">Local SQLite3 Engine</h4>
+                        <p class="text-white/50 text-xs leading-relaxed">High-performance native database caching for chat messages, completely avoiding UserDefaults size limits and supporting full offline room history.</p>
                     </div>
 
                     <!-- Feature 3 -->
                     <div class="p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl relative overflow-hidden group hover:border-royalPurple/40 transition-all duration-300">
                         <div class="w-12 h-12 rounded-xl bg-royalPurple/10 border border-royalPurple/20 flex items-center justify-center text-royalPurple mb-6">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
                             </svg>
                         </div>
-                        <h4 class="text-lg font-bold text-white mb-2">Magic Flip Card</h4>
-                        <p class="text-white/50 text-xs leading-relaxed">Automatic 10-second fade transition alternating between your partner's live map view and their beautiful, premium portrait photo.</p>
+                        <h4 class="text-lg font-bold text-white mb-2">WebSocket Sync Lock</h4>
+                        <p class="text-white/50 text-xs leading-relaxed">Connection locking mechanism blocks redundant reconnect attempts, preventing network loops and maintaining an ultra-lean battery profile.</p>
                     </div>
 
                     <!-- Feature 4 -->
@@ -250,16 +249,18 @@
                             </svg>
                         </div>
                         <h4 class="text-lg font-bold text-white mb-2">Self-Destructing Flash</h4>
-                        <p class="text-white/50 text-xs leading-relaxed">Seamless camera snapshots sent instantly to chat as attachments that automatically redirect to the map view upon clicking.</p>
+                        <p class="text-white/50 text-xs leading-relaxed">Snapshot attachments that automatically fade out after viewing, triggering swift redirection to map details upon tapping.</p>
                     </div>
                 </div>
             </div>
-        </sec        <!-- API DOCUMENTATION SECTION -->
+        </section>
+
+        <!-- API DOCUMENTATION SECTION -->
         <section id="docs" class="border-t border-white/10 bg-slate-950/40 backdrop-blur-xl py-20">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="text-center max-w-3xl mx-auto mb-16 space-y-4">
                     <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-electricPurple/10 border border-electricPurple/20 text-electricPurple text-[10px] font-bold uppercase tracking-wider animate-pulse">
-                        <span>📖 REST · WebSocket · Protobuf Binary Protocol</span>
+                        <span>REST · WebSocket · Protobuf Binary Protocol</span>
                     </div>
                     <h3 class="text-3xl sm:text-4xl font-extrabold tracking-tight">API Reference Docs</h3>
                     <p class="text-white/60 text-sm">Glimpse uses a hybrid protocol: JSON for state/auth endpoints, and <strong class="text-electricPurple">custom Protobuf binary encoding</strong> for the chat pipeline to minimize payload size and maximize throughput on mobile networks.</p>
@@ -284,6 +285,10 @@
                         <button onclick="switchDocTab('chat')" id="doc-tab-chat" class="w-full text-left p-4 rounded-xl border border-white/5 bg-white/5 text-white/70 hover:text-white transition-all">
                             <span class="block text-sm">4. Intimate Chats & Flash</span>
                             <span class="block text-xs text-white/50 font-normal mt-0.5">Real-time chat, Seen receipts, & Flash photo uploads</span>
+                        </button>
+                        <button onclick="switchDocTab('protobuf')" id="doc-tab-protobuf" class="w-full text-left p-4 rounded-xl border border-white/5 bg-white/5 text-white/70 hover:text-white transition-all">
+                            <span class="block text-sm">5. Protobuf Spec & Code</span>
+                            <span class="block text-xs text-white/50 font-normal mt-0.5">Protobuf proto3 schemas & Swift/PHP code structures</span>
                         </button>
                     </div>
 
@@ -486,7 +491,7 @@
                                         <span class="block text-[9px] text-white/40 uppercase font-bold tracking-wider mb-2">Request — Protobuf Binary (Content-Type: application/octet-stream)</span>
                                         <pre class="text-electricPurple font-medium">Field 1 (varint): sender_id = 1
 Field 2 (varint): room_id   = 5
-Field 3 (string): message   = "Hey love! ❤️"
+Field 3 (string): message   = "Hey love!"
 Field 4 (string): created_at= "2026-05-19T..."
 
 // Encoded as raw binary, not JSON
@@ -498,7 +503,7 @@ Field 4 (string): created_at= "2026-05-19T..."
                                         <pre class="text-activeCyan font-medium">Field 1 (varint): id        = 125
 Field 2 (varint): room_id   = 5
 Field 3 (varint): sender_id = 1
-Field 4 (string): message   = "Hey love! ❤️"
+Field 4 (string): message   = "Hey love!"
 Field 5 (string): created_at= "2026-05-19T..."
 
 // iOS: ChatMessage.decodeProtobuf(from: data)</pre>
@@ -546,6 +551,147 @@ Authorization: Bearer 2|sanctum_access_token</pre>
                             </div>
                         </div>
 
+                        <!-- PROTOBUF DOCS -->
+                        <div id="doc-content-protobuf" class="doc-content space-y-6 hidden text-left">
+                            <div class="space-y-2 border-b border-white/5 pb-4">
+                                <h4 class="text-xl font-bold text-white flex items-center space-x-2">
+                                    <span class="px-2 py-0.5 rounded bg-electricPurple/10 border border-electricPurple/20 text-electricPurple text-xs font-bold font-mono">PROTO3</span>
+                                    <span>Protocol Buffer Specifications</span>
+                                </h4>
+                                <p class="text-xs text-white/60">
+                                    To maximize performance and battery longevity, Glimpse bypasses heavy JSON strings for real-time location pushes and chat pipelines. The data is encoded into lightweight, binary Protocol Buffer payloads.
+                                </p>
+                            </div>
+
+                            <!-- Spec 1: ChatMessage Schema -->
+                            <div class="space-y-3">
+                                <h5 class="text-sm font-bold text-electricPurple uppercase tracking-wider">1. Chat Message Proto Schema</h5>
+                                <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-4 font-mono text-[11px]">
+                                    <pre class="text-activeCyan font-medium">syntax = "proto3";
+
+message ChatMessage {
+    int32 id = 1;
+    int32 room_id = 2;
+    int32 sender_id = 3;
+    string message = 4;
+    string created_at = 5;
+}</pre>
+                                </div>
+                                <p class="text-xs text-white/50">
+                                    This binary structure compresses a standard 300-byte JSON message down to just ~40-60 bytes.
+                                </p>
+                            </div>
+
+                            <!-- Spec 2: GlimpseUserStatus Schema -->
+                            <div class="space-y-3">
+                                <h5 class="text-sm font-bold text-electricPurple uppercase tracking-wider">2. User GPS & Battery Status Schema</h5>
+                                <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-4 font-mono text-[11px]">
+                                    <pre class="text-activeCyan font-medium">syntax = "proto3";
+
+message GlimpseUserStatus {
+    string latitude = 1;      // String to prevent precision loss
+    string longitude = 2;     // String to prevent precision loss
+    int32 battery_level = 3;
+    int32 is_charging = 4;    // 0 = false, 1 = true
+    string status_note = 5;
+    string location_name = 6;
+    string wifi_bssid = 7;
+}</pre>
+                                </div>
+                            </div>
+
+                            <!-- Spec 3: GlimpsePartnerStateUpdate Schema -->
+                            <div class="space-y-3">
+                                <h5 class="text-sm font-bold text-electricPurple uppercase tracking-wider">3. Partner Live State Update Schema</h5>
+                                <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-4 font-mono text-[11px]">
+                                    <pre class="text-activeCyan font-medium">syntax = "proto3";
+
+message GlimpsePartnerStateUpdate {
+    int32 user_id = 1;
+    string latitude = 2;
+    string longitude = 3;
+    int32 battery_level = 4;
+    int32 is_charging = 5;    // 0 = false, 1 = true
+    string status_note = 6;
+    string location_name = 7;
+    string wifi_bssid = 8;
+    int32 last_seen_message_id = 9;
+}</pre>
+                                </div>
+                            </div>
+
+                            <!-- Code Implementation Specs -->
+                            <div class="space-y-4 border-t border-white/5 pt-6">
+                                <h4 class="text-md font-bold text-white uppercase tracking-wider">Swift Client Implementation Code</h4>
+                                <p class="text-xs text-white/50">
+                                    The iOS application encodes variables manually using a high-speed bitwise `ProtobufWriter` and parses incoming streams using `ProtobufReader`, minimizing external library dependencies:
+                                </p>
+                                <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-4 font-mono text-[11px] max-h-72 overflow-y-auto">
+                                    <pre class="text-electricPurple font-medium">// Manual Protobuf Serialization in Swift (GlimpseProtobuf.swift)
+struct ProtobufWriter {
+    private(set) var data = Data()
+    
+    mutating func writeVarint(_ val: UInt64) {
+        var value = val
+        while value >= 0x80 {
+            data.append(UInt8((value & 0x7F) | 0x80))
+            value >>= 7
+        }
+        data.append(UInt8(value & 0x7F))
+    }
+    
+    mutating func writeTag(fieldNumber: Int, wireType: Int) {
+        writeVarint(UInt64((fieldNumber << 3) | wireType))
+    }
+    
+    mutating func writeInt32Field(fieldNumber: Int, value: Int) {
+        writeTag(fieldNumber: fieldNumber, wireType: 0)
+        writeVarint(UInt64(value))
+    }
+    
+    mutating func writeStringField(fieldNumber: Int, value: String) {
+        guard let stringData = value.data(using: .utf8) else { return }
+        writeTag(fieldNumber: fieldNumber, wireType: 2)
+        writeVarint(UInt64(stringData.count))
+        data.append(stringData)
+    }
+}</pre>
+                                </div>
+                            </div>
+
+                            <div class="space-y-4 pt-2">
+                                <h4 class="text-md font-bold text-white uppercase tracking-wider">Laravel PHP Parser & Server Broadcast</h4>
+                                <p class="text-xs text-white/50">
+                                    When the Laravel backend receives the raw binary request header `Content-Type: application/x-protobuf`, it handles it using a PHP Protobuf decoder to decode message tags:
+                                </p>
+                                <div class="rounded-xl overflow-hidden bg-slate-900 border border-white/10 p-4 font-mono text-[11px] max-h-72 overflow-y-auto">
+                                    <pre class="text-activeCyan font-medium">// Laravel Controller: Decoding Protobuf Bytes & Broadcasting
+public function sendProtobufChat(Request $request) {
+    $rawBytes = $request->getContent();
+    
+    // Decodes Proto3 Fields (1=id, 2=roomId, 3=senderId, 4=message, 5=createdAt)
+    $protoMessage = new \App\Protobuf\ChatMessage();
+    $protoMessage->mergeFromString($rawBytes);
+    
+    // Store in MySQL database persistent schema
+    $chat = ChatMessage::create([
+        'room_id' => $protoMessage->getRoomId(),
+        'sender_id' => $protoMessage->getSenderId(),
+        'message' => $protoMessage->getMessage(),
+    ]);
+    
+    // Prepare Base64 encoded payload for real-time WebSocket distribution
+    $encodedBase64 = base64_encode($rawBytes);
+    
+    // Broadcast via Pusher WebSockets to listening partner devices
+    broadcast(new GlimpseChatEvent($chat->couple_id, $encodedBase64))->toOthers();
+    
+    return response($rawBytes)->header('Content-Type', 'application/x-protobuf');
+}</pre>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             </div>
@@ -570,13 +716,13 @@ Authorization: Bearer 2|sanctum_access_token</pre>
                         <div class="lg:col-span-4 space-y-4">
                             <h4 class="text-xl font-bold text-white">How it Works</h4>
                             <p class="text-white/50 text-xs leading-relaxed">
-                                When a user updates their battery level, notes, or coordinates, the Glimpse iOS app sends an authenticated POST request to our Laravel backend.
+                                When a user updates their battery level, status, or coordinates, the Glimpse iOS app sends an authenticated request to our Laravel backend.
                             </p>
                             <p class="text-white/50 text-xs leading-relaxed">
-                                The Laravel engine processes the update, saves the status in the SQLite database, and immediately fires a custom broadcast event.
+                                The Laravel engine processes the request, persists the state in the database, and immediately fires a Pusher broadcast event. On the client, incoming messages are saved in an atomic local SQLite3 database.
                             </p>
                             <p class="text-white/50 text-xs leading-relaxed">
-                                The Pusher WebSocket server picks up this event and broadcasts a live socket push to the connected partner's iOS device. This complete flow finishes in **less than 100 milliseconds**!
+                                The WebSocket server broadcasts a live socket push to the connected partner's iOS device. This entire end-to-end sync completes in **under 100 milliseconds**!
                             </p>
                         </div>
 

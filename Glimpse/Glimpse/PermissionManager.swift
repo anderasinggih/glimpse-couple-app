@@ -46,8 +46,12 @@ class PermissionManager {
         isLocationGranted = (locStatus == .authorizedAlways)
         
         // 2. Check CoreMotion Activity Permission
+        #if targetEnvironment(simulator)
+        isMotionGranted = true
+        #else
         let motionStatus = CMMotionActivityManager.authorizationStatus()
         isMotionGranted = (motionStatus == .authorized)
+        #endif
         
         // 3. Check Notifications Permission (Async)
         UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
@@ -72,6 +76,9 @@ class PermissionManager {
     }
     
     func requestMotion() {
+        #if targetEnvironment(simulator)
+        isMotionGranted = true
+        #else
         guard CMMotionActivityManager.isActivityAvailable() else {
             isMotionGranted = true
             return
@@ -81,6 +88,7 @@ class PermissionManager {
         motionActivityManager.queryActivityStarting(from: Date(), to: Date(), to: .main) { [weak self] _, error in
             self?.checkAllPermissions()
         }
+        #endif
     }
     
     func requestNotifications() {

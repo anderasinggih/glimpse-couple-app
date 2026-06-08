@@ -89,10 +89,9 @@ struct ChatLinkPreviewCard: View {
                         .foregroundColor(themeColor.opacity(0.5))
                 )
             VStack(alignment: .leading, spacing: 6) {
-                RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.1)).frame(height: 10).frame(maxWidth: 140)
-                RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.06)).frame(height: 8).frame(maxWidth: 100)
+                RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.1)).frame(height: 10).frame(width: 140)
+                RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.06)).frame(height: 8).frame(width: 100)
             }
-            Spacer()
         }
         .padding(10)
         .background(Color.white.opacity(0.05))
@@ -101,51 +100,49 @@ struct ChatLinkPreviewCard: View {
 
     @ViewBuilder
     private func previewCard(meta: LPLinkMetadata) -> some View {
-        Button {
-            openURL(url)
-        } label: {
-            HStack(spacing: 10) {
-                if let imageProvider = meta.imageProvider {
-                    AsyncImageFromProvider(provider: imageProvider)
-                        .frame(width: 56, height: 56)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                } else {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(themeColor.opacity(0.15))
-                        .frame(width: 56, height: 56)
-                        .overlay(
-                            Image(systemName: "globe")
-                                .font(.system(size: 22))
-                                .foregroundColor(themeColor)
-                        )
-                }
-                VStack(alignment: .leading, spacing: 3) {
-                    if let title = meta.title, !title.isEmpty {
-                        Text(title)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.white)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                    }
-                    Text(url.host ?? url.absoluteString)
-                        .font(.system(size: 10))
-                        .foregroundColor(themeColor.opacity(0.8))
-                        .lineLimit(1)
-                }
-                Spacer()
-                Image(systemName: "arrow.up.right")
-                    .font(.system(size: 10))
-                    .foregroundColor(.white.opacity(0.3))
+        HStack(spacing: 10) {
+            if let imageProvider = meta.imageProvider {
+                AsyncImageFromProvider(provider: imageProvider)
+                    .frame(width: 56, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(themeColor.opacity(0.15))
+                    .frame(width: 56, height: 56)
+                    .overlay(
+                        Image(systemName: "globe")
+                            .font(.system(size: 22))
+                            .foregroundColor(themeColor)
+                    )
             }
-            .padding(10)
-            .background(Color.white.opacity(0.05))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(themeColor.opacity(0.2), lineWidth: 1)
-            )
+            VStack(alignment: .leading, spacing: 3) {
+                if let title = meta.title, !title.isEmpty {
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                Text(url.host ?? url.absoluteString)
+                    .font(.system(size: 10))
+                    .foregroundColor(themeColor.opacity(0.8))
+                    .lineLimit(1)
+            }
+            Image(systemName: "arrow.up.right")
+                .font(.system(size: 10))
+                .foregroundColor(.white.opacity(0.3))
         }
-        .buttonStyle(PlainButtonStyle())
+        .padding(10)
+        .background(Color.white.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(themeColor.opacity(0.2), lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            openURL(url)
+        }
     }
 
     private func loadMetadata() {

@@ -46,6 +46,23 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         locationManager.showsBackgroundLocationIndicator = false
         
         setupNetworkPathMonitor()
+        
+        NotificationCenter.default.addObserver(self, selector: #selector(handleAppResignActive), name: UIApplication.willResignActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(handleAppTerminate), name: UIApplication.willTerminateNotification, object: nil)
+    }
+    
+    @objc private func handleAppResignActive() {
+        self.log("📱 App resigning active: Mengunggah status lokasi terakhir sebelum background...")
+        if let currentLoc = locationManager.location {
+            processAndUploadLocation(currentLoc, forceUpload: true)
+        }
+    }
+    
+    @objc private func handleAppTerminate() {
+        self.log("📱 App terminating: Mengunggah status lokasi terakhir sebelum terminasi...")
+        if let currentLoc = locationManager.location {
+            processAndUploadLocation(currentLoc, forceUpload: true)
+        }
     }
     
     func startTracking() {
@@ -144,6 +161,9 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     
     // MARK: - CoreMotion (Motion Detection)
     private func startMotionTracking() {
+        #if targetEnvironment(simulator)
+        return
+        #else
         guard CMMotionActivityManager.isActivityAvailable() else { return }
         
         motionActivityManager.startActivityUpdates(to: motionQueue) { [weak self] activity in
@@ -246,6 +266,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                 }
             }
         }
+        #endif
     }
     
     // MARK: - NWPathMonitor (Wi-Fi Change Monitoring)
@@ -294,10 +315,11 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             
             self.log("📶 Wi-Fi Terhubung: Tersambung ke Wi-Fi BSSID: \(bssid)")
             
-            // HOTSPOT PROTECTION: Only sleep GPS if device is STATIONARY.
-            // If device is moving, do NOT lock to cached Wi-Fi coordinates (user might be tethered to a moving hotspot in a car!)
-            if !self.isStationary {
-                self.log("🚗 Wi-Fi Terhubung tetapi HP sedang bergerak (Hotspot Mobil?). GPS dibiarkan AKTIF!")
+            // HOTSPOT PROTECTION: Only keep GPS active if connected to Wi-Fi while actively traveling in a vehicle.
+            // If we are just indoors on Wi-Fi (even if walking around), lock to the static Wi-Fi coordinates and turn off GPS!
+            let isMovingInVehicle = self.lastKnownActivity != nil && (self.lastKnownActivity!.automotive || self.lastKnownActivity!.cycling)
+            if isMovingInVehicle {
+                self.log("🚗 Wi-Fi Terhubung tetapi HP terdeteksi berkendara (Hotspot Mobil/Bus?). GPS dibiarkan AKTIF!")
                 LiveDebugLogger.shared.setGPSStatus("Active (Moving on Wi-Fi) 📶🚗")
                 self.locationManager.startUpdatingLocation()
                 return
@@ -388,10 +410,31 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         
         // Dynamic stationary wakeup check (Layer 1.5)
         if isStationary {
-            let isMovingSignificantly = speed > 1.5 || distanceMoved > 40.0
-            let isMovingActivity = lastKnownActivity != nil && !lastKnownActivity!.stationary
+            // Wi-Fi Shield Protection: If we are still connected to the same Wi-Fi, 
+            // DO NOT wake up GPS due to GPS location drift! Only wake up if Wi-Fi disconnected or we are in a vehicle.
+            if currentWiFiBSSID != nil {
+                let isMovingInVehicle = lastKnownActivity != nil && (lastKnownActivity!.automotive || lastKnownActivity!.cycling)
+                if !isMovingInVehicle {
+                    // Force stationary lock and skip location updates
+                    self.log("📶 Wi-Fi Shield Active: Mengabaikan drift GPS (\(Int(distanceMoved))m) karena masih tersambung Wi-Fi.")
+                    return
+                }
+            }
             
-            if isMovingSignificantly || isMovingActivity {
+            let isMovingActivity: Bool
+            if CMMotionActivityManager.isActivityAvailable() {
+                if let activity = lastKnownActivity {
+                    // Trust CoreMotion activity: wake up ONLY if it says we are physically moving (stationary == false)
+                    isMovingActivity = !activity.stationary
+                } else {
+                    // Fallback to GPS before first motion event is received
+                    isMovingActivity = speed > 1.5 || distanceMoved > 40.0
+                }
+            } else {
+                isMovingActivity = speed > 1.5 || distanceMoved > 40.0
+            }
+            
+            if isMovingActivity {
                 self.log("🏃‍♂️ GPS: Bergerak (Speed: \(Int(speedInKmH)) km/h, Jarak: \(Int(distanceMoved))m). Membangunkan dari status stationary!")
                 removeStationaryGeofence()
                 isStationary = false
@@ -577,7 +620,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             self.log("📤 GPS Uplink: Mengirim data ke server Laravel! (Lat: \(location.coordinate.latitude), Lon: \(location.coordinate.longitude), Nama: \(self.cachedLocationName ?? "Tidak Diketahui"), Jarak: \(Int(distanceMoved))m, Waktu: \(Int(timeElapsed))s)")
             
             // Upload dynamically to server!
-            AuthManager.shared.pushLocationAndStatus(
+            await AuthManager.shared.pushLocationAndStatus(
                 latitude: location.coordinate.latitude,
                 longitude: location.coordinate.longitude,
                 locationName: self.cachedLocationName

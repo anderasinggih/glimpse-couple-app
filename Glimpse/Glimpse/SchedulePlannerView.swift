@@ -18,7 +18,7 @@ class AlarmManager {
                     
                     if existingEvents.contains(where: { $0.title == eventTitle }) {
                         // Play gentle alert haptic feedback
-                        DispatchQueue.main.sync {
+                        DispatchQueue.main.async {
                             let generator = UINotificationFeedbackGenerator()
                             generator.notificationOccurred(.warning)
                         }
@@ -56,7 +56,7 @@ class AlarmManager {
         try eventStore.save(event, span: .thisEvent)
         
         // Haptic feedback
-        DispatchQueue.main.sync {
+        DispatchQueue.main.async {
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
         }
@@ -91,7 +91,7 @@ struct SchedulePlannerView: View {
     
     var body: some View {
         ZStack {
-            Color.deepVelvet.ignoresSafeArea()
+            Color.adaptiveBackground.ignoresSafeArea()
                 .onTapGesture {
                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 }
@@ -128,7 +128,7 @@ struct SchedulePlannerView: View {
                 .background(Color.black.opacity(0.15))
                 
                 // Tabs Selector
-                HStack(spacing: 0) {
+                HStack(spacing: 14) {
                     TabButton(title: "Plan Date", icon: "calendar.badge.plus", isActive: activeTab == 0) {
                         activeTab = 0
                     }
@@ -139,7 +139,7 @@ struct SchedulePlannerView: View {
                         activeTab = 2
                     }
                 }
-                .padding(.horizontal, 20)
+                .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 12)
                 .background(Color.black.opacity(0.08))
                 
@@ -207,14 +207,12 @@ struct SchedulePlannerView: View {
                 }
                 .foregroundColor(isActive ? .activeCyan : .white.opacity(0.4))
                 
-                // Indicator line
+                // Indicator line matching exactly the text/icon width
                 Rectangle()
                     .fill(isActive ? .activeCyan : Color.clear)
                     .frame(height: 3)
                     .cornerRadius(1.5)
-                    .padding(.horizontal, 10)
             }
-            .frame(maxWidth: .infinity)
         }
         .buttonStyle(PlainButtonStyle())
     }
@@ -454,18 +452,38 @@ struct SchedulePlannerView: View {
                 
                 Spacer()
                 
-                // Big Calendar Icon indicator
-                VStack(spacing: 2) {
-                    Text(schedule.scheduledDate.formatted(.dateTime.day()))
-                        .font(.system(size: 22, weight: .black, design: .rounded))
-                        .foregroundColor(.white)
-                    Text(schedule.scheduledDate.formatted(.dateTime.month(.abbreviated)))
-                        .font(.system(size: 10, weight: .black, design: .rounded))
-                        .foregroundColor(.white.opacity(0.4))
+                HStack(spacing: 12) {
+                    if isCreator {
+                        Button {
+                            let generator = UIImpactFeedbackGenerator(style: .medium)
+                            generator.impactOccurred()
+                            Task {
+                                await deleteSchedule(id: schedule.id)
+                            }
+                        } label: {
+                            Image(systemName: "trash.fill")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.red.opacity(0.85))
+                                .padding(8)
+                                .background(Color.red.opacity(0.12))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                    
+                    // Big Calendar Icon indicator
+                    VStack(spacing: 2) {
+                        Text(schedule.scheduledDate.formatted(.dateTime.day()))
+                            .font(.system(size: 22, weight: .black, design: .rounded))
+                            .foregroundColor(.white)
+                        Text(schedule.scheduledDate.formatted(.dateTime.month(.abbreviated)))
+                            .font(.system(size: 10, weight: .black, design: .rounded))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+                    .frame(width: 44, height: 44)
+                    .background(Color.white.opacity(0.08))
+                    .cornerRadius(10)
                 }
-                .frame(width: 44, height: 44)
-                .background(Color.white.opacity(0.08))
-                .cornerRadius(10)
             }
             
             // Reminder info
@@ -553,8 +571,8 @@ struct SchedulePlannerView: View {
                 .padding(.top, 4)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white.opacity(isPast ? 0.02 : 0.05))
         .cornerRadius(18)
         .overlay(
@@ -620,6 +638,37 @@ struct SchedulePlannerView: View {
             try await auth.respondToSchedule(id: id, accept: accept)
             isSuccessAlert = true
             statusMessage = accept ? "Date Accepted! Set your alarm now." : "Date invitation declined."
+            
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                showStatusAlert = true
+            }
+            
+            await loadSchedules()
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                withAnimation {
+                    showStatusAlert = false
+                }
+            }
+        } catch {
+            isSuccessAlert = false
+            statusMessage = error.localizedDescription
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                showStatusAlert = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                withAnimation {
+                    showStatusAlert = false
+                }
+            }
+        }
+    }
+    
+    private func deleteSchedule(id: Int) async {
+        do {
+            try await auth.deleteSchedule(id: id)
+            isSuccessAlert = true
+            statusMessage = "Schedule invitation deleted! 🗑️"
             
             withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
                 showStatusAlert = true

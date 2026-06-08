@@ -36,6 +36,7 @@ class User extends Authenticatable
         'profile_photo_url',
         'last_seen_message_id',
         'location_history',
+        'last_active_at',
     ];
 
     protected static function boot()
@@ -43,6 +44,12 @@ class User extends Authenticatable
         parent::boot();
         static::creating(function ($user) {
             $user->invite_code = strtoupper(bin2hex(random_bytes(4)));
+        });
+        static::saving(function ($user) {
+            $cacheKey = "user_{$user->id}_location_history";
+            if (\Cache::has($cacheKey)) {
+                $user->location_history = \Cache::get($cacheKey);
+            }
         });
     }
 
@@ -68,6 +75,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'location_history' => 'array',
             'is_charging' => 'boolean',
+            'last_active_at' => 'datetime',
         ];
     }
 }

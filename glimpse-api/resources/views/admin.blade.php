@@ -89,6 +89,7 @@
                     <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all bg-white/10 text-white">Overview</button>
                     <button onclick="switchTab('users')" id="tab-users" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-white/60 hover:text-white">User Management</button>
                     <button onclick="switchTab('couples')" id="tab-couples" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-white/60 hover:text-white">Couple Pairs</button>
+                    <button onclick="switchTab('bugs')" id="tab-bugs" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-white/60 hover:text-white">Bug Reports</button>
                     <button onclick="switchTab('control')" id="tab-control" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-white/60 hover:text-white">Control Center</button>
                     <button onclick="switchTab('diagnostics')" id="tab-diagnostics" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-white/60 hover:text-white flex items-center space-x-1.5">
                         <span>Live Debugger</span>
@@ -113,6 +114,7 @@
             <button onclick="switchTab('overview')" class="tab-btn-mob px-3 py-1.5 rounded-lg text-xs font-medium bg-white/10 text-white" id="tab-mob-overview">Overview</button>
             <button onclick="switchTab('users')" class="tab-btn-mob px-3 py-1.5 rounded-lg text-xs font-medium text-white/60" id="tab-mob-users">Users</button>
             <button onclick="switchTab('couples')" class="tab-btn-mob px-3 py-1.5 rounded-lg text-xs font-medium text-white/60" id="tab-mob-couples">Couples</button>
+            <button onclick="switchTab('bugs')" class="tab-btn-mob px-3 py-1.5 rounded-lg text-xs font-medium text-white/60" id="tab-mob-bugs">Bugs</button>
             <button onclick="switchTab('control')" class="tab-btn-mob px-3 py-1.5 rounded-lg text-xs font-medium text-white/60" id="tab-mob-control">Control</button>
             <button onclick="switchTab('diagnostics')" class="tab-btn-mob px-3 py-1.5 rounded-lg text-xs font-medium text-white/60" id="tab-mob-diagnostics">Debug</button>
         </div>
@@ -200,9 +202,13 @@
                                 @endphp
                                 <span class="font-bold text-white">{{ $dbDriver }}</span>
                             </div>
-                            <div class="p-3 bg-white/5 rounded-xl border border-white/5">
-                                <span class="block text-[10px] text-white/50 uppercase font-semibold">Server Host</span>
-                                <span class="font-bold text-white">Octane (Swoole/Roadrunner)</span>
+                            <div class="p-3 bg-white/5 rounded-xl border border-white/5 flex flex-col justify-between">
+                                <span class="block text-[10px] text-white/50 uppercase font-semibold">Server Host / Octane</span>
+                                <div class="flex items-center space-x-1.5 mt-0.5">
+                                    <span id="headerOctaneIndicator" class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                                    <span id="headerOctaneStatus" class="font-bold text-xs text-amber-400">CHECKING</span>
+                                    <span class="text-[9px] text-white/40 font-mono">(Swoole/Roadrunner)</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -430,6 +436,37 @@
                 </div>
             </div>
 
+            <!-- BUG REPORTS TAB -->
+            <div id="content-bugs" class="tab-content space-y-6 hidden">
+                <div>
+                    <h3 class="text-2xl font-bold">Bug & Support Reports</h3>
+                    <p class="text-white/50 text-sm">Review issues reported directly by users from the mobile client.</p>
+                </div>
+
+                <!-- Bug Reports Table -->
+                <div class="border border-white/10 rounded-2xl bg-white/5 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm border-collapse">
+                            <thead>
+                                <tr class="bg-white/5 border-b border-white/10 text-white/60 font-semibold">
+                                    <th class="p-4">User</th>
+                                    <th class="p-4">Title</th>
+                                    <th class="p-4">Description</th>
+                                    <th class="p-4">Device Specs</th>
+                                    <th class="p-4">Submitted At</th>
+                                    <th class="p-4 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bugTableBody">
+                                <tr>
+                                    <td colspan="6" class="p-8 text-center text-white/40">Syncing bug reports...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <!-- CONTROL CENTER TAB -->
             <div id="content-control" class="tab-content space-y-6 hidden">
                 <div>
@@ -469,6 +506,9 @@
                                     </button>
                                     <button onclick="triggerSimulatedUpdate('critical_alert')" class="py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 font-semibold text-[11px] transition-all">
                                         Critical Alert (1%)
+                                    </button>
+                                    <button onclick="forceSyncTargetLocation()" class="py-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-400 font-semibold text-[11px] transition-all col-span-2">
+                                        Force Sync & Wipe Wi-Fi Cache
                                     </button>
                                 </div>
                             </div>
@@ -966,6 +1006,54 @@
                             </div>
                         </div>
 
+                        <!-- Box 3: Laravel Octane Monitor & Controller -->
+                        <div class="p-6 rounded-2xl border border-white/10 bg-white/5 space-y-4">
+                            <h4 class="text-lg font-bold flex items-center justify-between">
+                                <div class="flex items-center space-x-2">
+                                    <span class="w-1.5 h-6 rounded bg-emerald-500 inline-block"></span>
+                                    <span>Laravel Octane Monitor</span>
+                                </div>
+                                <span id="octaneBadge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">CHECKING...</span>
+                            </h4>
+                            <p class="text-xs text-white/50">Monitor worker state, check Octane server connectivity, and reload code changes instantly without server downtime.</p>
+                            
+                            <div class="space-y-3 pt-2 text-xs">
+                                <div class="grid grid-cols-2 gap-2 text-[9px] font-mono">
+                                    <div class="p-2 rounded bg-slate-900 border border-white/5 flex flex-col">
+                                        <span class="text-white/40">Latency / Response:</span>
+                                        <span id="octaneLatency" class="font-bold text-white">-- ms</span>
+                                    </div>
+                                    <div class="p-2 rounded bg-slate-900 border border-white/5 flex flex-col">
+                                        <span class="text-white/40">PHP Version:</span>
+                                        <span id="octanePhpVersion" class="font-bold text-white">--</span>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-2 pt-1">
+                                    <button onclick="checkOctaneStatus()" class="py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold border border-white/10 transition-all flex items-center justify-center space-x-1 text-xs">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                                        </svg>
+                                        <span>Refresh Status</span>
+                                    </button>
+                                    <button onclick="reloadOctaneWorkers()" class="py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 border border-emerald-500/30 font-bold transition-all flex items-center justify-center space-x-1 text-xs">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.656 48.656 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3" />
+                                        </svg>
+                                        <span>Artisan Reload</span>
+                                    </button>
+                                </div>
+
+                                <!-- Console output -->
+                                <div id="octaneConsole" class="hidden p-3 rounded-xl bg-slate-950/70 border border-white/5 text-[9px] font-mono space-y-2">
+                                    <div>
+                                        <span class="text-emerald-400 block font-bold uppercase text-[8px]">Octane Command Output</span>
+                                        <span id="octaneConsoleOutput" class="text-white break-all block whitespace-pre-wrap"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
 
                 </div>
@@ -1132,8 +1220,10 @@
                 if (response.ok) {
                     const data = await response.json();
                     updateUI(data);
-                    // Defer to prevent blocking UI load
-                    setTimeout(diagnoseStorageSymlink, 100);
+                    setTimeout(() => {
+                        diagnoseStorageSymlink();
+                        checkOctaneStatus();
+                    }, 100);
                 } else if (response.status === 401) {
                     handleLogout();
                 }
@@ -1157,6 +1247,7 @@
             // Render tables & grids
             renderUsersTable(data.users);
             renderCouplesGrid(data.couples);
+            renderBugsTable(data.bug_reports);
             
             // Auto-subscribe to all active couples' channels on websocket to monitor broadcasts
             if (data.couples && liveWS && liveWS.readyState === WebSocket.OPEN) {
@@ -1244,6 +1335,10 @@
                             <span class="block font-bold text-white">${u.name}</span>
                             <span class="block text-[10px] text-white/50">${u.email}</span>
                             <span class="block text-[9px] mt-0.5">${coupleStatus}</span>
+                            ${u.email_verified_at
+                                ? `<span class="inline-flex items-center space-x-1 mt-1 px-1.5 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-[9px] font-bold"><span>✓</span><span>Email Verified</span></span>`
+                                : `<span class="inline-flex items-center space-x-1 mt-1 px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/25 text-amber-400 text-[9px] font-bold"><span>⚠</span><span>Unverified</span></span>`
+                            }
                         </div>
                     </td>
                     <td class="p-4 font-mono text-[10px] text-white/80 select-all">${u.invite_code || 'None'}</td>
@@ -1258,9 +1353,13 @@
                         <span class="block text-[9px] font-mono text-white/40 mt-0.5">Lat: ${lat} | Lon: ${lon}</span>
                     </td>
                     <td class="p-4 text-right">
-                        <div class="inline-flex space-x-2">
+                        <div class="inline-flex flex-wrap gap-1.5 justify-end">
                             <button onclick="openLocationModal(${u.id}, ${u.latitude || -6.200000}, ${u.longitude || 106.816666}, '${u.location_name || ''}')" class="px-2.5 py-1.5 rounded-lg bg-electricPurple/10 hover:bg-electricPurple/20 border border-electricPurple/20 text-electricPurple text-[10px] font-semibold transition-all">Location</button>
                             <button onclick="openBatteryModal(${u.id}, ${u.battery_level || 100})" class="px-2.5 py-1.5 rounded-lg bg-activeCyan/10 hover:bg-activeCyan/20 border border-activeCyan/20 text-activeCyan text-[10px] font-semibold transition-all">Battery</button>
+                            ${!u.email_verified_at
+                                ? `<button onclick="bypassVerification('${u.email}', this)" class="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 text-emerald-400 text-[10px] font-semibold transition-all">Verify ✓</button>`
+                                : `<span class="px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/25 text-[10px] font-semibold cursor-default">Verified</span>`
+                            }
                             <button onclick="deleteUser(${u.id})" class="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20 text-rose-400 text-[10px] font-semibold transition-all">Delete</button>
                         </div>
                     </td>
@@ -1269,10 +1368,102 @@
             });
         }
 
+        function renderBugsTable(bugs) {
+            const tbody = document.getElementById('bugTableBody');
+            tbody.innerHTML = '';
+
+            if (!bugs || bugs.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-white/40">No bug reports submitted yet.</td></tr>`;
+                return;
+            }
+
+            bugs.forEach(b => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-white/5 hover:bg-white/5 transition-all text-xs';
+
+                const reporterName = b.user ? b.user.name : 'Unknown User';
+                const reporterEmail = b.user ? b.user.email : '';
+                const createdDate = new Date(b.created_at).toLocaleString();
+
+                tr.innerHTML = `
+                    <td class="p-4">
+                        <span class="block font-bold text-white">${reporterName}</span>
+                        <span class="block text-[10px] text-white/50">${reporterEmail}</span>
+                    </td>
+                    <td class="p-4 font-semibold text-white/80">${b.title}</td>
+                    <td class="p-4 max-w-sm whitespace-pre-wrap text-white/60">${b.description}</td>
+                    <td class="p-4 font-mono text-[10px] text-white/50">${b.device_info || '-'}</td>
+                    <td class="p-4 text-white/40 font-mono text-[10px]">${createdDate}</td>
+                    <td class="p-4 text-right">
+                        <button onclick="deleteBugReport(${b.id})" class="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20 text-rose-400 text-[10px] font-semibold transition-all">Resolve / Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function deleteBugReport(reportId) {
+            if (!confirm("Are you sure you want to resolve/delete this bug report?")) return;
+            const token = localStorage.getItem('glimpse_admin_token');
+            try {
+                const response = await fetch(`/admin/api?token=${encodeURIComponent(token)}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Admin-Token': token
+                    },
+                    body: JSON.stringify({ action: 'delete_bug_report', report_id: reportId })
+                });
+
+                if (response.ok) {
+                    showNotification("Bug report resolved successfully!", "success");
+                    fetchData();
+                } else {
+                    const err = await response.json();
+                    showNotification(err.error || "Failed to resolve bug report", "error");
+                }
+            } catch (err) {
+                console.error(err);
+                showNotification("Network error occurred", "error");
+            }
+        }
+
         function filterUsers() {
             const query = document.getElementById('userSearch').value.toLowerCase();
             const filtered = appData.users.filter(u => u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query));
             renderUsersTable(filtered);
+        }
+
+        async function bypassVerification(email, btn) {
+            if (!confirm(`Force-verify email for: ${email}?`)) return;
+            const orig = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Verifying...';
+            try {
+                const res = await fetch(`/api/verify-email/bypass?email=${encodeURIComponent(email)}`, {
+                    headers: { 'X-Admin-Token': adminToken }
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    btn.textContent = '✓ Done';
+                    btn.className = btn.className.replace('emerald', 'white').replace('hover:bg-emerald-500', '');
+                    btn.disabled = true;
+                    // Update local data and re-render
+                    const user = appData.users.find(u => u.email === email);
+                    if (user) user.email_verified_at = new Date().toISOString();
+                    filterUsers();
+                    showToast(`Email verified for ${email}`, 'success');
+                } else {
+                    btn.textContent = orig;
+                    btn.disabled = false;
+                    showToast(data.error || 'Bypass failed', 'error');
+                }
+            } catch (e) {
+                btn.textContent = orig;
+                btn.disabled = false;
+                showToast('Network error', 'error');
+            }
         }
 
         function renderCouplesGrid(couples) {
@@ -1442,6 +1633,15 @@
                 return;
             }
             adminApiCall('push_diagnostics', { user_id: userId, type: type });
+        }
+        
+        async function forceSyncTargetLocation() {
+            const userId = document.getElementById('simulatorUserSelect').value;
+            if (!userId) {
+                alert("Please select a user first!");
+                return;
+            }
+            adminApiCall('sync_location', { user_id: userId });
         }
 
         function triggerCustomInject() {
@@ -3007,6 +3207,130 @@
             ctx.closePath();
             ctx.fillStyle = fillColor;
             ctx.fill();
+        }
+
+        async function checkOctaneStatus() {
+            const token = localStorage.getItem('glimpse_admin_token');
+            const badge = document.getElementById('octaneBadge');
+            const latencySpan = document.getElementById('octaneLatency');
+            const phpSpan = document.getElementById('octanePhpVersion');
+            const consoleDiv = document.getElementById('octaneConsole');
+            const consoleOutput = document.getElementById('octaneConsoleOutput');
+
+            if (!badge) return;
+
+            badge.innerText = "CHECKING...";
+            badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20";
+
+            try {
+                const response = await fetch(`/admin/api?token=${encodeURIComponent(token)}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Admin-Token': token
+                    },
+                    body: JSON.stringify({ action: 'octane_status' })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    
+                    const headerIndicator = document.getElementById('headerOctaneIndicator');
+                    const headerStatus = document.getElementById('headerOctaneStatus');
+                    
+                    if (result.is_running) {
+                        badge.innerText = "RUNNING";
+                        badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+                        if (headerIndicator && headerStatus) {
+                            headerIndicator.className = "w-2 h-2 rounded-full bg-emerald-500";
+                            headerStatus.innerText = "ON";
+                            headerStatus.className = "font-bold text-xs text-emerald-400";
+                        }
+                    } else {
+                        badge.innerText = "STOPPED";
+                        badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20";
+                        if (headerIndicator && headerStatus) {
+                            headerIndicator.className = "w-2 h-2 rounded-full bg-rose-500";
+                            headerStatus.innerText = "OFF";
+                            headerStatus.className = "font-bold text-xs text-rose-400";
+                        }
+                    }
+
+                    latencySpan.innerText = result.latency_ms + " ms";
+                    phpSpan.innerText = result.php_version;
+                    
+                    if (result.artisan_output) {
+                        consoleDiv.classList.remove('hidden');
+                        consoleOutput.innerText = result.artisan_output;
+                    } else {
+                        consoleDiv.classList.add('hidden');
+                    }
+                } else {
+                    badge.innerText = "OFFLINE";
+                    badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20";
+                    updateHeaderOffline();
+                }
+            } catch (err) {
+                badge.innerText = "ERROR";
+                badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20";
+                console.error("Octane status check failed:", err);
+                updateHeaderOffline();
+            }
+
+            function updateHeaderOffline() {
+                const headerIndicator = document.getElementById('headerOctaneIndicator');
+                const headerStatus = document.getElementById('headerOctaneStatus');
+                if (headerIndicator && headerStatus) {
+                    headerIndicator.className = "w-2 h-2 rounded-full bg-rose-500";
+                    headerStatus.innerText = "OFFLINE";
+                    headerStatus.className = "font-bold text-xs text-rose-400";
+                }
+            }
+        }
+
+        async function reloadOctaneWorkers() {
+            const token = localStorage.getItem('glimpse_admin_token');
+            const badge = document.getElementById('octaneBadge');
+            const consoleDiv = document.getElementById('octaneConsole');
+            const consoleOutput = document.getElementById('octaneConsoleOutput');
+
+            if (!confirm("Are you sure you want to reload Laravel Octane worker processes?\n\nThis is a zero-downtime hot-reload to apply any new PHP code updates immediately.")) {
+                return;
+            }
+
+            if (badge) {
+                badge.innerText = "RELOADING...";
+                badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20";
+            }
+
+            try {
+                const response = await fetch(`/admin/api?token=${encodeURIComponent(token)}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Admin-Token': token
+                    },
+                    body: JSON.stringify({ action: 'octane_reload' })
+                });
+
+                const result = await response.json();
+                if (consoleDiv) consoleDiv.classList.remove('hidden');
+
+                if (response.ok && result.success) {
+                    if (consoleOutput) consoleOutput.innerText = result.artisan_output || "Octane workers successfully reloaded.";
+                    alert(result.message);
+                    checkOctaneStatus();
+                } else {
+                    if (consoleOutput) consoleOutput.innerText = "Error:\n" + (result.error || result.message);
+                    alert("Octane reload failed: " + (result.message || 'Server error'));
+                    checkOctaneStatus();
+                }
+            } catch (err) {
+                alert("Exception: " + err.message);
+                checkOctaneStatus();
+            }
         }
     </script>
 </body>

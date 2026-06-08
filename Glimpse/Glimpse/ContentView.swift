@@ -22,7 +22,9 @@ struct ContentView: View {
             } else {
                 Group {
                     if auth.isAuthenticated {
-                        if permissionManager.hasAllPermissions {
+                        if let user = auth.currentUser, !user.isEmailVerified {
+                            EmailVerificationView(auth: auth)
+                        } else if permissionManager.hasAllPermissions {
                             MainDashboardView()
                         } else {
                             PermissionGateView()
