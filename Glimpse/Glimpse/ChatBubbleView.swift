@@ -267,8 +267,6 @@ struct ChatBubbleView: View {
                                     .foregroundColor(.white.opacity(0.6))
                             }
                         }
-                    }
-                    .padding(.top, 2)
                 }
             }
             
