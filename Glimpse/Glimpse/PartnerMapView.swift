@@ -983,14 +983,9 @@ struct PartnerOverlayCard: View {
                                         .foregroundColor(.activeCyan.opacity(0.6))
                                 }
                             } else if user.latest_photo_url != nil {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "camera.shutter.button.fill")
-                                        .font(.system(size: 8))
-                                        .foregroundColor(.activeCyan)
-                                    Text("Flash Captured")
-                                        .font(.caption.bold())
-                                        .foregroundColor(.activeCyan)
-                                }
+                                Image(systemName: "camera.shutter.button.fill")
+                                    .font(.system(size: 8))
+                                    .foregroundColor(.activeCyan)
                                 
                                 Text("•")
                                     .font(.caption)
