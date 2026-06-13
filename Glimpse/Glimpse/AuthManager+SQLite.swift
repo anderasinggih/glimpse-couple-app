@@ -206,7 +206,6 @@ class GlimpseDatabase {
         }
     }
 }
-}
 
 
 
