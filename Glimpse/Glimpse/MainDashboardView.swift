@@ -945,37 +945,7 @@ struct MainDashboardView: View {
                                                 .font(.system(size: 13, weight: .medium, design: .rounded))
                                                 .foregroundColor(.white.opacity(0.8))
                                             
-                                            TimelineView(.periodic(from: Date(), by: 1.0)) { context in
-                                                let timeString = timeRemainingString(from: context.date, to: schedule.scheduledDate)
-                                                
-                                                if !timeString.isEmpty {
-                                                    HStack(spacing: 3) {
-                                                        Image(systemName: "hourglass.badge.ellipsis")
-                                                            .font(.system(size: 8))
-                                                        Text("\(timeString) left")
-                                                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                                    }
-                                                    .foregroundColor(.activeCyan)
-                                                    .padding(.horizontal, 6)
-                                                    .padding(.vertical, 2.5)
-                                                    .background(Color.activeCyan.opacity(0.12))
-                                                    .cornerRadius(5)
-                                                    .padding(.top, 2)
-                                                } else {
-                                                    HStack(spacing: 3) {
-                                                        Image(systemName: "checkmark.circle.fill")
-                                                            .font(.system(size: 8))
-                                                        Text("Happening Now!")
-                                                            .font(.system(size: 9, weight: .bold, design: .rounded))
-                                                    }
-                                                    .foregroundColor(.vividMint)
-                                                    .padding(.horizontal, 6)
-                                                    .padding(.vertical, 2.5)
-                                                    .background(Color.vividMint.opacity(0.12))
-                                                    .cornerRadius(5)
-                                                    .padding(.top, 2)
-                                                }
-                                            }
+                                            ScheduleCountdownView(targetDate: schedule.scheduledDate)
                                         }
                                         
                                         Spacer()
@@ -2493,5 +2463,62 @@ extension MainDashboardView {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
+    }
+}
+
+struct ScheduleCountdownView: View {
+    let targetDate: Date
+    
+    var body: some View {
+        TimelineView(.periodic(from: Date(), by: 1.0)) { context in
+            let timeString = timeRemainingString(from: context.date, to: targetDate)
+            
+            if !timeString.isEmpty {
+                HStack(spacing: 3) {
+                    Image(systemName: "hourglass.badge.ellipsis")
+                        .font(.system(size: 8))
+                    Text("\(timeString) left")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                }
+                .foregroundColor(.activeCyan)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2.5)
+                .background(Color.activeCyan.opacity(0.12))
+                .cornerRadius(5)
+                .padding(.top, 2)
+            } else {
+                HStack(spacing: 3) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 8))
+                    Text("Happening Now!")
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                }
+                .foregroundColor(.vividMint)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2.5)
+                .background(Color.vividMint.opacity(0.12))
+                .cornerRadius(5)
+                .padding(.top, 2)
+            }
+        }
+    }
+    
+    private func timeRemainingString(from now: Date, to target: Date) -> String {
+        let diff = target.timeIntervalSince(now)
+        guard diff > 0 else { return "" }
+        
+        let totalSeconds = Int(diff)
+        let days = totalSeconds / 86400
+        let hours = (totalSeconds % 86400) / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let seconds = totalSeconds % 60
+        
+        var parts: [String] = []
+        if days > 0 { parts.append("\(days)d") }
+        if hours > 0 || days > 0 { parts.append("\(hours)hr") }
+        if minutes > 0 || hours > 0 || days > 0 { parts.append("\(minutes)min") }
+        parts.append("\(seconds)sec")
+        
+        return parts.joined(separator: " ")
     }
 }
