@@ -4,13 +4,17 @@ import SQLite3
 import SwiftUI
 
 // MARK: - SQLite Database Manager
+// MARK: - SQLite Database Manager
 class GlimpseDatabase {
     static let shared = GlimpseDatabase()
     private var db: OpaquePointer?
+    private let dbQueue = DispatchQueue(label: "group.glimpse.database", qos: .background)
     
     private init() {
-        openDatabase()
-        createTable()
+        dbQueue.sync {
+            openDatabase()
+            createTable()
+        }
     }
     
     private func openDatabase() {
@@ -55,118 +59,153 @@ class GlimpseDatabase {
     }
     
     func saveMessage(_ msg: ChatMessage) {
-        let insertStatementString = """
-        INSERT OR REPLACE INTO chat_messages (id, couple_id, sender_id, message, room_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?);
-        """
-        
-        var insertStatement: OpaquePointer?
-        if sqlite3_prepare_v2(db, insertStatementString, -1, &insertStatement, nil) == SQLITE_OK {
-            sqlite3_bind_int(insertStatement, 1, Int32(msg.id))
-            sqlite3_bind_int(insertStatement, 2, Int32(msg.couple_id))
-            sqlite3_bind_int(insertStatement, 3, Int32(msg.sender_id))
-            sqlite3_bind_text(insertStatement, 4, (msg.message as NSString).utf8String, -1, nil)
+        dbQueue.async { [weak self] in
+            guard let self = self else { return }
+            let insertStatementString = """
+            INSERT OR REPLACE INTO chat_messages (id, couple_id, sender_id, message, room_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?);
+            """
             
-            if let roomId = msg.room_id {
-                sqlite3_bind_int(insertStatement, 5, Int32(roomId))
+            var insertStatement: OpaquePointer?
+            if sqlite3_prepare_v2(self.db, insertStatementString, -1, &insertStatement, nil) == SQLITE_OK {
+                sqlite3_bind_int(insertStatement, 1, Int32(msg.id))
+                sqlite3_bind_int(insertStatement, 2, Int32(msg.couple_id))
+                sqlite3_bind_int(insertStatement, 3, Int32(msg.sender_id))
+                sqlite3_bind_text(insertStatement, 4, (msg.message as NSString).utf8String, -1, nil)
+                
+                if let roomId = msg.room_id {
+                    sqlite3_bind_int(insertStatement, 5, Int32(roomId))
+                } else {
+                    sqlite3_bind_null(insertStatement, 5)
+                }
+                
+                sqlite3_bind_text(insertStatement, 6, (msg.created_at as NSString? ?? "" as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(insertStatement, 7, (msg.updated_at as NSString? ?? "" as NSString).utf8String, -1, nil)
+                
+                if sqlite3_step(insertStatement) == SQLITE_DONE {
+                    // Successfully inserted or updated
+                } else {
+                    print("❌ SQLite: Could not insert row.")
+                }
             } else {
-                sqlite3_bind_null(insertStatement, 5)
+                print("❌ SQLite: INSERT statement could not be prepared.")
             }
-            
-            sqlite3_bind_text(insertStatement, 6, (msg.created_at as NSString? ?? "" as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(insertStatement, 7, (msg.updated_at as NSString? ?? "" as NSString).utf8String, -1, nil)
-            
-            if sqlite3_step(insertStatement) == SQLITE_DONE {
-                // Successfully inserted or updated
-            } else {
-                print("❌ SQLite: Could not insert row.")
-            }
-        } else {
-            print("❌ SQLite: INSERT statement could not be prepared.")
+            sqlite3_finalize(insertStatement)
         }
-        sqlite3_finalize(insertStatement)
     }
     
     func saveMessages(_ messages: [ChatMessage]) {
-        // Run in transaction for high performance bulk inserts
-        sqlite3_exec(db, "BEGIN TRANSACTION", nil, nil, nil)
-        for msg in messages {
-            saveMessage(msg)
+        dbQueue.async { [weak self] in
+            guard let self = self else { return }
+            // Run in transaction for high performance bulk inserts
+            sqlite3_exec(self.db, "BEGIN TRANSACTION", nil, nil, nil)
+            for msg in messages {
+                let insertStatementString = """
+                INSERT OR REPLACE INTO chat_messages (id, couple_id, sender_id, message, room_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?);
+                """
+                
+                var insertStatement: OpaquePointer?
+                if sqlite3_prepare_v2(self.db, insertStatementString, -1, &insertStatement, nil) == SQLITE_OK {
+                    sqlite3_bind_int(insertStatement, 1, Int32(msg.id))
+                    sqlite3_bind_int(insertStatement, 2, Int32(msg.couple_id))
+                    sqlite3_bind_int(insertStatement, 3, Int32(msg.sender_id))
+                    sqlite3_bind_text(insertStatement, 4, (msg.message as NSString).utf8String, -1, nil)
+                    
+                    if let roomId = msg.room_id {
+                        sqlite3_bind_int(insertStatement, 5, Int32(roomId))
+                    } else {
+                        sqlite3_bind_null(insertStatement, 5)
+                    }
+                    
+                    sqlite3_bind_text(insertStatement, 6, (msg.created_at as NSString? ?? "" as NSString).utf8String, -1, nil)
+                    sqlite3_bind_text(insertStatement, 7, (msg.updated_at as NSString? ?? "" as NSString).utf8String, -1, nil)
+                    
+                    _ = sqlite3_step(insertStatement)
+                }
+                sqlite3_finalize(insertStatement)
+            }
+            sqlite3_exec(self.db, "COMMIT TRANSACTION", nil, nil, nil)
         }
-        sqlite3_exec(db, "COMMIT TRANSACTION", nil, nil, nil)
     }
     
     func getMessages(forRoomId roomId: Int?) -> [ChatMessage] {
-        let queryStatementString: String
-        if let rId = roomId {
-            queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id = ? ORDER BY id ASC;"
-        } else {
-            queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id IS NULL ORDER BY id ASC;"
-        }
-        
-        var queryStatement: OpaquePointer?
-        var messages: [ChatMessage] = []
-        
-        if sqlite3_prepare_v2(db, queryStatementString, -1, &queryStatement, nil) == SQLITE_OK {
+        return dbQueue.sync {
+            let queryStatementString: String
             if let rId = roomId {
-                sqlite3_bind_int(queryStatement, 1, Int32(rId))
+                queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id = ? ORDER BY id ASC;"
+            } else {
+                queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id IS NULL ORDER BY id ASC;"
             }
             
-            while sqlite3_step(queryStatement) == SQLITE_ROW {
-                let id = Int(sqlite3_column_int(queryStatement, 0))
-                let coupleId = Int(sqlite3_column_int(queryStatement, 1))
-                let senderId = Int(sqlite3_column_int(queryStatement, 2))
-                
-                guard let messageTextBytes = sqlite3_column_text(queryStatement, 3) else { continue }
-                let message = String(cString: messageTextBytes)
-                
-                var roomId: Int? = nil
-                if sqlite3_column_type(queryStatement, 4) != SQLITE_NULL {
-                    roomId = Int(sqlite3_column_int(queryStatement, 4))
+            var queryStatement: OpaquePointer?
+            var messages: [ChatMessage] = []
+            
+            if sqlite3_prepare_v2(self.db, queryStatementString, -1, &queryStatement, nil) == SQLITE_OK {
+                if let rId = roomId {
+                    sqlite3_bind_int(queryStatement, 1, Int32(rId))
                 }
                 
-                let createdAt: String?
-                if let createdAtBytes = sqlite3_column_text(queryStatement, 5) {
-                    createdAt = String(cString: createdAtBytes)
-                } else {
-                    createdAt = nil
+                while sqlite3_step(queryStatement) == SQLITE_ROW {
+                    let id = Int(sqlite3_column_int(queryStatement, 0))
+                    let coupleId = Int(sqlite3_column_int(queryStatement, 1))
+                    let senderId = Int(sqlite3_column_int(queryStatement, 2))
+                    
+                    guard let messageTextBytes = sqlite3_column_text(queryStatement, 3) else { continue }
+                    let message = String(cString: messageTextBytes)
+                    
+                    var roomId: Int? = nil
+                    if sqlite3_column_type(queryStatement, 4) != SQLITE_NULL {
+                        roomId = Int(sqlite3_column_int(queryStatement, 4))
+                    }
+                    
+                    let createdAt: String?
+                    if let createdAtBytes = sqlite3_column_text(queryStatement, 5) {
+                        createdAt = String(cString: createdAtBytes)
+                    } else {
+                        createdAt = nil
+                    }
+                    
+                    let updatedAt: String?
+                    if let updatedAtBytes = sqlite3_column_text(queryStatement, 6) {
+                        updatedAt = String(cString: updatedAtBytes)
+                    } else {
+                        updatedAt = nil
+                    }
+                    
+                    let chatMessage = ChatMessage(
+                        id: id,
+                        couple_id: coupleId,
+                        sender_id: senderId,
+                        message: message,
+                        room_id: roomId,
+                        created_at: createdAt,
+                        updated_at: updatedAt
+                    )
+                    messages.append(chatMessage)
                 }
-                
-                let updatedAt: String?
-                if let updatedAtBytes = sqlite3_column_text(queryStatement, 6) {
-                    updatedAt = String(cString: updatedAtBytes)
-                } else {
-                    updatedAt = nil
-                }
-                
-                let chatMessage = ChatMessage(
-                    id: id,
-                    couple_id: coupleId,
-                    sender_id: senderId,
-                    message: message,
-                    room_id: roomId,
-                    created_at: createdAt,
-                    updated_at: updatedAt
-                )
-                messages.append(chatMessage)
+            } else {
+                print("❌ SQLite: SELECT statement could not be prepared.")
             }
-        } else {
-            print("❌ SQLite: SELECT statement could not be prepared.")
+            sqlite3_finalize(queryStatement)
+            return messages
         }
-        sqlite3_finalize(queryStatement)
-        return messages
     }
     
     func clearAllMessages() {
-        let deleteString = "DELETE FROM chat_messages;"
-        var deleteStatement: OpaquePointer?
-        if sqlite3_prepare_v2(db, deleteString, -1, &deleteStatement, nil) == SQLITE_OK {
-            if sqlite3_step(deleteStatement) == SQLITE_DONE {
-                print("✅ SQLite: All messages cleared.")
+        dbQueue.async { [weak self] in
+            guard let self = self else { return }
+            let deleteString = "DELETE FROM chat_messages;"
+            var deleteStatement: OpaquePointer?
+            if sqlite3_prepare_v2(self.db, deleteString, -1, &deleteStatement, nil) == SQLITE_OK {
+                if sqlite3_step(deleteStatement) == SQLITE_DONE {
+                    print("✅ SQLite: All messages cleared.")
+                }
             }
+            sqlite3_finalize(deleteStatement)
         }
-        sqlite3_finalize(deleteStatement)
     }
+}
 }
 
 

@@ -126,13 +126,15 @@ extension AuthManager {
             case .success(let message):
                 switch message {
                 case .string(let text):
+                    let event = self.parseWebSocketString(text)
                     Task { @MainActor in
-                        self.handleWebSocketString(text)
+                        self.handleParsedWebSocketEvent(event)
                     }
                 case .data(let data):
                     if let text = String(data: data, encoding: .utf8) {
+                        let event = self.parseWebSocketString(text)
                         Task { @MainActor in
-                            self.handleWebSocketString(text)
+                            self.handleParsedWebSocketEvent(event)
                         }
                     }
                 @unknown default:
@@ -158,32 +160,43 @@ extension AuthManager {
         let data: String?
     }
     
-    @MainActor
-    private func handleWebSocketString(_ text: String) {
-        guard let data = text.data(using: .utf8) else { return }
+    enum ParsedWebSocketEvent {
+        case ping
+        case connectionEstablished
+        case subscriptionSucceeded
+        case partnerStateUpdated(GlimpsePartnerStateUpdate)
+        case syncLocationRequested(Int) // targetUserId
+        case chatRoomCreated(GlimpseChatRoom)
+        case chatRoomDeleted(Int) // roomId
+        case chatRoomUpdated(roomId: Int, name: String)
+        case chatRoomThemeUpdated(roomId: Int, themeColor: String?, backgroundColor: String?)
+        case chatRoomDeleteStatusChanged(roomId: Int, deleteRequestedBy: Int?)
+        case messageSent(ChatMessage)
+        case loveBurstSent(timestamp: Double, senderId: Int, reaction: String?)
+        case loveBumpSent(timestamp: Double, senderId: Int, totalMeetings: Int)
+        case partnerTyping(userId: Int, isTyping: Bool, roomId: Int?)
+        case unknown
+    }
+    
+    private func parseWebSocketString(_ text: String) -> ParsedWebSocketEvent {
+        guard let data = text.data(using: .utf8) else { return .unknown }
         do {
             let pusherEvent = try JSONDecoder().decode(PusherEvent.self, from: data)
             
             switch pusherEvent.event {
             case "pusher:ping":
-                self.sendPongFrame()
+                return .ping
                 
             case "pusher:pong":
-                print("📥 Received websocket pong.")
+                return .ping // Triggers pong
                 
             case "pusher:connection_established":
-                print("✅ WebSocket handshake established!")
-                self.isConnecting = false
-                self.isWebSocketConnected = true
-                if let coupleId = self.currentUser?.couple_id {
-                    self.sendSubscribeFrame(channel: "couple.\(coupleId)")
-                }
+                return .connectionEstablished
                 
             case "pusher_internal:subscription_succeeded":
-                print("❤️ Subscribed successfully to Glimpse Live Channel!")
+                return .subscriptionSucceeded
                 
             case "App\\Events\\PartnerStateUpdated":
-                print("🔔 Live State Updated from partner!")
                 if let eventDataString = pusherEvent.data,
                    let eventData = eventDataString.data(using: .utf8) {
                     struct ProtobufPayload: Codable {
@@ -192,72 +205,44 @@ extension AuthManager {
                     if let pbPayload = try? JSONDecoder().decode(ProtobufPayload.self, from: eventData),
                        let pbString = pbPayload.pb,
                        let update = GlimpsePartnerStateUpdate.decodeProtobuf(from: pbString) {
-                        if var p = self.partner, p.id == update.userId {
-                            if let lat = update.latitude { p.latitude = lat }
-                            if let lon = update.longitude { p.longitude = lon }
-                            if let batt = update.batteryLevel { p.battery_level = batt }
-                            if let char = update.isCharging { p.is_charging = char }
-                            if let lastSeen = update.lastSeenMessageId { p.last_seen_message_id = lastSeen }
-                            if let active = update.lastActiveAt { p.last_active_at = active }
-                            if let sleep = update.isSleeping { p.is_sleeping = sleep }
-                            p.status_note = update.statusNote
-                            p.location_name = update.locationName
-                            p.wifi_bssid = update.wifiBssid
-                            p.last_updated = ISO8601DateFormatter().string(from: Date())
-                            self.partner = p
-                        }
-                        
-                        // Trigger immediate local state notification
-                        NotificationCenter.default.post(name: Notification.Name("GlimpseLiveStateUpdated"), object: nil)
-                        Task {
-                            try? await self.fetchFlashes()
-                        }
+                        return .partnerStateUpdated(update)
                     }
                 }
                 
             case "App\\Events\\SyncLocationRequested":
-                print("🔄 Sync Location Requested received from Pusher!")
                 if let eventDataString = pusherEvent.data,
                    let eventData = eventDataString.data(using: .utf8) {
                     struct SyncPayload: Codable {
                         let targetUserId: Int
                     }
                     if let payload = try? JSONDecoder().decode(SyncPayload.self, from: eventData) {
-                        // Only force sync if the target user ID matches my current user ID
-                        if payload.targetUserId == self.currentUser?.id {
-                            print("🛰️ Forcing GPS Location Sync as requested by Web/Partner!")
-                            // Wake up GPS immediately to get fresh satellite coordinates
-                            LiveLocationManager.shared.forceWakeGPSAndSync(bypassCooldown: true)
-                        }
+                        return .syncLocationRequested(payload.targetUserId)
                     }
                 }
                 
             case "App\\Events\\ChatRoomCreated":
-                print("🆕 Chat room created broadcast received!")
                 if let eventDataString = pusherEvent.data,
                    let eventData = eventDataString.data(using: .utf8) {
                     struct RoomPayload: Codable {
                         let room: GlimpseChatRoom
                     }
                     if let payload = try? JSONDecoder().decode(RoomPayload.self, from: eventData) {
-                        NotificationCenter.default.post(name: Notification.Name("GlimpseChatRoomCreated"), object: payload.room)
+                        return .chatRoomCreated(payload.room)
                     }
                 }
                 
             case "App\\Events\\ChatRoomDeleted":
-                print("🗑️ Chat room deleted broadcast received!")
                 if let eventDataString = pusherEvent.data,
                    let eventData = eventDataString.data(using: .utf8) {
                     struct RoomIdPayload: Codable {
                         let room_id: Int
                     }
                     if let payload = try? JSONDecoder().decode(RoomIdPayload.self, from: eventData) {
-                        NotificationCenter.default.post(name: Notification.Name("GlimpseChatRoomDeleted"), object: payload.room_id)
+                        return .chatRoomDeleted(payload.room_id)
                     }
                 }
 
             case "App\\Events\\ChatRoomUpdated":
-                print("🔄 Chat room renamed broadcast received!")
                 if let eventDataString = pusherEvent.data,
                    let eventData = eventDataString.data(using: .utf8) {
                     struct RoomUpdatePayload: Codable {
@@ -265,16 +250,11 @@ extension AuthManager {
                         let name: String
                     }
                     if let payload = try? JSONDecoder().decode(RoomUpdatePayload.self, from: eventData) {
-                        NotificationCenter.default.post(
-                            name: Notification.Name("GlimpseChatRoomUpdated"),
-                            object: nil,
-                            userInfo: ["room_id": payload.room_id, "name": payload.name]
-                        )
+                        return .chatRoomUpdated(roomId: payload.room_id, name: payload.name)
                     }
                 }
 
             case "App\\Events\\ChatRoomThemeUpdated":
-                print("🎨 Chat room theme updated broadcast received!")
                 if let eventDataString = pusherEvent.data,
                    let eventData = eventDataString.data(using: .utf8) {
                     struct ThemeUpdatePayload: Codable {
@@ -283,20 +263,11 @@ extension AuthManager {
                         let background_color: String?
                     }
                     if let payload = try? JSONDecoder().decode(ThemeUpdatePayload.self, from: eventData) {
-                        NotificationCenter.default.post(
-                            name: Notification.Name("GlimpseChatRoomThemeUpdated"),
-                            object: nil,
-                            userInfo: [
-                                "room_id": payload.room_id,
-                                "theme_color": payload.theme_color as Any,
-                                "background_color": payload.background_color as Any
-                            ]
-                        )
+                        return .chatRoomThemeUpdated(roomId: payload.room_id, themeColor: payload.theme_color, backgroundColor: payload.background_color)
                     }
                 }
 
             case "App\\Events\\ChatRoomDeleteStatusChanged":
-                print("⚠️ Chat room delete status changed broadcast received!")
                 if let eventDataString = pusherEvent.data,
                    let eventData = eventDataString.data(using: .utf8) {
                     struct StatusPayload: Codable {
@@ -304,107 +275,24 @@ extension AuthManager {
                         let delete_requested_by: Int?
                     }
                     if let payload = try? JSONDecoder().decode(StatusPayload.self, from: eventData) {
-                        NotificationCenter.default.post(
-                            name: Notification.Name("GlimpseChatRoomDeleteStatusChanged"),
-                            object: nil,
-                            userInfo: ["room_id": payload.room_id, "delete_requested_by": payload.delete_requested_by as Any]
-                        )
+                        return .chatRoomDeleteStatusChanged(roomId: payload.room_id, deleteRequestedBy: payload.delete_requested_by)
                     }
                 }
 
             case "App\\Events\\MessageSent":
-                print("💬 New message broadcast received!")
                 if let eventDataString = pusherEvent.data,
                    let eventData = eventDataString.data(using: .utf8) {
-                    
-                    var decodedMessage: ChatMessage? = nil
-                    
-                    // High-Performance Pure Protocol Buffers decoding
                     struct ProtobufPayload: Codable {
                         let pb: String?
                     }
                     if let pbPayload = try? JSONDecoder().decode(ProtobufPayload.self, from: eventData),
                        let pbString = pbPayload.pb,
                        let pbMessage = ChatMessage.decodeProtobuf(from: pbString) {
-                        decodedMessage = pbMessage
-                        print("⚡️ Decoded message instantly using High-Speed Protobuf binary!")
-                    } else {
-                        print("⚠️ Received MessageSent broadcast, but it was missing or had invalid Protobuf data.")
-                    }
-                    
-                    if let finalMsg = decodedMessage {
-                        // Persist in local SQLite database instantly
-                        GlimpseDatabase.shared.saveMessage(finalMsg)
-                        
-                        if finalMsg.sender_id != self.currentUser?.id, var p = self.partner, p.id == finalMsg.sender_id {
-                            p.last_active_at = ISO8601DateFormatter().string(from: Date())
-                            self.partner = p
-                        }
-                        // If it belongs to the main chat room, append to latestFetchedMessages
-                        if finalMsg.room_id == nil {
-                            if !self.latestFetchedMessages.contains(where: { $0.id == finalMsg.id }) {
-                                self.latestFetchedMessages.append(finalMsg)
-                            }
-                        } else {
-                            // If it belongs to a subroom, append to the in-memory roomMessagesCache
-                            if let rId = finalMsg.room_id {
-                                var currentRoomMsgs = self.roomMessagesCache[rId] ?? []
-                                if !currentRoomMsgs.contains(where: { $0.id == finalMsg.id }) {
-                                    currentRoomMsgs.append(finalMsg)
-                                    self.roomMessagesCache[rId] = currentRoomMsgs
-                                }
-                            }
-                        }
-                        
-                        // Always notify the UI view so it can render the message live
-                        NotificationCenter.default.post(name: Notification.Name("GlimpseChatMessageReceived"), object: finalMsg)
-                        
-                        // Unified coordinated Task to sync chat rooms and read state without double-fetching race conditions
-                        Task {
-                            let isCurrentActiveRoom = self.selectedTab == 3 && self.activeRoomId == finalMsg.room_id
-                            let isMyOwnMessage = finalMsg.sender_id == self.currentUser?.id
-                            
-                            if (isCurrentActiveRoom && !isMyOwnMessage) || isMyOwnMessage {
-                                if !isMyOwnMessage {
-                                    await self.markMessagesAsRead(messageId: finalMsg.id)
-                                }
-                                // Instantly update the local UserDefaults session for this room
-                                let currentUserId = self.currentUser?.id ?? 0
-                                let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(finalMsg.room_id ?? 0)"
-                                UserDefaults.standard.set(finalMsg.id, forKey: userDefaultsKey)
-                            }
-                            
-                            // Now safe to fetch room updates
-                            if var rooms = try? await self.fetchChatRooms() {
-                                await MainActor.run {
-                                    let currentUserId = self.currentUser?.id ?? 0
-                                    for i in 0..<rooms.count {
-                                        let r = rooms[i]
-                                        let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(r.id)"
-                                        let storedId = UserDefaults.standard.integer(forKey: userDefaultsKey)
-                                        if let latestId = r.latest_message?.id, latestId > 0 && latestId <= storedId {
-                                            rooms[i].unread_count = 0
-                                        }
-                                        if (isCurrentActiveRoom || isMyOwnMessage) && r.id == finalMsg.room_id {
-                                            rooms[i].unread_count = 0
-                                        }
-                                    }
-                                    self.chatRooms = rooms
-                                    self.updateUnreadCount()
-                                }
-                            }
-                        }
-                        
-                        // Global sound & haptic alert for incoming messages from partner!
-                        if finalMsg.sender_id != self.currentUser?.id {
-                            AudioServicesPlaySystemSound(1103) // Soft ting/ping sound as requested by user
-                            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                        }
+                        return .messageSent(pbMessage)
                     }
                 }
                 
             case "App\\Events\\LoveBurstSent":
-                print("💖 Live Love Burst broadcast received!")
                 if let eventDataString = pusherEvent.data,
                    let eventData = eventDataString.data(using: .utf8) {
                     struct LoveBurstPayload: Codable {
@@ -413,18 +301,11 @@ extension AuthManager {
                         let reaction: String?
                     }
                     if let payload = try? JSONDecoder().decode(LoveBurstPayload.self, from: eventData) {
-                        // Update lastLoveBurstTimestamp in real-time!
-                        self.lastLoveBurstReaction = payload.reaction
-                        self.lastLoveBurstTimestamp = payload.timestamp
-                        if payload.sender_id != self.currentUser?.id, var p = self.partner, p.id == payload.sender_id {
-                            p.last_active_at = ISO8601DateFormatter().string(from: Date())
-                            self.partner = p
-                        }
+                        return .loveBurstSent(timestamp: payload.timestamp, senderId: payload.sender_id, reaction: payload.reaction)
                     }
                 }
                 
             case "App\\Events\\LoveBumpSent":
-                print("🤜🤛 Live Love Bump broadcast received!")
                 if let eventDataString = pusherEvent.data,
                    let eventData = eventDataString.data(using: .utf8) {
                     struct LoveBumpPayload: Codable {
@@ -433,17 +314,11 @@ extension AuthManager {
                         let total_meetings: Int
                     }
                     if let payload = try? JSONDecoder().decode(LoveBumpPayload.self, from: eventData) {
-                        self.totalMeetings = payload.total_meetings
-                        self.lastLoveBumpTimestamp = payload.timestamp
-                        if payload.sender_id != self.currentUser?.id, var p = self.partner, p.id == payload.sender_id {
-                            p.last_active_at = ISO8601DateFormatter().string(from: Date())
-                            self.partner = p
-                        }
+                        return .loveBumpSent(timestamp: payload.timestamp, senderId: payload.sender_id, totalMeetings: payload.total_meetings)
                     }
                 }
                 
             case "App\\Events\\PartnerTyping":
-                print("⌨️ Live typing status broadcast received!")
                 if let eventDataString = pusherEvent.data,
                    let eventData = eventDataString.data(using: .utf8) {
                     struct ProtobufPayload: Codable {
@@ -452,14 +327,7 @@ extension AuthManager {
                     if let pbPayload = try? JSONDecoder().decode(ProtobufPayload.self, from: eventData),
                        let pbString = pbPayload.pb,
                        let state = GlimpseTypingState.decodeProtobuf(from: pbString) {
-                        if state.userId != self.currentUser?.id {
-                            self.isPartnerTyping = state.isTyping
-                            self.partnerTypingRoomId = state.roomId
-                            if var p = self.partner, p.id == state.userId {
-                                p.last_active_at = ISO8601DateFormatter().string(from: Date())
-                                self.partner = p
-                            }
-                        }
+                        return .partnerTyping(userId: state.userId, isTyping: state.isTyping, roomId: state.roomId)
                     }
                 }
                 
@@ -468,6 +336,185 @@ extension AuthManager {
             }
         } catch {
             print("⚠️ Failed to parse incoming socket event: \(error)")
+        }
+        return .unknown
+    }
+    
+    @MainActor
+    private func handleParsedWebSocketEvent(_ event: ParsedWebSocketEvent) {
+        switch event {
+        case .ping:
+            self.sendPongFrame()
+            
+        case .connectionEstablished:
+            print("✅ WebSocket handshake established!")
+            self.isConnecting = false
+            self.isWebSocketConnected = true
+            if let coupleId = self.currentUser?.couple_id {
+                self.sendSubscribeFrame(channel: "couple.\(coupleId)")
+            }
+            
+        case .subscriptionSucceeded:
+            print("❤️ Subscribed successfully to Glimpse Live Channel!")
+            
+        case .partnerStateUpdated(let update):
+            print("🔔 Live State Updated from partner!")
+            if var p = self.partner, p.id == update.userId {
+                if let lat = update.latitude { p.latitude = lat }
+                if let lon = update.longitude { p.longitude = lon }
+                if let batt = update.batteryLevel { p.battery_level = batt }
+                if let char = update.isCharging { p.is_charging = char }
+                if let lastSeen = update.lastSeenMessageId { p.last_seen_message_id = lastSeen }
+                if let active = update.lastActiveAt { p.last_active_at = active }
+                if let sleep = update.isSleeping { p.is_sleeping = sleep }
+                p.status_note = update.statusNote
+                p.location_name = update.locationName
+                p.wifi_bssid = update.wifiBssid
+                p.last_updated = ISO8601DateFormatter().string(from: Date())
+                self.partner = p
+            }
+            
+            NotificationCenter.default.post(name: Notification.Name("GlimpseLiveStateUpdated"), object: nil)
+            Task {
+                try? await self.fetchFlashes()
+            }
+            
+        case .syncLocationRequested(let targetUserId):
+            print("🔄 Sync Location Requested received from Pusher!")
+            if targetUserId == self.currentUser?.id {
+                print("🛰️ Forcing GPS Location Sync as requested by Web/Partner!")
+                LiveLocationManager.shared.forceWakeGPSAndSync(bypassCooldown: true)
+            }
+            
+        case .chatRoomCreated(let room):
+            print("🆕 Chat room created broadcast received!")
+            NotificationCenter.default.post(name: Notification.Name("GlimpseChatRoomCreated"), object: room)
+            
+        case .chatRoomDeleted(let roomId):
+            print("🗑️ Chat room deleted broadcast received!")
+            NotificationCenter.default.post(name: Notification.Name("GlimpseChatRoomDeleted"), object: roomId)
+
+        case .chatRoomUpdated(let roomId, let name):
+            print("🔄 Chat room renamed broadcast received!")
+            NotificationCenter.default.post(
+                name: Notification.Name("GlimpseChatRoomUpdated"),
+                object: nil,
+                userInfo: ["room_id": roomId, "name": name]
+            )
+
+        case .chatRoomThemeUpdated(let roomId, let themeColor, let backgroundColor):
+            print("🎨 Chat room theme updated broadcast received!")
+            NotificationCenter.default.post(
+                name: Notification.Name("GlimpseChatRoomThemeUpdated"),
+                object: nil,
+                userInfo: [
+                    "room_id": roomId,
+                    "theme_color": themeColor as Any,
+                    "background_color": backgroundColor as Any
+                ]
+            )
+
+        case .chatRoomDeleteStatusChanged(let roomId, let deleteRequestedBy):
+            print("⚠️ Chat room delete status changed broadcast received!")
+            NotificationCenter.default.post(
+                name: Notification.Name("GlimpseChatRoomDeleteStatusChanged"),
+                object: nil,
+                userInfo: ["room_id": roomId, "delete_requested_by": deleteRequestedBy as Any]
+            )
+
+        case .messageSent(let finalMsg):
+            print("💬 New message broadcast received!")
+            GlimpseDatabase.shared.saveMessage(finalMsg)
+            
+            if finalMsg.sender_id != self.currentUser?.id, var p = self.partner, p.id == finalMsg.sender_id {
+                p.last_active_at = ISO8601DateFormatter().string(from: Date())
+                self.partner = p
+            }
+            if finalMsg.room_id == nil {
+                if !self.latestFetchedMessages.contains(where: { $0.id == finalMsg.id }) {
+                    self.latestFetchedMessages.append(finalMsg)
+                }
+            } else {
+                if let rId = finalMsg.room_id {
+                    var currentRoomMsgs = self.roomMessagesCache[rId] ?? []
+                    if !currentRoomMsgs.contains(where: { $0.id == finalMsg.id }) {
+                        currentRoomMsgs.append(finalMsg)
+                        self.roomMessagesCache[rId] = currentRoomMsgs
+                    }
+                }
+            }
+            
+            NotificationCenter.default.post(name: Notification.Name("GlimpseChatMessageReceived"), object: finalMsg)
+            
+            Task {
+                let isCurrentActiveRoom = self.selectedTab == 3 && self.activeRoomId == finalMsg.room_id
+                let isMyOwnMessage = finalMsg.sender_id == self.currentUser?.id
+                
+                if (isCurrentActiveRoom && !isMyOwnMessage) || isMyOwnMessage {
+                    if !isMyOwnMessage {
+                        await self.markMessagesAsRead(messageId: finalMsg.id)
+                    }
+                    let currentUserId = self.currentUser?.id ?? 0
+                    let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(finalMsg.room_id ?? 0)"
+                    UserDefaults.standard.set(finalMsg.id, forKey: userDefaultsKey)
+                }
+                
+                if var rooms = try? await self.fetchChatRooms() {
+                    await MainActor.run {
+                        let currentUserId = self.currentUser?.id ?? 0
+                        for i in 0..<rooms.count {
+                            let r = rooms[i]
+                            let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(r.id)"
+                            let storedId = UserDefaults.standard.integer(forKey: userDefaultsKey)
+                            if let latestId = r.latest_message?.id, latestId > 0 && latestId <= storedId {
+                                rooms[i].unread_count = 0
+                            }
+                            if (isCurrentActiveRoom || isMyOwnMessage) && r.id == finalMsg.room_id {
+                                rooms[i].unread_count = 0
+                            }
+                        }
+                        self.chatRooms = rooms
+                        self.updateUnreadCount()
+                    }
+                }
+            }
+            
+            if finalMsg.sender_id != self.currentUser?.id {
+                AudioServicesPlaySystemSound(1103)
+                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+            }
+            
+        case .loveBurstSent(let timestamp, let senderId, let reaction):
+            print("💖 Live Love Burst broadcast received!")
+            self.lastLoveBurstReaction = reaction
+            self.lastLoveBurstTimestamp = timestamp
+            if senderId != self.currentUser?.id, var p = self.partner, p.id == senderId {
+                p.last_active_at = ISO8601DateFormatter().string(from: Date())
+                self.partner = p
+            }
+            
+        case .loveBumpSent(let timestamp, let senderId, let totalMeetings):
+            print("🤜🤛 Live Love Bump broadcast received!")
+            self.totalMeetings = totalMeetings
+            self.lastLoveBumpTimestamp = timestamp
+            if senderId != self.currentUser?.id, var p = self.partner, p.id == senderId {
+                p.last_active_at = ISO8601DateFormatter().string(from: Date())
+                self.partner = p
+            }
+            
+        case .partnerTyping(let userId, let isTyping, let roomId):
+            print("⌨️ Live typing status broadcast received!")
+            if userId != self.currentUser?.id {
+                self.isPartnerTyping = isTyping
+                self.partnerTypingRoomId = roomId
+                if var p = self.partner, p.id == userId {
+                    p.last_active_at = ISO8601DateFormatter().string(from: Date())
+                    self.partner = p
+                }
+            }
+            
+        case .unknown:
+            break
         }
     }
     
