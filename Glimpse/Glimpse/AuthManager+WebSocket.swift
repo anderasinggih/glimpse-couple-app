@@ -5,6 +5,7 @@ import AudioToolbox
 
 extension AuthManager {
     // MARK: - WEBSOCKET INTEGRATION
+    @MainActor
     func connectWebSocket() {
         // If already connected, do nothing
         if isWebSocketConnected && webSocketTask != nil && webSocketTask?.state == .running {
@@ -63,33 +64,31 @@ extension AuthManager {
         startPingTimer()
     }
     
+    @MainActor
     func disconnectWebSocket() {
         shouldReconnect = false
         isConnecting = false
         stopPingTimer()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
-        DispatchQueue.main.async {
-            self.isWebSocketConnected = false
-        }
+        self.isWebSocketConnected = false
         print("🔌 WebSocket disconnected manually.")
     }
     
+    @MainActor
     private func startPingTimer() {
         stopPingTimer()
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.pingTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
+        self.pingTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
                 self?.sendPingFrame()
             }
         }
     }
     
+    @MainActor
     private func stopPingTimer() {
-        DispatchQueue.main.async { [weak self] in
-            self?.pingTimer?.invalidate()
-            self?.pingTimer = nil
-        }
+        self.pingTimer?.invalidate()
+        self.pingTimer = nil
     }
     
     private func sendPingFrame() {
@@ -127,10 +126,14 @@ extension AuthManager {
             case .success(let message):
                 switch message {
                 case .string(let text):
-                    self.handleWebSocketString(text)
+                    Task { @MainActor in
+                        self.handleWebSocketString(text)
+                    }
                 case .data(let data):
                     if let text = String(data: data, encoding: .utf8) {
-                        self.handleWebSocketString(text)
+                        Task { @MainActor in
+                            self.handleWebSocketString(text)
+                        }
                     }
                 @unknown default:
                     break
@@ -141,8 +144,10 @@ extension AuthManager {
                 
             case .failure(let error):
                 print("❌ WebSocket connection failed/disconnected: \(error)")
-                self.isConnecting = false
-                self.handleWebSocketDisconnection()
+                Task { @MainActor in
+                    self.isConnecting = false
+                    self.handleWebSocketDisconnection()
+                }
             }
         }
     }
@@ -153,6 +158,7 @@ extension AuthManager {
         let data: String?
     }
     
+    @MainActor
     private func handleWebSocketString(_ text: String) {
         guard let data = text.data(using: .utf8) else { return }
         do {
@@ -168,9 +174,7 @@ extension AuthManager {
             case "pusher:connection_established":
                 print("✅ WebSocket handshake established!")
                 self.isConnecting = false
-                DispatchQueue.main.async {
-                    self.isWebSocketConnected = true
-                }
+                self.isWebSocketConnected = true
                 if let coupleId = self.currentUser?.couple_id {
                     self.sendSubscribeFrame(channel: "couple.\(coupleId)")
                 }
@@ -188,27 +192,25 @@ extension AuthManager {
                     if let pbPayload = try? JSONDecoder().decode(ProtobufPayload.self, from: eventData),
                        let pbString = pbPayload.pb,
                        let update = GlimpsePartnerStateUpdate.decodeProtobuf(from: pbString) {
-                        DispatchQueue.main.async {
-                            if var p = self.partner, p.id == update.userId {
-                                if let lat = update.latitude { p.latitude = lat }
-                                if let lon = update.longitude { p.longitude = lon }
-                                if let batt = update.batteryLevel { p.battery_level = batt }
-                                if let char = update.isCharging { p.is_charging = char }
-                                if let lastSeen = update.lastSeenMessageId { p.last_seen_message_id = lastSeen }
-                                if let active = update.lastActiveAt { p.last_active_at = active }
-                                if let sleep = update.isSleeping { p.is_sleeping = sleep }
-                                p.status_note = update.statusNote
-                                p.location_name = update.locationName
-                                p.wifi_bssid = update.wifiBssid
-                                p.last_updated = ISO8601DateFormatter().string(from: Date())
-                                self.partner = p
-                            }
-                            
-                            // Trigger immediate local state notification
-                            NotificationCenter.default.post(name: Notification.Name("GlimpseLiveStateUpdated"), object: nil)
-                            Task {
-                                try? await self.fetchFlashes()
-                            }
+                        if var p = self.partner, p.id == update.userId {
+                            if let lat = update.latitude { p.latitude = lat }
+                            if let lon = update.longitude { p.longitude = lon }
+                            if let batt = update.batteryLevel { p.battery_level = batt }
+                            if let char = update.isCharging { p.is_charging = char }
+                            if let lastSeen = update.lastSeenMessageId { p.last_seen_message_id = lastSeen }
+                            if let active = update.lastActiveAt { p.last_active_at = active }
+                            if let sleep = update.isSleeping { p.is_sleeping = sleep }
+                            p.status_note = update.statusNote
+                            p.location_name = update.locationName
+                            p.wifi_bssid = update.wifiBssid
+                            p.last_updated = ISO8601DateFormatter().string(from: Date())
+                            self.partner = p
+                        }
+                        
+                        // Trigger immediate local state notification
+                        NotificationCenter.default.post(name: Notification.Name("GlimpseLiveStateUpdated"), object: nil)
+                        Task {
+                            try? await self.fetchFlashes()
                         }
                     }
                 }
@@ -224,10 +226,8 @@ extension AuthManager {
                         // Only force sync if the target user ID matches my current user ID
                         if payload.targetUserId == self.currentUser?.id {
                             print("🛰️ Forcing GPS Location Sync as requested by Web/Partner!")
-                            DispatchQueue.main.async {
-                                // Wake up GPS immediately to get fresh satellite coordinates
-                                LiveLocationManager.shared.forceWakeGPSAndSync(bypassCooldown: true)
-                            }
+                            // Wake up GPS immediately to get fresh satellite coordinates
+                            LiveLocationManager.shared.forceWakeGPSAndSync(bypassCooldown: true)
                         }
                     }
                 }
@@ -240,9 +240,7 @@ extension AuthManager {
                         let room: GlimpseChatRoom
                     }
                     if let payload = try? JSONDecoder().decode(RoomPayload.self, from: eventData) {
-                        DispatchQueue.main.async {
-                            NotificationCenter.default.post(name: Notification.Name("GlimpseChatRoomCreated"), object: payload.room)
-                        }
+                        NotificationCenter.default.post(name: Notification.Name("GlimpseChatRoomCreated"), object: payload.room)
                     }
                 }
                 
@@ -254,9 +252,7 @@ extension AuthManager {
                         let room_id: Int
                     }
                     if let payload = try? JSONDecoder().decode(RoomIdPayload.self, from: eventData) {
-                        DispatchQueue.main.async {
-                            NotificationCenter.default.post(name: Notification.Name("GlimpseChatRoomDeleted"), object: payload.room_id)
-                        }
+                        NotificationCenter.default.post(name: Notification.Name("GlimpseChatRoomDeleted"), object: payload.room_id)
                     }
                 }
 
@@ -269,13 +265,11 @@ extension AuthManager {
                         let name: String
                     }
                     if let payload = try? JSONDecoder().decode(RoomUpdatePayload.self, from: eventData) {
-                        DispatchQueue.main.async {
-                            NotificationCenter.default.post(
-                                name: Notification.Name("GlimpseChatRoomUpdated"),
-                                object: nil,
-                                userInfo: ["room_id": payload.room_id, "name": payload.name]
-                            )
-                        }
+                        NotificationCenter.default.post(
+                            name: Notification.Name("GlimpseChatRoomUpdated"),
+                            object: nil,
+                            userInfo: ["room_id": payload.room_id, "name": payload.name]
+                        )
                     }
                 }
 
@@ -289,17 +283,15 @@ extension AuthManager {
                         let background_color: String?
                     }
                     if let payload = try? JSONDecoder().decode(ThemeUpdatePayload.self, from: eventData) {
-                        DispatchQueue.main.async {
-                            NotificationCenter.default.post(
-                                name: Notification.Name("GlimpseChatRoomThemeUpdated"),
-                                object: nil,
-                                userInfo: [
-                                    "room_id": payload.room_id,
-                                    "theme_color": payload.theme_color as Any,
-                                    "background_color": payload.background_color as Any
-                                ]
-                            )
-                        }
+                        NotificationCenter.default.post(
+                            name: Notification.Name("GlimpseChatRoomThemeUpdated"),
+                            object: nil,
+                            userInfo: [
+                                "room_id": payload.room_id,
+                                "theme_color": payload.theme_color as Any,
+                                "background_color": payload.background_color as Any
+                            ]
+                        )
                     }
                 }
 
@@ -312,13 +304,11 @@ extension AuthManager {
                         let delete_requested_by: Int?
                     }
                     if let payload = try? JSONDecoder().decode(StatusPayload.self, from: eventData) {
-                        DispatchQueue.main.async {
-                            NotificationCenter.default.post(
-                                name: Notification.Name("GlimpseChatRoomDeleteStatusChanged"),
-                                object: nil,
-                                userInfo: ["room_id": payload.room_id, "delete_requested_by": payload.delete_requested_by as Any]
-                            )
-                        }
+                        NotificationCenter.default.post(
+                            name: Notification.Name("GlimpseChatRoomDeleteStatusChanged"),
+                            object: nil,
+                            userInfo: ["room_id": payload.room_id, "delete_requested_by": payload.delete_requested_by as Any]
+                        )
                     }
                 }
 
@@ -346,71 +336,69 @@ extension AuthManager {
                         // Persist in local SQLite database instantly
                         GlimpseDatabase.shared.saveMessage(finalMsg)
                         
-                        DispatchQueue.main.async {
-                            if finalMsg.sender_id != self.currentUser?.id, var p = self.partner, p.id == finalMsg.sender_id {
-                                p.last_active_at = ISO8601DateFormatter().string(from: Date())
-                                self.partner = p
+                        if finalMsg.sender_id != self.currentUser?.id, var p = self.partner, p.id == finalMsg.sender_id {
+                            p.last_active_at = ISO8601DateFormatter().string(from: Date())
+                            self.partner = p
+                        }
+                        // If it belongs to the main chat room, append to latestFetchedMessages
+                        if finalMsg.room_id == nil {
+                            if !self.latestFetchedMessages.contains(where: { $0.id == finalMsg.id }) {
+                                self.latestFetchedMessages.append(finalMsg)
                             }
-                            // If it belongs to the main chat room, append to latestFetchedMessages
-                            if finalMsg.room_id == nil {
-                                if !self.latestFetchedMessages.contains(where: { $0.id == finalMsg.id }) {
-                                    self.latestFetchedMessages.append(finalMsg)
-                                }
-                            } else {
-                                // If it belongs to a subroom, append to the in-memory roomMessagesCache
-                                if let rId = finalMsg.room_id {
-                                    var currentRoomMsgs = self.roomMessagesCache[rId] ?? []
-                                    if !currentRoomMsgs.contains(where: { $0.id == finalMsg.id }) {
-                                        currentRoomMsgs.append(finalMsg)
-                                        self.roomMessagesCache[rId] = currentRoomMsgs
-                                    }
+                        } else {
+                            // If it belongs to a subroom, append to the in-memory roomMessagesCache
+                            if let rId = finalMsg.room_id {
+                                var currentRoomMsgs = self.roomMessagesCache[rId] ?? []
+                                if !currentRoomMsgs.contains(where: { $0.id == finalMsg.id }) {
+                                    currentRoomMsgs.append(finalMsg)
+                                    self.roomMessagesCache[rId] = currentRoomMsgs
                                 }
                             }
+                        }
+                        
+                        // Always notify the UI view so it can render the message live
+                        NotificationCenter.default.post(name: Notification.Name("GlimpseChatMessageReceived"), object: finalMsg)
+                        
+                        // Unified coordinated Task to sync chat rooms and read state without double-fetching race conditions
+                        Task {
+                            let isCurrentActiveRoom = self.selectedTab == 3 && self.activeRoomId == finalMsg.room_id
+                            let isMyOwnMessage = finalMsg.sender_id == self.currentUser?.id
                             
-                            // Always notify the UI view so it can render the message live
-                            NotificationCenter.default.post(name: Notification.Name("GlimpseChatMessageReceived"), object: finalMsg)
+                            if (isCurrentActiveRoom && !isMyOwnMessage) || isMyOwnMessage {
+                                if !isMyOwnMessage {
+                                    await self.markMessagesAsRead(messageId: finalMsg.id)
+                                }
+                                // Instantly update the local UserDefaults session for this room
+                                let currentUserId = self.currentUser?.id ?? 0
+                                let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(finalMsg.room_id ?? 0)"
+                                UserDefaults.standard.set(finalMsg.id, forKey: userDefaultsKey)
+                            }
                             
-                            // Unified coordinated Task to sync chat rooms and read state without double-fetching race conditions
-                            Task {
-                                let isCurrentActiveRoom = self.selectedTab == 3 && self.activeRoomId == finalMsg.room_id
-                                let isMyOwnMessage = finalMsg.sender_id == self.currentUser?.id
-                                
-                                if (isCurrentActiveRoom && !isMyOwnMessage) || isMyOwnMessage {
-                                    if !isMyOwnMessage {
-                                        await self.markMessagesAsRead(messageId: finalMsg.id)
-                                    }
-                                    // Instantly update the local UserDefaults session for this room
+                            // Now safe to fetch room updates
+                            if var rooms = try? await self.fetchChatRooms() {
+                                await MainActor.run {
                                     let currentUserId = self.currentUser?.id ?? 0
-                                    let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(finalMsg.room_id ?? 0)"
-                                    UserDefaults.standard.set(finalMsg.id, forKey: userDefaultsKey)
-                                }
-                                
-                                // Now safe to fetch room updates
-                                if var rooms = try? await self.fetchChatRooms() {
-                                    await MainActor.run {
-                                        let currentUserId = self.currentUser?.id ?? 0
-                                        for i in 0..<rooms.count {
-                                            let r = rooms[i]
-                                            let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(r.id)"
-                                            let storedId = UserDefaults.standard.integer(forKey: userDefaultsKey)
-                                            if let latestId = r.latest_message?.id, latestId > 0 && latestId <= storedId {
-                                                rooms[i].unread_count = 0
-                                            }
-                                            if (isCurrentActiveRoom || isMyOwnMessage) && r.id == finalMsg.room_id {
-                                                rooms[i].unread_count = 0
-                                            }
+                                    for i in 0..<rooms.count {
+                                        let r = rooms[i]
+                                        let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(r.id)"
+                                        let storedId = UserDefaults.standard.integer(forKey: userDefaultsKey)
+                                        if let latestId = r.latest_message?.id, latestId > 0 && latestId <= storedId {
+                                            rooms[i].unread_count = 0
                                         }
-                                        self.chatRooms = rooms
-                                        self.updateUnreadCount()
+                                        if (isCurrentActiveRoom || isMyOwnMessage) && r.id == finalMsg.room_id {
+                                            rooms[i].unread_count = 0
+                                        }
                                     }
+                                    self.chatRooms = rooms
+                                    self.updateUnreadCount()
                                 }
                             }
-                            
-                            // Global sound & haptic alert for incoming messages from partner!
-                            if finalMsg.sender_id != self.currentUser?.id {
-                                AudioServicesPlaySystemSound(1103) // Soft ting/ping sound as requested by user
-                                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                            }
+                        }
+                        
+                        // Global sound & haptic alert for incoming messages from partner!
+                        if finalMsg.sender_id != self.currentUser?.id {
+                            AudioServicesPlaySystemSound(1103) // Soft ting/ping sound as requested by user
+                            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                         }
                     }
                 }
@@ -425,14 +413,12 @@ extension AuthManager {
                         let reaction: String?
                     }
                     if let payload = try? JSONDecoder().decode(LoveBurstPayload.self, from: eventData) {
-                        DispatchQueue.main.async {
-                            // Update lastLoveBurstTimestamp in real-time!
-                            self.lastLoveBurstReaction = payload.reaction
-                            self.lastLoveBurstTimestamp = payload.timestamp
-                            if payload.sender_id != self.currentUser?.id, var p = self.partner, p.id == payload.sender_id {
-                                p.last_active_at = ISO8601DateFormatter().string(from: Date())
-                                self.partner = p
-                            }
+                        // Update lastLoveBurstTimestamp in real-time!
+                        self.lastLoveBurstReaction = payload.reaction
+                        self.lastLoveBurstTimestamp = payload.timestamp
+                        if payload.sender_id != self.currentUser?.id, var p = self.partner, p.id == payload.sender_id {
+                            p.last_active_at = ISO8601DateFormatter().string(from: Date())
+                            self.partner = p
                         }
                     }
                 }
@@ -447,13 +433,11 @@ extension AuthManager {
                         let total_meetings: Int
                     }
                     if let payload = try? JSONDecoder().decode(LoveBumpPayload.self, from: eventData) {
-                        DispatchQueue.main.async {
-                            self.totalMeetings = payload.total_meetings
-                            self.lastLoveBumpTimestamp = payload.timestamp
-                            if payload.sender_id != self.currentUser?.id, var p = self.partner, p.id == payload.sender_id {
-                                p.last_active_at = ISO8601DateFormatter().string(from: Date())
-                                self.partner = p
-                            }
+                        self.totalMeetings = payload.total_meetings
+                        self.lastLoveBumpTimestamp = payload.timestamp
+                        if payload.sender_id != self.currentUser?.id, var p = self.partner, p.id == payload.sender_id {
+                            p.last_active_at = ISO8601DateFormatter().string(from: Date())
+                            self.partner = p
                         }
                     }
                 }
@@ -468,14 +452,12 @@ extension AuthManager {
                     if let pbPayload = try? JSONDecoder().decode(ProtobufPayload.self, from: eventData),
                        let pbString = pbPayload.pb,
                        let state = GlimpseTypingState.decodeProtobuf(from: pbString) {
-                        DispatchQueue.main.async {
-                            if state.userId != self.currentUser?.id {
-                                self.isPartnerTyping = state.isTyping
-                                self.partnerTypingRoomId = state.roomId
-                                if var p = self.partner, p.id == state.userId {
-                                    p.last_active_at = ISO8601DateFormatter().string(from: Date())
-                                    self.partner = p
-                                }
+                        if state.userId != self.currentUser?.id {
+                            self.isPartnerTyping = state.isTyping
+                            self.partnerTypingRoomId = state.roomId
+                            if var p = self.partner, p.id == state.userId {
+                                p.last_active_at = ISO8601DateFormatter().string(from: Date())
+                                self.partner = p
                             }
                         }
                     }
@@ -511,18 +493,18 @@ extension AuthManager {
         }
     }
     
+    @MainActor
     private func handleWebSocketDisconnection() {
-        DispatchQueue.main.async {
-            self.isWebSocketConnected = false
-        }
+        self.isWebSocketConnected = false
         guard shouldReconnect else { return }
         
-        DispatchQueue.global().asyncAfter(deadline: .now() + reconnectInterval) { [weak self] in
-            print("🔄 Attempting to reconnect to WebSocket...")
-            self?.connectWebSocket()
+        Task {
+            try? await Task.sleep(nanoseconds: UInt64(reconnectInterval * 1_000_000_000))
+            await MainActor.run {
+                print("🔄 Attempting to reconnect to WebSocket...")
+                self.connectWebSocket()
+            }
         }
     }
-    
-
 }
 #endif
