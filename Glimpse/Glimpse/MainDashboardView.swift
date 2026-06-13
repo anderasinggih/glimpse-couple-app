@@ -561,7 +561,7 @@ struct MainDashboardView: View {
                         }
                         .frame(height: 0)
                         
-                        VStack(spacing: 20) {
+                        LazyVStack(spacing: 20) {
                             Spacer(minLength: 65) // Space for floating header
                                 .id("SCROLL_TOP_ANCHOR")
                     
