@@ -25,6 +25,25 @@ struct ChatView: View {
     @State private var pinnedRoomIds: Set<Int> = []
     @State private var scrollToMessageTrigger: Int? = nil
     
+    // Bulk Select & Archive state
+    @State private var isSelectMode = false
+    @State private var selectedRoomIds: Set<Int> = []
+    @AppStorage("glimpse_archived_room_ids", store: UserDefaults(suiteName: "group.glimpse.app")) private var archivedRoomIdsString = ""
+    @State private var showArchivedOnly = false
+    @State private var showDeleteSelectedConfirmation = false
+    
+    private var archivedRoomIds: Set<Int> {
+        Set(archivedRoomIdsString.split(separator: ",").compactMap { Int($0) })
+    }
+    
+    private func updateArchivedRooms(_ newSet: Set<Int>) {
+        archivedRoomIdsString = newSet.map { String($0) }.joined(separator: ",")
+    }
+    
+    private var hasArchivedRooms: Bool {
+        chatRooms.contains { room in archivedRoomIds.contains(room.id) }
+    }
+    
     // Delete Request flows
     @State private var showRequestDeleteAlert = false
     @State private var roomToRequestDelete: GlimpseChatRoom? = nil
@@ -107,7 +126,12 @@ struct ChatView: View {
     }
     
     var sortedChatRooms: [GlimpseChatRoom] {
-        chatRooms.sorted { r1, r2 in
+        let filtered = chatRooms.filter { room in
+            let isArchived = archivedRoomIds.contains(room.id)
+            return showArchivedOnly ? isArchived : !isArchived
+        }
+        
+        return filtered.sorted { r1, r2 in
             // 1. Main room is always first
             if r1.is_main != r2.is_main {
                 return r1.is_main
@@ -180,7 +204,8 @@ struct ChatView: View {
         return uniqueResults.values.sorted { $0.message.id > $1.message.id }
     }
     
-    var body: some View {
+    @ViewBuilder
+    private func mainZStack() -> some View {
         ZStack {
             // LAYER 1: Background
             ZStack {
@@ -196,245 +221,228 @@ struct ChatView: View {
             // LAYER 2: Main Content
             if let partner = auth.partner, auth.coupleActive {
                 NavigationStack {
-                    chatRoomsListView(partner: partner)
-                        .alert("Request Clear Chat?", isPresented: $showRequestDeleteAlert, presenting: roomToRequestDelete) { room in
-                            Button("Cancel", role: .cancel) { roomToRequestDelete = nil }
-                            Button("Request", role: .destructive) {
-                                requestDeleteRoom(room)
-                            }
-                        } message: { room in
-                            Text("Requesting to clear general chat will ask your partner for confirmation. If approved, all messages will be permanently cleared.")
-                        }
-                        .alert("Partner Requested Clear Chat", isPresented: $showRespondDeleteRequestAlert, presenting: roomToRespondDelete) { room in
-                            Button("Decline", role: .destructive) {
-                                declineDeleteRoom(room)
-                            }
-                            Button("Accept & Clear", role: .none) {
-                                confirmDeleteRoom(room)
-                            }
-                            Button("Cancel", role: .cancel) { roomToRespondDelete = nil }
-                        } message: { room in
-                            Text("Your partner has requested to permanently clear the general chat history. Do you accept this request?")
-                        }
-                        .alert("Clear Chat Request Pending", isPresented: $showPendingDeleteRequestAlert, presenting: roomToDeleteRequest) { room in
-                            Button("Cancel Request", role: .destructive) {
-                                declineDeleteRoom(room)
-                            }
-                            Button("OK", role: .cancel) { roomToDeleteRequest = nil }
-                        } message: { room in
-                            Text("Waiting for your partner to confirm clearing the general chat history. You can cancel your request here.")
-                        }
-                        .alert("Chat Options", isPresented: $showRoomOptionsDialog, presenting: roomForOptions) { room in
-                            Button("Clear Chat", role: .destructive) {
-                                roomToClear = room
-                                showClearChatConfirmAlert = true
-                            }
-                            Button("Delete Room", role: .destructive) {
-                                roomToDelete = room
-                                showDeleteConfirmAlert = true
-                            }
-                            Button("Cancel", role: .cancel) {
-                                roomForOptions = nil
-                            }
-                        } message: { room in
-                            Text("What would you like to do with '\(room.name)'?")
-                        }
-                        .alert("Clear Chat?", isPresented: $showClearChatConfirmAlert, presenting: roomToClear) { room in
-                            Button("Cancel", role: .cancel) { roomToClear = nil }
-                            Button("Clear", role: .destructive) {
-                                clearRoomChat(room)
-                            }
-                        } message: { room in
-                            let msg = "Are you sure you want to clear all messages in '\(room.name)'? This action cannot be undone."
-                            Text(msg)
-                        }
-                        .alert("Delete Room?", isPresented: $showDeleteConfirmAlert, presenting: roomToDelete) { room in
-                            Button("Cancel", role: .cancel) { roomToDelete = nil }
-                            Button("Delete", role: .destructive) {
-                                deleteRoom(room)
-                            }
-                        } message: { room in
-                            Text("Are you sure you want to delete '\(room.name)'? All messages in this room will be permanently lost.")
-                        }
-                        .navigationDestination(item: $selectedRoom) { activeRoom in
-                            activeChatRoomView(partner: partner, room: activeRoom)
-                                .navigationBarBackButtonHidden(true)
-                                .toolbar(.hidden, for: .navigationBar)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
-                        .toolbar(.hidden, for: .navigationBar)
+                    chatRoomsListViewWithAlerts(partner: partner)
                 }
                 .toolbar(.hidden, for: .navigationBar)
             } else {
                 notConnectedView
             }
         }
-        .toolbar(selectedRoom != nil ? .hidden : .visible, for: .tabBar)
-        .onChange(of: selectedRoom) { oldValue, newValue in
-            auth.selectedChatRoom = newValue
-            auth.activeRoomId = newValue?.id
-            self.replyMessage = nil
-            if let activeRoom = newValue {
+    }
 
-                // Reset unread counter locally upon entering the room
-                if let index = chatRooms.firstIndex(where: { $0.id == activeRoom.id }) {
-                    chatRooms[index].unread_count = 0
-                    auth.chatRooms = chatRooms
-                    auth.updateUnreadCount()
-                    // Sync theme from latest API data into selectedRoom so it's always fresh
-                    selectedRoom = chatRooms[index]
-                }
-                
-                // Load starred & pinned message IDs for this room from local storage
-                let roomKey = activeRoom.id
-                let starredKey = "glimpse_starred_messages_room_\(roomKey)"
-                let pinnedKey = "glimpse_pinned_messages_room_\(roomKey)"
-                starredMessageIds = Set(UserDefaults.standard.array(forKey: starredKey) as? [Int] ?? [])
-                pinnedMessageIds = Set(UserDefaults.standard.array(forKey: pinnedKey) as? [Int] ?? [])
-                
-                // Load per-room baseline unread message ID
-                let currentUserId = auth.currentUser?.id ?? 0
-                let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(activeRoom.id)"
-                let storedId = UserDefaults.standard.integer(forKey: userDefaultsKey)
-                self.roomInitialLastReadId = storedId > 0 ? storedId : (auth.currentUser?.last_seen_message_id ?? 0)
-                
-                // Sync read status to server using the latest cached room message
-                if let lastMsg = (messagesCache[activeRoom.id] ?? auth.roomMessagesCache[activeRoom.id] ?? []).last, lastMsg.id > 0 {
-                    Task {
-                        await auth.markMessagesAsRead(messageId: lastMsg.id)
+    @ViewBuilder
+    private func applyMainModifiers<Content: View>(to content: Content) -> some View {
+        let v1 = content
+            .toolbar(selectedRoom != nil ? .hidden : .visible, for: .tabBar)
+            .onChange(of: selectedRoom) { oldValue, newValue in
+                auth.selectedChatRoom = newValue
+                auth.activeRoomId = newValue?.id
+                self.replyMessage = nil
+                if let activeRoom = newValue {
+
+                    // Reset unread counter locally upon entering the room
+                    if let index = chatRooms.firstIndex(where: { $0.id == activeRoom.id }) {
+                        chatRooms[index].unread_count = 0
+                        auth.chatRooms = chatRooms
+                        auth.updateUnreadCount()
+                        // Sync theme from latest API data into selectedRoom so it's always fresh
+                        selectedRoom = chatRooms[index]
                     }
-                }
-            } else {
-                // Auto-send voice note if currently recording on room exit
-                if audioRecorder.isRecording {
-                    stopAndSendRecording()
-                    isRecordingLocked = false
-                    dragOffset = 0.0
-                }
-                
-                // Leaving the room: save final read state sweep to prevent badges from reappearing
-                if let oldRoom = oldValue {
-                    auth.sendTypingStatus(isTyping: false, roomId: oldRoom.is_main ? 0 : oldRoom.id)
-                    if let lastMsg = messages.last, lastMsg.id > 0 {
-                        let currentUserId = auth.currentUser?.id ?? 0
-                        let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(oldRoom.id)"
-                        UserDefaults.standard.set(lastMsg.id, forKey: userDefaultsKey)
+                    
+                    // Load starred & pinned message IDs for this room from local storage
+                    let roomKey = activeRoom.id
+                    let starredKey = "glimpse_starred_messages_room_\(roomKey)"
+                    let pinnedKey = "glimpse_pinned_messages_room_\(roomKey)"
+                    starredMessageIds = Set(UserDefaults.standard.array(forKey: starredKey) as? [Int] ?? [])
+                    pinnedMessageIds = Set(UserDefaults.standard.array(forKey: pinnedKey) as? [Int] ?? [])
+                    
+                    // Load per-room baseline unread message ID
+                    let currentUserId = auth.currentUser?.id ?? 0
+                    let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(activeRoom.id)"
+                    let storedId = UserDefaults.standard.integer(forKey: userDefaultsKey)
+                    self.roomInitialLastReadId = storedId > 0 ? storedId : (auth.currentUser?.last_seen_message_id ?? 0)
+                    
+                    // Sync read status to server using the latest cached room message
+                    if let lastMsg = (messagesCache[activeRoom.id] ?? auth.roomMessagesCache[activeRoom.id] ?? []).last, lastMsg.id > 0 {
                         Task {
                             await auth.markMessagesAsRead(messageId: lastMsg.id)
                         }
                     }
+                } else {
+                    // Auto-send voice note if currently recording on room exit
+                    if audioRecorder.isRecording {
+                        stopAndSendRecording()
+                        isRecordingLocked = false
+                        dragOffset = 0.0
+                    }
+                    
+                    // Leaving the room: save final read state sweep to prevent badges from reappearing
+                    if let oldRoom = oldValue {
+                        auth.sendTypingStatus(isTyping: false, roomId: oldRoom.is_main ? 0 : oldRoom.id)
+                        if let lastMsg = messages.last, lastMsg.id > 0 {
+                            let currentUserId = auth.currentUser?.id ?? 0
+                            let userDefaultsKey = "last_read_message_id_\(currentUserId)_room_\(oldRoom.id)"
+                            UserDefaults.standard.set(lastMsg.id, forKey: userDefaultsKey)
+                            Task {
+                                await auth.markMessagesAsRead(messageId: lastMsg.id)
+                            }
+                        }
+                    }
+                    
+                    // Clear messages to trigger clean load next time
+                    self.messages = []
+                    self.pendingMessages = []
+                    
+                    // Clear the divider baseline when leaving the room
+                    self.roomInitialLastReadId = nil
+                    
+                    // Clear search state when exiting the active chat room
+                    self.isSearchingChat = false
+                    self.searchQuery = ""
+                    self.isInsideChatSearchFocused = false
                 }
-                
-                // Clear messages to trigger clean load next time
-                self.messages = []
-                self.pendingMessages = []
-                
-                // Clear the divider baseline when leaving the room
-                self.roomInitialLastReadId = nil
-                
-                // Clear search state when exiting the active chat room
-                self.isSearchingChat = false
-                self.searchQuery = ""
-                self.isInsideChatSearchFocused = false
             }
-        }
-        .onChange(of: audioPlayerManager.navigateToMessageIdTrigger) { _, newValue in
-            if let targetId = newValue {
-                scrollToMessageTrigger = targetId
-                audioPlayerManager.navigateToMessageIdTrigger = nil
+            .onChange(of: audioPlayerManager.navigateToMessageIdTrigger) { _, newValue in
+                if let targetId = newValue {
+                    scrollToMessageTrigger = targetId
+                    audioPlayerManager.navigateToMessageIdTrigger = nil
+                }
             }
-        }
-        .onAppear {
-            pinnedRoomIds = Set(UserDefaults.standard.array(forKey: "glimpse_pinned_room_ids") as? [Int] ?? [])
-            loadChatRooms()
-            if selectedRoom != nil {
-                loadMessagesForSelectedRoom()
+            
+        let v2 = v1
+            .onAppear {
+                pinnedRoomIds = Set(UserDefaults.standard.array(forKey: "glimpse_pinned_room_ids") as? [Int] ?? [])
+                loadChatRooms()
+                if selectedRoom != nil {
+                    loadMessagesForSelectedRoom()
+                }
+                auth.pushCurrentStatus()
             }
-            auth.pushCurrentStatus()
-        }
-        .sheet(isPresented: $showRoomDetailsSheet) {
-            roomDetailsSheetContent()
-        }
-        // WebSocket synchronization for chat rooms
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomCreated"))) { notification in
-            self.handleChatRoomCreated(notification)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomDeleted"))) { notification in
-            self.handleChatRoomDeleted(notification)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomUpdated"))) { notification in
-            self.handleChatRoomUpdated(notification)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomDeleteStatusChanged"))) { notification in
-            self.handleChatRoomDeleteStatusChanged(notification)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomThemeUpdated"))) { notification in
-            self.handleChatRoomThemeUpdated(notification)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatMessageReceived"))) { notification in
-            self.handleChatMessageReceived(notification)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseAudioPlaybackDidFinish"))) { notification in
-            self.handleAudioPlaybackDidFinish(notification)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ShowCreateChatRoom"))) { _ in
-            newRoomName = ""
-            showCreateRoomAlert = true
-        }
-        .onChange(of: networkMonitor.isConnected) { _, isConnected in
-            if isConnected {
-                processPendingQueue()
+            .sheet(isPresented: $showRoomDetailsSheet) {
+                roomDetailsSheetContent()
             }
-        }
-        .onChange(of: messageInput) { oldValue, newValue in
-            self.handleMessageInputChanged(oldValue: oldValue, newValue: newValue)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
-            if isInputFocused && !messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let targetRoomId = selectedRoom?.is_main == true ? 0 : selectedRoom?.id
-                auth.sendTypingStatus(isTyping: false, roomId: targetRoomId)
+            // WebSocket synchronization for chat rooms
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomCreated"))) { notification in
+                self.handleChatRoomCreated(notification)
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-            if isInputFocused && !messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let targetRoomId = selectedRoom?.is_main == true ? 0 : selectedRoom?.id
-                auth.sendTypingStatus(isTyping: true, roomId: targetRoomId)
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomDeleted"))) { notification in
+                self.handleChatRoomDeleted(notification)
             }
-        }
-        // Custom creation and deletion alerts
-        .alert("New Chat Room", isPresented: $showCreateRoomAlert) {
-            TextField("Room name", text: $newRoomName)
-            Button("Cancel", role: .cancel) { newRoomName = "" }
-            Button("Create") {
-                createRoom()
+
+        let v3 = v2
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomUpdated"))) { notification in
+                self.handleChatRoomUpdated(notification)
             }
-        } message: {
-            Text("Create a new chat room to discuss a different topic with your partner.")
-        }
-        .alert("Rename Chat Room", isPresented: $showRenameRoomAlert, presenting: roomToRename) { room in
-            TextField("Room name", text: $renameRoomName)
-            Button("Cancel", role: .cancel) {
-                roomToRename = nil
-                renameRoomName = ""
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomDeleteStatusChanged"))) { notification in
+                self.handleChatRoomDeleteStatusChanged(notification)
             }
-            Button("Rename") {
-                renameRoom(_: room)
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatRoomThemeUpdated"))) { notification in
+                self.handleChatRoomThemeUpdated(notification)
             }
-        } message: { room in
-            Text("Enter a new name for '\(room.name)'.")
-        }
-        .alert("No Internet Connection", isPresented: $showNoInternetAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("No internet connection. Please connect to the internet and try again.")
-        }
-        .onChange(of: searchQuery) { oldValue, newValue in
-            debouncedSearchQuery = newValue
-            updateLocalSearchMatches()
-        }
-        .onReceive(refreshTimer) { _ in
-            relativeTimeRefreshTrigger = Date()
-        }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatMessageReceived"))) { notification in
+                self.handleChatMessageReceived(notification)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseAudioPlaybackDidFinish"))) { notification in
+                self.handleAudioPlaybackDidFinish(notification)
+            }
+
+        let v4 = v3
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ShowCreateChatRoom"))) { _ in
+                newRoomName = ""
+                showCreateRoomAlert = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatArchiveSelected"))) { _ in
+                archiveOrUnarchiveSelected()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatDeleteSelected"))) { _ in
+                deleteSelectedRooms()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("GlimpseChatClearSelection"))) { _ in
+                selectedRoomIds.removeAll()
+                isSelectMode = false
+            }
+            .onChange(of: auth.isChatSelectMode) { _, newValue in
+                isSelectMode = newValue
+            }
+            .onChange(of: auth.showArchivedOnly) { _, newValue in
+                showArchivedOnly = newValue
+            }
+            .onChange(of: isSelectMode) { _, newValue in
+                auth.isChatSelectMode = newValue
+            }
+
+        let v5 = v4
+            .onChange(of: showArchivedOnly) { _, newValue in
+                auth.showArchivedOnly = newValue
+            }
+            .onChange(of: networkMonitor.isConnected) { _, isConnected in
+                if isConnected {
+                    processPendingQueue()
+                }
+            }
+            .onChange(of: messageInput) { oldValue, newValue in
+                self.handleMessageInputChanged(oldValue: oldValue, newValue: newValue)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+                if isInputFocused && !messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    let targetRoomId = selectedRoom?.is_main == true ? 0 : selectedRoom?.id
+                    auth.sendTypingStatus(isTyping: false, roomId: targetRoomId)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                if isInputFocused && !messageInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    let targetRoomId = selectedRoom?.is_main == true ? 0 : selectedRoom?.id
+                    auth.sendTypingStatus(isTyping: true, roomId: targetRoomId)
+                }
+            }
+
+        v5
+            // Custom creation and deletion alerts
+            .alert("New Chat Room", isPresented: $showCreateRoomAlert) {
+                TextField("Room name", text: $newRoomName)
+                Button("Cancel", role: .cancel) { newRoomName = "" }
+                Button("Create") {
+                    createRoom()
+                }
+            } message: {
+                Text("Create a new chat room to discuss a different topic with your partner.")
+            }
+            .alert("Rename Chat Room", isPresented: $showRenameRoomAlert, presenting: roomToRename) { room in
+                TextField("Room name", text: $renameRoomName)
+                Button("Cancel", role: .cancel) {
+                    roomToRename = nil
+                    renameRoomName = ""
+                }
+                Button("Rename") {
+                    renameRoom(_: room)
+                }
+            } message: { room in
+                Text("Enter a new name for '\(room.name)'.")
+            }
+            .alert("No Internet Connection", isPresented: $showNoInternetAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("No internet connection. Please connect to the internet and try again.")
+            }
+            .alert("Delete Chats?", isPresented: $showDeleteSelectedConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    performDeleteSelectedRooms()
+                }
+            } message: {
+                Text("Are you sure you want to delete the selected chat room(s)? This action cannot be undone.")
+            }
+            .onChange(of: searchQuery) { oldValue, newValue in
+                debouncedSearchQuery = newValue
+                updateLocalSearchMatches()
+            }
+            .onReceive(refreshTimer) { _ in
+                relativeTimeRefreshTrigger = Date()
+            }
+    }
+
+    var body: some View {
+        applyMainModifiers(to: mainZStack())
     }
     
     // --- 💬 ACTIVE CHAT ROOM SCREEN (Type-safety separated) ---
@@ -568,7 +576,6 @@ struct ChatView: View {
                                     )
                             }
                         }
-                        .defaultScrollAnchor(.bottom)
                         .scrollDismissesKeyboard(.interactively)
                         .scrollBounceBehavior(.always, axes: .vertical)
                         .onAppear {
@@ -582,21 +589,24 @@ struct ChatView: View {
                                     }
                                 }
                                 // Auto clear highlight after 2.0s
+                                let highlightIdTemp = highlightId
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                                     withAnimation(.easeOut(duration: 0.5)) {
-                                        if highlightedMessageId == highlightId {
+                                        if highlightedMessageId == highlightIdTemp {
                                             highlightedMessageId = nil
                                         }
                                     }
                                 }
                             } else {
                                 self.isShowingScrollToBottomButton = false
-                                // Backup manual scroll because defaultScrollAnchor sometimes fails and causes blank screen on initial layout
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                                    proxy.scrollTo("bottom_anchor", anchor: .bottom)
-                                }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                                    proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                // Instant scroll to bottom on appear
+                                proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                
+                                // Retry scrolls at multiple intervals to ensure it stays anchored as views finish layout (especially large flash bubbles)
+                                for delay in [0.05, 0.15, 0.3, 0.45] {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                                        proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                    }
                                 }
                             }
                         }
@@ -693,6 +703,17 @@ struct ChatView: View {
                                 jumpToDate(jumpToDateValue, proxy: proxy)
                             }
                         }
+                        .onChange(of: replyMessage) { _, newValue in
+                            // When replyMessage changes, force ScrollView to update its position to the bottom anchor
+                            // to prevent the defaultScrollAnchor bottom blank/black screen glitch
+                            for delay in [0.05, 0.15, 0.3] {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                                    withAnimation(.easeOut(duration: 0.15)) {
+                                        proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                                    }
+                                }
+                            }
+                        }
                         .onChange(of: scrollToMessageTrigger) { _, newValue in
                             if let targetId = newValue {
                                 highlightedMessageId = targetId
@@ -742,6 +763,9 @@ struct ChatView: View {
 
             }
         }
+        .navigationBarHidden(true)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showDatePickerForJump) {
             ZStack {
                 Color.adaptiveBackground.ignoresSafeArea()
@@ -808,6 +832,77 @@ struct ChatView: View {
     }
     
     @ViewBuilder
+    private func chatRoomsListViewWithAlerts(partner: GlimpseUser) -> some View {
+        chatRoomsListView(partner: partner)
+            .alert("Request Clear Chat?", isPresented: $showRequestDeleteAlert, presenting: roomToRequestDelete) { room in
+                Button("Cancel", role: .cancel) { roomToRequestDelete = nil }
+                Button("Request", role: .destructive) {
+                    requestDeleteRoom(room)
+                }
+            } message: { room in
+                Text("Requesting to clear general chat will ask your partner for confirmation. If approved, all messages will be permanently cleared.")
+            }
+            .alert("Partner Requested Clear Chat", isPresented: $showRespondDeleteRequestAlert, presenting: roomToRespondDelete) { room in
+                Button("Decline", role: .destructive) {
+                    declineDeleteRoom(room)
+                }
+                Button("Accept & Clear", role: .none) {
+                    confirmDeleteRoom(room)
+                }
+                Button("Cancel", role: .cancel) { roomToRespondDelete = nil }
+            } message: { room in
+                Text("Your partner has requested to permanently clear the general chat history. Do you accept this request?")
+            }
+            .alert("Clear Chat Request Pending", isPresented: $showPendingDeleteRequestAlert, presenting: roomToDeleteRequest) { room in
+                Button("Cancel Request", role: .destructive) {
+                    declineDeleteRoom(room)
+                }
+                Button("OK", role: .cancel) { roomToDeleteRequest = nil }
+            } message: { room in
+                Text("Waiting for your partner to confirm clearing the general chat history. You can cancel your request here.")
+            }
+            .alert("Chat Options", isPresented: $showRoomOptionsDialog, presenting: roomForOptions) { room in
+                Button("Clear Chat", role: .destructive) {
+                    roomToClear = room
+                    showClearChatConfirmAlert = true
+                }
+                Button("Delete Room", role: .destructive) {
+                    roomToDelete = room
+                    showDeleteConfirmAlert = true
+                }
+                Button("Cancel", role: .cancel) {
+                    roomForOptions = nil
+                }
+            } message: { room in
+                Text("What would you like to do with '\(room.name)'?")
+            }
+            .alert("Clear Chat?", isPresented: $showClearChatConfirmAlert, presenting: roomToClear) { room in
+                Button("Cancel", role: .cancel) { roomToClear = nil }
+                Button("Clear", role: .destructive) {
+                    clearRoomChat(room)
+                }
+            } message: { room in
+                let msg = "Are you sure you want to clear all messages in '\(room.name)'? This action cannot be undone."
+                Text(msg)
+            }
+            .alert("Delete Room?", isPresented: $showDeleteConfirmAlert, presenting: roomToDelete) { room in
+                Button("Cancel", role: .cancel) { roomToDelete = nil }
+                Button("Delete", role: .destructive) {
+                    deleteRoom(room)
+                }
+            } message: { room in
+                Text("Are you sure you want to delete '\(room.name)'? All messages in this room will be permanently lost.")
+            }
+            .navigationDestination(item: $selectedRoom) { activeRoom in
+                activeChatRoomView(partner: partner, room: activeRoom)
+                    .navigationBarBackButtonHidden(true)
+                    .toolbar(.hidden, for: .navigationBar)
+                    .toolbar(.hidden, for: .tabBar)
+            }
+            .toolbar(.hidden, for: .navigationBar)
+    }
+    
+    @ViewBuilder
     private func chatRoomsListView(partner: GlimpseUser) -> some View {
         ZStack(alignment: .top) {
             Color.adaptiveBackground.ignoresSafeArea()
@@ -816,6 +911,45 @@ struct ChatView: View {
             VStack(spacing: 0) {
                 // Header spacer (clears the blurred top header precisely)
                 Spacer().frame(height: 104)
+                
+                // Sleek premium WhatsApp-style search bar OUTSIDE List (pinned)
+                if !chatRooms.isEmpty {
+                    HStack(spacing: 8) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.white.opacity(0.4))
+                                .font(.system(size: 14, weight: .bold))
+                            
+                            TextField("Search rooms or messages...", text: $searchQuery)
+                                .focused($isSearchFocused)
+                                .font(.system(size: 14, design: .rounded))
+                                .foregroundColor(.white)
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                            
+                            if !searchQuery.isEmpty {
+                                Button {
+                                    searchQuery = ""
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.white.opacity(0.4))
+                                        .font(.system(size: 14))
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.white.opacity(0.06))
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(searchQuery.isEmpty ? Color.clear : Color.activeCyan.opacity(0.4), lineWidth: 1)
+                        )
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 8)
+                }
                 
                 if isLoadingRooms {
                     VStack {
@@ -841,190 +975,206 @@ struct ChatView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ScrollViewReader { listProxy in
-                        List {
-                            // Sleek premium WhatsApp-style search bar inside List
-                            if !chatRooms.isEmpty {
-                                HStack(spacing: 8) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "magnifyingglass")
-                                            .foregroundColor(.white.opacity(0.4))
-                                            .font(.system(size: 14, weight: .bold))
-                                        
-                                        TextField("Search rooms or messages...", text: $searchQuery)
-                                            .focused($isSearchFocused)
-                                            .font(.system(size: 14, design: .rounded))
-                                            .foregroundColor(.white)
-                                            .autocorrectionDisabled()
-                                            .textInputAutocapitalization(.never)
-                                        
-                                        if !searchQuery.isEmpty {
-                                            Button {
-                                                searchQuery = ""
-                                            } label: {
-                                                Image(systemName: "xmark.circle.fill")
-                                                    .foregroundColor(.white.opacity(0.4))
-                                                    .font(.system(size: 14))
-                                            }
-                                        }
-                                    }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(Color.white.opacity(0.06))
-                                    .cornerRadius(10)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .stroke(searchQuery.isEmpty ? Color.clear : Color.activeCyan.opacity(0.4), lineWidth: 1)
-                                    )
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.top, 12)
-                                .padding(.bottom, 6)
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
-                                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                                .id("list_search_bar")
-                            }
-                        if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            // --- 🔍 SEARCH RESULTS VIEW ---
-                            let matchedRooms = sortedChatRooms.filter { $0.name.localizedCaseInsensitiveContains(debouncedSearchQuery) }
-                            let matchedMsgs = globalSearchResults
-                            
-                            if searchQuery != debouncedSearchQuery {
-                                VStack(spacing: 16) {
-                                    Spacer().frame(height: 40)
-                                    ProgressView()
-                                        .tint(.activeCyan)
-                                        .scaleEffect(1.2)
-                                    Text("Searching...")
-                                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                                        .foregroundColor(.white.opacity(0.4))
-                                    Spacer().frame(height: 40)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
-                            } else if matchedRooms.isEmpty && matchedMsgs.isEmpty {
-                                VStack(spacing: 12) {
-                                    Spacer().frame(height: 40)
-                                    Image(systemName: "magnifyingglass")
-                                        .font(.system(size: 40))
-                                        .foregroundColor(.white.opacity(0.15))
-                                    Text("No results found for \"\(searchQuery)\"")
-                                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                        .foregroundColor(.white.opacity(0.4))
-                                    Text("Try searching for a different keyword or room name.")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.white.opacity(0.25))
-                                        .multilineTextAlignment(.center)
-                                    Spacer().frame(height: 40)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
-                            } else {
-                                if !matchedRooms.isEmpty {
-                                    Section(header: Text("Rooms").font(.system(size: 11, weight: .bold)).foregroundColor(.white.opacity(0.4))) {
-                                        ForEach(matchedRooms) { room in
-                                            roomRow(room)
-                                                .listRowBackground(Color.clear)
-                                                .listRowSeparator(.hidden)
-                                                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                                                .onTapGesture {
-                                                    openRoomDirectly(room)
-                                                }
-                                        }
-                                    }
-                                }
-                                
-                                if !matchedMsgs.isEmpty {
-                                    Section(header: Text("Messages").font(.system(size: 11, weight: .bold)).foregroundColor(.white.opacity(0.4))) {
-                                        ForEach(matchedMsgs) { result in
-                                            searchMessageRow(result)
-                                                .listRowBackground(Color.clear)
-                                                .listRowSeparator(.hidden)
-                                                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                                                .onTapGesture {
-                                                    highlightedMessageId = result.message.id
-                                                    openRoomDirectly(result.room)
-                                                }
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            // --- 💬 STANDARD ROOMS LIST ---
-                            ForEach(sortedChatRooms) { room in
-                                roomRow(room)
-                                    .listRowBackground(Color.clear)
-                                    .listRowSeparator(.hidden)
-                                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                                    .onTapGesture {
-                                        openRoomDirectly(room)
-                                    }
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        ZStack {
+                            if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                // --- STANDARD CHAT LIST VIEW ---
+                                List {
+                                    // --- 💬 STANDARD ROOMS LIST ---
+                                    ForEach(sortedChatRooms) { room in
                                         let isCurrentUserRequesting = room.delete_requested_by == auth.currentUser?.id
                                         let isPartnerRequesting = room.delete_requested_by != nil && !isCurrentUserRequesting
                                         
-                                        Button(role: room.is_main ? .none : .destructive) {
-                                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                        let deleteLabelText: String = {
                                             if room.is_main {
-                                                if isCurrentUserRequesting {
-                                                    roomToDeleteRequest = room
-                                                    showPendingDeleteRequestAlert = true
-                                                } else if isPartnerRequesting {
-                                                    roomToRespondDelete = room
-                                                    showRespondDeleteRequestAlert = true
-                                                } else {
-                                                    roomToRequestDelete = room
-                                                    showRequestDeleteAlert = true
-                                                }
-                                                return
+                                                if isCurrentUserRequesting { return "Pending" }
+                                                else if isPartnerRequesting { return "Review" }
+                                                else { return "Clear Chat" }
+                                            } else {
+                                                return "Delete"
                                             }
-                                            roomForOptions = room
-                                            showRoomOptionsDialog = true
-                                        } label: {
+                                        }()
+                                        
+                                        let deleteLabelImage: String = {
                                             if room.is_main {
-                                                if isCurrentUserRequesting {
-                                                    Label("Pending", systemImage: "clock.badge.exclamationmark.fill")
-                                                } else if isPartnerRequesting {
-                                                    Label("Review", systemImage: "checkmark.circle.fill")
+                                                if isCurrentUserRequesting { return "clock.badge.exclamationmark.fill" }
+                                                else if isPartnerRequesting { return "checkmark.circle.fill" }
+                                                else { return "trash.fill" }
+                                            } else {
+                                                return "trash.fill"
+                                            }
+                                        }()
+                                        
+                                        HStack(spacing: 12) {
+                                            if isSelectMode {
+                                                if !room.is_main {
+                                                    Button {
+                                                        toggleRoomSelection(room.id)
+                                                    } label: {
+                                                        Image(systemName: selectedRoomIds.contains(room.id) ? "checkmark.circle.fill" : "circle")
+                                                            .font(.system(size: 22))
+                                                            .foregroundColor(selectedRoomIds.contains(room.id) ? .activeCyan : .white.opacity(0.4))
+                                                    }
+                                                    .buttonStyle(PlainButtonStyle())
+                                                    .transition(.move(edge: .leading).combined(with: .opacity))
                                                 } else {
-                                                    Label("Clear Chat", systemImage: "trash.fill")
+                                                    // Blank spacer to maintain alignment for General/Main room
+                                                    Spacer()
+                                                        .frame(width: 22)
+                                                        .transition(.move(edge: .leading).combined(with: .opacity))
+                                                }
+                                            }
+                                            
+                                            roomRow(room)
+                                        }
+                                        .id(room.id)
+                                        .listRowBackground(Color.clear)
+                                        .listRowSeparator(.hidden)
+                                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                                        .onTapGesture {
+                                            if isSelectMode {
+                                                if !room.is_main {
+                                                    toggleRoomSelection(room.id)
                                                 }
                                             } else {
-                                                Label("Delete", systemImage: "trash.fill")
+                                                openRoomDirectly(room)
                                             }
                                         }
-                                        .tint(room.is_main ? (isCurrentUserRequesting ? .orange : (isPartnerRequesting ? .activeCyan : .red)) : .red)
-                                    }
-                                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                        if !room.is_main {
-                                            let isPinned = pinnedRoomIds.contains(room.id)
-                                            Button {
-                                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                                togglePinRoom(room)
-                                            } label: {
-                                                Label(isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash.fill" : "pin.fill")
+                                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                            if !isSelectMode {
+                                                Button(role: room.is_main ? .none : .destructive) {
+                                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                                    if room.is_main {
+                                                        if isCurrentUserRequesting {
+                                                            roomToDeleteRequest = room
+                                                            showPendingDeleteRequestAlert = true
+                                                        } else if isPartnerRequesting {
+                                                            roomToRespondDelete = room
+                                                            showRespondDeleteRequestAlert = true
+                                                        } else {
+                                                            roomToRequestDelete = room
+                                                            showRequestDeleteAlert = true
+                                                        }
+                                                        return
+                                                    }
+                                                    roomForOptions = room
+                                                    showRoomOptionsDialog = true
+                                                } label: {
+                                                    Label(deleteLabelText, systemImage: deleteLabelImage)
+                                                }
+                                                .tint(room.is_main ? (isCurrentUserRequesting ? .orange : (isPartnerRequesting ? .activeCyan : .red)) : .red)
                                             }
-                                            .tint(.orange)
-                                            
-                                            Button {
-                                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                                roomToRename = room
-                                                renameRoomName = room.name
-                                                showRenameRoomAlert = true
-                                            } label: {
-                                                Label("Rename", systemImage: "square.and.pencil")
+                                        }
+                                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                            if !isSelectMode && !room.is_main {
+                                                let isPinned = pinnedRoomIds.contains(room.id)
+                                                Button {
+                                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                                    togglePinRoom(room)
+                                                } label: {
+                                                    Label(isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash.fill" : "pin.fill")
+                                                }
+                                                .tint(.orange)
+                                                
+                                                Button {
+                                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                                    roomToRename = room
+                                                    renameRoomName = room.name
+                                                    showRenameRoomAlert = true
+                                                } label: {
+                                                    Label("Rename", systemImage: "square.and.pencil")
+                                                }
+                                                .tint(.blue)
                                             }
-                                            .tint(.blue)
                                         }
                                     }
+                                    
+                                    // End of list spacer is no longer needed since list content is clean
+                                }
+                                .listStyle(.plain)
+                                .scrollContentBackground(.hidden)
+                                .background(Color.clear)
+                            } else {
+                                // --- 🔍 SEARCH RESULTS VIEW ---
+                                let matchedRooms = sortedChatRooms.filter { $0.name.localizedCaseInsensitiveContains(debouncedSearchQuery) }
+                                let matchedMsgs = globalSearchResults
+                                
+                                List {
+                                    if searchQuery != debouncedSearchQuery {
+                                        VStack(spacing: 16) {
+                                            Spacer().frame(height: 40)
+                                            ProgressView()
+                                                .tint(.activeCyan)
+                                                .scaleEffect(1.2)
+                                            Text("Searching...")
+                                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                                .foregroundColor(.white.opacity(0.4))
+                                            Spacer().frame(height: 40)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .listRowBackground(Color.clear)
+                                        .listRowSeparator(.hidden)
+                                    } else if matchedRooms.isEmpty && matchedMsgs.isEmpty {
+                                        VStack(spacing: 12) {
+                                            Spacer().frame(height: 40)
+                                            Image(systemName: "magnifyingglass")
+                                                .font(.system(size: 40))
+                                                .foregroundColor(.white.opacity(0.15))
+                                            Text("No results found for \"\(searchQuery)\"")
+                                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                                .foregroundColor(.white.opacity(0.4))
+                                            Text("Try searching for a different keyword or room name.")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.white.opacity(0.25))
+                                                .multilineTextAlignment(.center)
+                                            Spacer().frame(height: 40)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .listRowBackground(Color.clear)
+                                        .listRowSeparator(.hidden)
+                                    } else {
+                                        if !matchedRooms.isEmpty {
+                                            Section(header: Text("Rooms").font(.system(size: 11, weight: .bold)).foregroundColor(.white.opacity(0.4))) {
+                                                ForEach(matchedRooms) { room in
+                                                    roomRow(room)
+                                                        .listRowBackground(Color.clear)
+                                                        .listRowSeparator(.hidden)
+                                                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                                                        .onTapGesture {
+                                                            openRoomDirectly(room)
+                                                        }
+                                                }
+                                            }
+                                        }
+                                        
+                                        if !matchedMsgs.isEmpty {
+                                            Section(header: Text("Messages").font(.system(size: 11, weight: .bold)).foregroundColor(.white.opacity(0.4))) {
+                                                ForEach(matchedMsgs) { result in
+                                                    searchMessageRow(result)
+                                                        .listRowBackground(Color.clear)
+                                                        .listRowSeparator(.hidden)
+                                                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                                                        .onTapGesture {
+                                                            highlightedMessageId = result.message.id
+                                                            openRoomDirectly(result.room)
+                                                        }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                .listStyle(.plain)
+                                .scrollContentBackground(.hidden)
+                                .background(Color.clear)
+                            }
+                        } // closes ZStack
+                        .onReceive(auth.chatTabDoubleTapPublisher) { _ in
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                if let firstRoomId = sortedChatRooms.first?.id {
+                                    listProxy.scrollTo(firstRoomId, anchor: .top)
+                                }
                             }
                         }
-                    }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .background(Color.clear)
+                    } // closes ScrollViewReader
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .scrollDismissesKeyboard(.interactively)
                     .simultaneousGesture(
@@ -1033,12 +1183,6 @@ struct ChatView: View {
                             hideKeyboard()
                         }
                     )
-                    .onReceive(auth.chatTabDoubleTapPublisher) { _ in
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                            listProxy.scrollTo("list_search_bar", anchor: .top)
-                        }
-                    }
-                }
             }
         }
         .ignoresSafeArea(edges: .top)
@@ -1053,9 +1197,10 @@ struct ChatView: View {
         isSearchFocused = false
         isInsideChatSearchFocused = false
         hideKeyboard()
-        if let authCached = auth.roomMessagesCache[room.id], !authCached.isEmpty {
-            self.messages = authCached
-            self.messagesCache[room.id] = authCached
+        let localCached = auth.getCachedMessages(for: room.is_main ? nil : room.id)
+        if !localCached.isEmpty {
+            self.messages = localCached
+            self.messagesCache[room.id] = localCached
         } else if let cached = messagesCache[room.id], !cached.isEmpty {
             self.messages = cached
         } else {
@@ -1073,6 +1218,9 @@ struct ChatView: View {
         isInsideChatSearchFocused = false
         hideKeyboard()
         var cachedMsgs = messagesCache[room.id] ?? auth.roomMessagesCache[room.id] ?? []
+        if cachedMsgs.isEmpty {
+            cachedMsgs = auth.getCachedMessages(for: room.is_main ? nil : room.id)
+        }
         if !cachedMsgs.contains(where: { $0.id == message.id }) {
             cachedMsgs.append(message)
             cachedMsgs.sort { $0.id < $1.id }
@@ -1234,7 +1382,7 @@ struct ChatView: View {
                     )
                     .padding(.horizontal, 16)
                     .padding(.top, 10)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(.opacity)
                 }
                 
                 floatingInputBar(proxy: proxy)
@@ -2187,10 +2335,11 @@ struct RecordButtonStyle: ButtonStyle {
     private func loadMessagesForSelectedRoom() {
         guard let activeRoom = selectedRoom else { return }
         
-        // Show auth-level persistent cache instantly (survives tab switching)
-        if let authCached = auth.roomMessagesCache[activeRoom.id], !authCached.isEmpty {
-            self.messages = authCached
-            self.messagesCache[activeRoom.id] = authCached
+        // Show auth-level persistent cache instantly (survives tab switching and loads from SQLite if empty)
+        let cached = auth.getCachedMessages(for: activeRoom.is_main ? nil : activeRoom.id)
+        if !cached.isEmpty {
+            self.messages = cached
+            self.messagesCache[activeRoom.id] = cached
         }
         
         Task { @MainActor in
@@ -2277,6 +2426,63 @@ struct RecordButtonStyle: ButtonStyle {
                 roomToDelete = nil
             } catch {
                 print("❌ Failed to delete room: \(error)")
+            }
+        }
+    }
+
+    private func toggleRoomSelection(_ roomId: Int) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        if selectedRoomIds.contains(roomId) {
+            selectedRoomIds.remove(roomId)
+        } else {
+            selectedRoomIds.insert(roomId)
+        }
+    }
+    
+    private func archiveOrUnarchiveSelected() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        var currentSet = archivedRoomIds
+        if showArchivedOnly {
+            for id in selectedRoomIds {
+                currentSet.remove(id)
+            }
+        } else {
+            for id in selectedRoomIds {
+                currentSet.insert(id)
+            }
+        }
+        updateArchivedRooms(currentSet)
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            selectedRoomIds.removeAll()
+            isSelectMode = false
+            if showArchivedOnly && currentSet.intersection(chatRooms.map { $0.id }).isEmpty {
+                showArchivedOnly = false
+            }
+        }
+    }
+    
+    private func deleteSelectedRooms() {
+        guard !selectedRoomIds.isEmpty else { return }
+        showDeleteSelectedConfirmation = true
+    }
+    
+    private func performDeleteSelectedRooms() {
+        guard !selectedRoomIds.isEmpty else { return }
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        let idsToDelete = selectedRoomIds
+        
+        Task { @MainActor in
+            for id in idsToDelete {
+                if let room = chatRooms.first(where: { $0.id == id }) {
+                    try? await auth.deleteChatRoom(roomId: room.id)
+                }
+            }
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                self.chatRooms = self.chatRooms.filter { !idsToDelete.contains($0.id) }
+                self.auth.chatRooms = self.chatRooms
+                self.auth.updateUnreadCount()
+                self.selectedRoomIds.removeAll()
+                self.isSelectMode = false
             }
         }
     }

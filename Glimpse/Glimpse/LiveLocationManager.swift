@@ -14,6 +14,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     // CoreMotion activity tracking
     private let motionActivityManager = CMMotionActivityManager()
     private let motionQueue = OperationQueue()
+    private let motionManager = CMMotionManager()
     private var isStationary = false
     private var motionDebounceTimer: Timer?
     private var lastKnownActivity: CMMotionActivity?
@@ -25,6 +26,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     private var cachedWiFiLocations: [String: CLLocationCoordinate2D] = [:] // [BSSID: Coordinate]
     private var isWiFiScanning = false
     private var wasUsingWiFi = false
+    private var wifiBSSIDWaitingForCache: String? = nil
     
     private var lastUploadedLocation: CLLocation?
     private var lastUploadTime: Date?
@@ -34,8 +36,31 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     private var pendingForceSyncUpload = false
     private var lastForceSyncTime: Date? = nil
     
+    private func loadWiFiCache() {
+        if let stored = UserDefaults.standard.dictionary(forKey: "glimpse_cached_wifi_locations") as? [String: [Double]] {
+            var temp: [String: CLLocationCoordinate2D] = [:]
+            for (bssid, coords) in stored {
+                if coords.count == 2 {
+                    temp[bssid] = CLLocationCoordinate2D(latitude: coords[0], longitude: coords[1])
+                }
+            }
+            self.cachedWiFiLocations = temp
+            self.log("💾 Wi-Fi Cache loaded from UserDefaults: \(temp.count) networks.")
+        }
+    }
+    
+    private func saveWiFiCache() {
+        var toStore: [String: [Double]] = [:]
+        for (bssid, coord) in cachedWiFiLocations {
+            toStore[bssid] = [coord.latitude, coord.longitude]
+        }
+        UserDefaults.standard.set(toStore, forKey: "glimpse_cached_wifi_locations")
+        self.log("💾 Wi-Fi Cache saved to UserDefaults: \(cachedWiFiLocations.count) networks.")
+    }
+    
     override init() {
         super.init()
+        loadWiFiCache()
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters // High accuracy but highly energy efficient!
         locationManager.distanceFilter = 30.0 // Only trigger didUpdateLocations if user moves more than 30 meters!
@@ -46,6 +71,12 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         locationManager.showsBackgroundLocationIndicator = false
         
         setupNetworkPathMonitor()
+        
+        // Start device motion updates to check for flat orientation
+        if motionManager.isDeviceMotionAvailable {
+            motionManager.deviceMotionUpdateInterval = 5.0
+            motionManager.startDeviceMotionUpdates(to: motionQueue) { _, _ in }
+        }
         
         NotificationCenter.default.addObserver(self, selector: #selector(handleAppResignActive), name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(handleAppTerminate), name: UIApplication.willTerminateNotification, object: nil)
@@ -84,6 +115,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         locationManager.stopMonitoringSignificantLocationChanges()
         removeStationaryGeofence()
         motionActivityManager.stopActivityUpdates()
+        motionManager.stopDeviceMotionUpdates()
         LiveDebugLogger.shared.setGPSStatus("Stopped 🛑")
     }
     
@@ -99,6 +131,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         
         // CLEAR CACHE: If the user was stuck in a simulated/fake location lock, this completely wipes it!
         self.cachedWiFiLocations.removeAll()
+        self.saveWiFiCache()
         self.cachedLocationName = nil
         self.lastGeocodedLocation = nil
         
@@ -206,6 +239,12 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                     // 🏡 Wi-Fi Home Shield: If connected to Wi-Fi, only wake up GPS for vehicle movement (automotive/cycling)
                     // If we are just walking, playing games, or moving the phone at home, keep the GPS 100% powered down!
                     if self.currentWiFiBSSID != nil && !activity.automotive && !activity.cycling {
+                        // JANGAN TIDURKAN jika kita masih menunggu koordinat GPS segar untuk cache Wi-Fi ini!
+                        if self.wifiBSSIDWaitingForCache != nil {
+                            self.log("🛰️ Wi-Fi Shield: Menunda sleep karena masih menunggu koordinat GPS segar untuk cache Wi-Fi.")
+                            return
+                        }
+                        
                         if self.motionDebounceTimer != nil {
                             self.motionDebounceTimer?.invalidate()
                             self.motionDebounceTimer = nil
@@ -290,6 +329,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                         self.wasUsingWiFi = false
                         self.log("📴 Wi-Fi Terputus: Jaringan berpindah ke Data Seluler. Menyalakan kembali GPS aktif!")
                         self.currentWiFiBSSID = nil
+                        self.wifiBSSIDWaitingForCache = nil
                         self.locationManager.startUpdatingLocation()
                         LiveDebugLogger.shared.setGPSStatus("Active GPS 🛰️")
                     }
@@ -308,9 +348,17 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             
             defer { self.isWiFiScanning = false }
             
-            // Personal Dev Account Fallback: if network is nil (blocked by entitlement),
-            // we use a synthetic BSSID "personal_dev_wifi" to let them test the Wi-Fi feature!
+            #if targetEnvironment(simulator)
             let bssid = network?.bssid ?? "personal_dev_wifi_anchor"
+            #else
+            guard let bssid = network?.bssid else {
+                self.log("⚠️ Wi-Fi BSSID tidak dapat dibaca (nil) di background. Mengabaikan penguncian Wi-Fi stasioner.")
+                self.currentWiFiBSSID = nil
+                self.wifiBSSIDWaitingForCache = nil
+                self.locationManager.startUpdatingLocation()
+                return
+            }
+            #endif
             self.currentWiFiBSSID = bssid
             
             self.log("📶 Wi-Fi Terhubung: Tersambung ke Wi-Fi BSSID: \(bssid)")
@@ -343,31 +391,12 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                 let dummyLocation = CLLocation(latitude: cached.latitude, longitude: cached.longitude)
                 self.processAndUploadLocation(dummyLocation, forceUpload: true)
             } else {
-                // Otherwise, get current coordinate first to cache it (unless simulated!)
-                if let currentLoc = self.locationManager.location {
-                    // Proteksi Murni: JANGAN PERNAH MENYIMPAN LOKASI SIMULASI KE CACHE WI-FI RUMAH!
-                    var isSimulated = false
-                    if #available(iOS 15.0, *) {
-                        if currentLoc.sourceInformation?.isSimulatedBySoftware == true {
-                            isSimulated = true
-                        }
-                    }
-                    
-                    if isSimulated {
-                        self.log("⚠️ BSSID Caching Ditolak: Lokasi saat ini adalah SIMULASI Xcode/Web. Menolak mengikat Wi-Fi rumah ke lokasi palsu!")
-                        // Jangan sleep GPS, biarkan update jalan terus untuk simulasi.
-                        self.locationManager.startUpdatingLocation()
-                    } else {
-                        self.cachedWiFiLocations[bssid] = currentLoc.coordinate
-                        self.log("💾 Wi-Fi Caching: Koordinat lokasi baru disimpan untuk Wi-Fi BSSID: \(bssid)")
-                        
-                        self.log("😴 GPS Dinonaktifkan: Titik Wi-Fi berhasil di-cache. Menidurkan GPS!")
-                        self.setToStationary(at: currentLoc.coordinate)
-                        LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi Cache Locked) 📶😴")
-                        
-                        self.processAndUploadLocation(currentLoc, forceUpload: true)
-                    }
-                }
+                // Otherwise, request a fresh coordinate from GPS before caching it
+                self.log("🛰️ Wi-Fi Baru Terhubung: Memulai pencarian satelit untuk mendapatkan koordinat Wi-Fi yang segar...")
+                self.wifiBSSIDWaitingForCache = bssid
+                self.locationManager.desiredAccuracy = kCLLocationAccuracyBest
+                self.locationManager.distanceFilter = kCLDistanceFilterNone
+                self.locationManager.startUpdatingLocation()
             }
         }
     }
@@ -403,6 +432,24 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             }
         }
         
+        // If we are currently waiting for a fresh GPS coordinate to cache a new Wi-Fi
+        if let bssid = wifiBSSIDWaitingForCache {
+            if location.horizontalAccuracy <= 45.0 {
+                self.log("💾 Wi-Fi Caching (GPS Fresh): Menyimpan koordinat Wi-Fi BSSID \(bssid) dari satelit GPS segar (Akurasi: \(location.horizontalAccuracy)m).")
+                cachedWiFiLocations[bssid] = location.coordinate
+                self.saveWiFiCache()
+                wifiBSSIDWaitingForCache = nil
+                
+                self.setToStationary(at: location.coordinate)
+                LiveDebugLogger.shared.setGPSStatus("Sleeping (Wi-Fi Cache Locked) 📶😴")
+                
+                processAndUploadLocation(location, forceUpload: true)
+                return
+            } else {
+                self.log("🛰️ GPS update received but accuracy (\(location.horizontalAccuracy)m) is insufficient (limit <= 45m). Waiting for higher accuracy...")
+            }
+        }
+
         // Dynamic accuracy fallback based on actual physical speed (Layer 2)
         let speed = location.speed // in meters/second
         let speedInKmH = speed * 3.6
@@ -471,6 +518,7 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                 self.log("⚠️ Caching Ditolak: Menolak menyimpan lokasi simulasi ke cache BSSID \(bssid).")
             } else {
                 cachedWiFiLocations[bssid] = location.coordinate
+                self.saveWiFiCache()
                 self.log("💾 Wi-Fi Caching (GPS Lock): Menyimpan koordinat Wi-Fi BSSID \(bssid) dari satelit GPS aktif.")
                 
                 self.log("😴 GPS Dinonaktifkan: Wi-Fi terdaftar dari pembacaan satelit. Menidurkan GPS!")
@@ -609,6 +657,29 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
             }
         }
         
+        // Smart Sleeping Detection (CoreMotion flat state + isCharging + night time + isStationary)
+        let isSleeping: Bool = {
+            let hour = Calendar.current.component(.hour, from: Date())
+            let isNightTime = hour >= 20 || hour < 6
+            guard isNightTime else { return false }
+            
+            // 1. Check if charging
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            let isCharging = UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full
+            guard isCharging else { return false }
+            
+            // 2. Check if device is flat (gravity.z > 0.9 or < -0.9)
+            if let gravity = motionManager.deviceMotion?.gravity {
+                let isFlat = abs(gravity.z) > 0.9
+                guard isFlat else { return false }
+            } else {
+                return false
+            }
+            
+            // 3. Check if stationary
+            return self.isStationary
+        }()
+        
         Task {
             defer {
                 if bgTaskID != .invalid {
@@ -617,13 +688,14 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
                 }
             }
             
-            self.log("📤 GPS Uplink: Mengirim data ke server Laravel! (Lat: \(location.coordinate.latitude), Lon: \(location.coordinate.longitude), Nama: \(self.cachedLocationName ?? "Tidak Diketahui"), Jarak: \(Int(distanceMoved))m, Waktu: \(Int(timeElapsed))s)")
+            self.log("📤 GPS Uplink: Mengirim data ke server Laravel! (Lat: \(location.coordinate.latitude), Lon: \(location.coordinate.longitude), Nama: \(self.cachedLocationName ?? "Tidak Diketahui"), Jarak: \(Int(distanceMoved))m, Waktu: \(Int(timeElapsed))s, Sleeping: \(isSleeping))")
             
             // Upload dynamically to server!
             await AuthManager.shared.pushLocationAndStatus(
                 latitude: location.coordinate.latitude,
                 longitude: location.coordinate.longitude,
-                locationName: self.cachedLocationName
+                locationName: self.cachedLocationName,
+                isSleeping: isSleeping
             )
             
             await MainActor.run {

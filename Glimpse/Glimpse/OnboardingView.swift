@@ -5,6 +5,9 @@ struct OnboardingView: View {
     @State private var navigateToSignup = false
     @State private var isShowingToS = false
     @State private var isShowingPrivacyPolicy = false
+    @State private var showMockAppleSimulation = false
+    @State private var isLoading = false
+    @State private var errorMessage = ""
     
     var body: some View {
         NavigationStack {
@@ -32,6 +35,13 @@ struct OnboardingView: View {
                     Spacer()
                     
                     VStack(spacing: 16) {
+                        if !errorMessage.isEmpty {
+                            Text(errorMessage)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .transition(.opacity)
+                        }
+                        
                         Button { navigateToSignup = true } label: {
                             Text("Get Started")
                                 .font(.headline)
@@ -42,6 +52,29 @@ struct OnboardingView: View {
                                 .cornerRadius(16)
                         }
                         
+                        // Apple Sign In Button
+                        Button {
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            showMockAppleSimulation = true
+                        } label: {
+                            HStack(spacing: 8) {
+                                if isLoading {
+                                    ProgressView().tint(.black)
+                                } else {
+                                    Image(systemName: "apple.logo")
+                                        .font(.system(size: 18))
+                                    Text("Sign in with Apple")
+                                        .fontWeight(.bold)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(Color.white)
+                            .foregroundColor(.black)
+                            .cornerRadius(16)
+                        }
+                        .disabled(isLoading)
+                        
                         HStack {
                             Text("Already have an account?")
                                 .foregroundColor(.white.opacity(0.5))
@@ -51,6 +84,7 @@ struct OnboardingView: View {
                             .foregroundColor(.electricPurple)
                         }
                         .font(.subheadline)
+                        .padding(.top, 4)
                         
                         VStack(spacing: 4) {
                             Text("By continuing, you agree to our")
@@ -64,10 +98,10 @@ struct OnboardingView: View {
                                 Button("Privacy Policy") { isShowingPrivacyPolicy = true }
                                     .foregroundColor(.electricPurple)
                                     .fontWeight(.semibold)
-                            }
+                             }
                         }
                         .font(.caption2)
-                        .padding(.top, 16)
+                        .padding(.top, 12)
                     }
                     .padding(.horizontal, 32)
                     .padding(.bottom, 40)
@@ -96,6 +130,37 @@ struct OnboardingView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
+        .confirmationDialog("Simulate Apple Sign-In", isPresented: $showMockAppleSimulation, titleVisibility: .visible) {
+            Button("Sign In as Bob (Mock Apple)") {
+                Task {
+                    await simulateAppleLogin(id: "apple_mock_bob", email: "bob.apple@glimpse.test", name: "Bob Apple")
+                }
+            }
+            Button("Sign In as Alice (Mock Apple)") {
+                Task {
+                    await simulateAppleLogin(id: "apple_mock_alice", email: "alice.apple@glimpse.test", name: "Alice Apple")
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Since this app is in local development without a Paid Apple Developer Account, you can simulate Apple Sign-In with these test profiles.")
+        }
+    }
+    
+    private func simulateAppleLogin(id: String, email: String, name: String) async {
+        isLoading = true
+        errorMessage = ""
+        do {
+            try await AuthManager.shared.loginWithApple(
+                appleUserId: id,
+                email: email,
+                name: name,
+                identityToken: "mock_identity_token_\(id)"
+            )
+        } catch {
+            withAnimation { errorMessage = error.localizedDescription }
+        }
+        isLoading = false
     }
 }
 

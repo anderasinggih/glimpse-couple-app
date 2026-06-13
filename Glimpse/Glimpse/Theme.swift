@@ -178,8 +178,45 @@ struct BrandingHeader: View {
     var selectedTab: Int = 0
     var onCalendarTap: (() -> Void)? = nil
     
+    #if !WIDGET
+    @State private var auth = AuthManager.shared
+    #endif
+    
     var body: some View {
         HStack {
+            #if !WIDGET
+            if selectedTab == 3 && auth.showArchivedOnly {
+                Button {
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        auth.showArchivedOnly = false
+                        auth.isChatSelectMode = false
+                        NotificationCenter.default.post(name: Notification.Name("GlimpseChatClearSelection"), object: nil)
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 18, weight: .bold))
+                        Text("Archived")
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                    }
+                    .foregroundColor(.activeCyan)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .frame(height: 44)
+            } else {
+                HStack(spacing: 10) {
+                    Image(systemName: "heart.fill")
+                        .foregroundColor(.electricPurple)
+                        .font(.system(size: 28))
+                    Text("Glimpse")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                }
+                .frame(height: 44)
+            }
+            #else
             HStack(spacing: 10) {
                 Image(systemName: "heart.fill")
                     .foregroundColor(.electricPurple)
@@ -189,6 +226,7 @@ struct BrandingHeader: View {
                     .foregroundColor(.white)
             }
             .frame(height: 44)
+            #endif
             
             Spacer()
             
@@ -212,23 +250,94 @@ struct BrandingHeader: View {
                 }
                 .buttonStyle(PlainButtonStyle())
             } else if selectedTab == 3 {
-                Button {
-                    let generator = UIImpactFeedbackGenerator(style: .medium)
-                    generator.impactOccurred()
-                    NotificationCenter.default.post(name: Notification.Name("ShowCreateChatRoom"), object: nil)
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(Color.white.opacity(0.12))
-                            .frame(width: 44, height: 44)
-                            .blur(radius: 0.5)
+                #if !WIDGET
+                if auth.isChatSelectMode {
+                    HStack(spacing: 16) {
+                        Button {
+                            NotificationCenter.default.post(name: Notification.Name("GlimpseChatArchiveSelected"), object: nil)
+                        } label: {
+                            Image(systemName: auth.showArchivedOnly ? "archivebox.bottom.fill" : "archivebox.fill")
+                                .font(.system(size: 19, weight: .bold))
+                                .foregroundColor(.activeCyan)
+                        }
                         
-                        Image(systemName: "plus")
-                            .font(.system(size: 19, weight: .bold))
-                            .foregroundColor(.white)
+                        Button {
+                            NotificationCenter.default.post(name: Notification.Name("GlimpseChatDeleteSelected"), object: nil)
+                        } label: {
+                            Image(systemName: "trash.fill")
+                                .font(.system(size: 19, weight: .bold))
+                                .foregroundColor(.red)
+                        }
+                        
+                        Button {
+                            let generator = UIImpactFeedbackGenerator(style: .medium)
+                            generator.impactOccurred()
+                            auth.isChatSelectMode = false
+                            NotificationCenter.default.post(name: Notification.Name("GlimpseChatClearSelection"), object: nil)
+                        } label: {
+                            Text("Done")
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.white.opacity(0.12))
+                                .cornerRadius(8)
+                        }
                     }
+                } else {
+                    Menu {
+                        Button {
+                            let generator = UIImpactFeedbackGenerator(style: .medium)
+                            generator.impactOccurred()
+                            auth.isChatSelectMode = true
+                        } label: {
+                            Label("Select Chats", systemImage: "checklist")
+                        }
+                        
+                        Button {
+                            let generator = UIImpactFeedbackGenerator(style: .medium)
+                            generator.impactOccurred()
+                            NotificationCenter.default.post(name: Notification.Name("ShowCreateChatRoom"), object: nil)
+                        } label: {
+                            Label("New Chat Room", systemImage: "plus.circle")
+                        }
+                        
+                        let archivedCount = auth.chatRooms.filter { room in
+                            let suite = UserDefaults(suiteName: "group.glimpse.app")
+                            let archivedString = suite?.string(forKey: "glimpse_archived_room_ids") ?? ""
+                            let archivedIds = Set(archivedString.split(separator: ",").compactMap { Int($0) })
+                            return archivedIds.contains(room.id)
+                        }.count
+                        
+                        if !auth.showArchivedOnly && archivedCount > 0 {
+                            Button {
+                                let generator = UIImpactFeedbackGenerator(style: .medium)
+                                generator.impactOccurred()
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    auth.showArchivedOnly = true
+                                }
+                            } label: {
+                                Label("Archived Chats", systemImage: "archivebox")
+                            }
+                        }
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.12))
+                                .frame(width: 44, height: 44)
+                                .blur(radius: 0.5)
+                            
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 19, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
-                .buttonStyle(PlainButtonStyle())
+                #else
+                Color.clear
+                    .frame(width: 44, height: 44)
+                #endif
             } else {
                 Color.clear
                     .frame(width: 44, height: 44)

@@ -40,7 +40,7 @@ Layanan server utama menggunakan Octane + Roadrunner di port 8001.
 
 untuk reload
 pkill -9 -f rr
-   pkill -9 -f roadrunner
+pkill -9 -f roadrunner
    
 
    screen -ls | grep octane-8001 | cut -d. -f1 | awk '{print $1}' | xargs kill
@@ -116,3 +116,4 @@ Jika Anda melakukan pull kode terbaru dari Git, biasanya Anda perlu me-restart l
 2. Matikan dengan **`Ctrl` + `C`**.
 3. Jalankan kembali perintah start-nya.
 4. Detach kembali dengan **`Ctrl` + `A`** lalu **`D`**.
+git config --local --unset http.https://github.com/.extraheader

@@ -195,6 +195,8 @@ extension AuthManager {
                                 if let batt = update.batteryLevel { p.battery_level = batt }
                                 if let char = update.isCharging { p.is_charging = char }
                                 if let lastSeen = update.lastSeenMessageId { p.last_seen_message_id = lastSeen }
+                                if let active = update.lastActiveAt { p.last_active_at = active }
+                                if let sleep = update.isSleeping { p.is_sleeping = sleep }
                                 p.status_note = update.statusNote
                                 p.location_name = update.locationName
                                 p.wifi_bssid = update.wifiBssid
@@ -345,6 +347,10 @@ extension AuthManager {
                         GlimpseDatabase.shared.saveMessage(finalMsg)
                         
                         DispatchQueue.main.async {
+                            if finalMsg.sender_id != self.currentUser?.id, var p = self.partner, p.id == finalMsg.sender_id {
+                                p.last_active_at = ISO8601DateFormatter().string(from: Date())
+                                self.partner = p
+                            }
                             // If it belongs to the main chat room, append to latestFetchedMessages
                             if finalMsg.room_id == nil {
                                 if !self.latestFetchedMessages.contains(where: { $0.id == finalMsg.id }) {
@@ -423,6 +429,10 @@ extension AuthManager {
                             // Update lastLoveBurstTimestamp in real-time!
                             self.lastLoveBurstReaction = payload.reaction
                             self.lastLoveBurstTimestamp = payload.timestamp
+                            if payload.sender_id != self.currentUser?.id, var p = self.partner, p.id == payload.sender_id {
+                                p.last_active_at = ISO8601DateFormatter().string(from: Date())
+                                self.partner = p
+                            }
                         }
                     }
                 }
@@ -440,6 +450,10 @@ extension AuthManager {
                         DispatchQueue.main.async {
                             self.totalMeetings = payload.total_meetings
                             self.lastLoveBumpTimestamp = payload.timestamp
+                            if payload.sender_id != self.currentUser?.id, var p = self.partner, p.id == payload.sender_id {
+                                p.last_active_at = ISO8601DateFormatter().string(from: Date())
+                                self.partner = p
+                            }
                         }
                     }
                 }
@@ -458,6 +472,10 @@ extension AuthManager {
                             if state.userId != self.currentUser?.id {
                                 self.isPartnerTyping = state.isTyping
                                 self.partnerTypingRoomId = state.roomId
+                                if var p = self.partner, p.id == state.userId {
+                                    p.last_active_at = ISO8601DateFormatter().string(from: Date())
+                                    self.partner = p
+                                }
                             }
                         }
                     }

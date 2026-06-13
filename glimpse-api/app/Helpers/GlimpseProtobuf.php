@@ -357,6 +357,11 @@ class GlimpseProtobuf
             $data .= $activeStr;
         }
         
+        // Field 11: is_sleeping (Varint)
+        $isSleeping = (bool)\Cache::get("user_{$user->id}_is_sleeping", false);
+        $data .= self::writeTag(11, 0);
+        $data .= self::writeVarint($isSleeping ? 1 : 0);
+        
         return $data;
     }
 

@@ -387,16 +387,14 @@ extension ChatMessage {
     }
     
     var cleanDisplayContent: String {
-        if message.hasPrefix("[FLASH_ATTACHMENT]") {
+        let textToAnalyze = replyInfo?.actualMessage ?? message
+        if textToAnalyze.contains("[FLASH_ATTACHMENT]") {
             return "📸 Sent a Flash Photo"
         }
-        if message.hasPrefix("[KENCAN_INVITATION]") {
+        if textToAnalyze.contains("[KENCAN_INVITATION]") {
             return "📅 Sent a Date Invitation"
         }
-        if let reply = replyInfo {
-            return reply.actualMessage
-        }
-        return message
+        return textToAnalyze
     }
 }
 
@@ -422,15 +420,13 @@ extension RoomLatestMessage {
     }
     
     var cleanDisplayContent: String {
-        if message.hasPrefix("[FLASH_ATTACHMENT]") {
+        let textToAnalyze = replyInfo?.actualMessage ?? message
+        if textToAnalyze.contains("[FLASH_ATTACHMENT]") {
             return "📸 Sent a Flash Photo"
         }
-        if message.hasPrefix("[KENCAN_INVITATION]") {
+        if textToAnalyze.contains("[KENCAN_INVITATION]") {
             return "📅 Sent a Date Invitation"
         }
-        if let reply = replyInfo {
-            return reply.actualMessage
-        }
-        return message
+        return textToAnalyze
     }
 }

@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login/apple', [AuthController::class, 'loginApple']);
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 Route::get('/verify-email/bypass', [AuthController::class, 'bypassVerification']);
@@ -42,6 +43,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/glimpse/bump', [GlimpseController::class, 'triggerBump']);
     Route::post('/glimpse/typing', [GlimpseController::class, 'broadcastTyping']);
     Route::post('/glimpse/ping', [GlimpseController::class, 'ping']);
+    Route::post('/glimpse/offline', [GlimpseController::class, 'goOffline']);
     
     // Schedule Planner routes
     Route::post('/glimpse/schedule', [GlimpseController::class, 'createSchedule']);

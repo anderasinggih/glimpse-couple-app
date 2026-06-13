@@ -13,6 +13,16 @@ class GlimpseController extends Controller
         $user = $request->user();
         \Illuminate\Support\Facades\Log::info("getState: Request received for user {$user->id}");
 
+        $user->last_active_at = now();
+        $user->save();
+        $this->clearGlimpseCache($user->id);
+
+        try {
+            broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed in getState: " . $e->getMessage());
+        }
+
         try {
             $cacheKey = "glimpse_state_user_{$user->id}";
 
@@ -783,6 +793,7 @@ class GlimpseController extends Controller
         $map = json_decode($user->last_seen_room_messages ?: '{}', true) ?: [];
         $map[$roomId ?: 0] = (int)$msg->id;
         $user->last_seen_room_messages = json_encode($map);
+        $user->last_active_at = now();
         $user->save();
         $this->clearGlimpseCache($user->id);
 
@@ -875,6 +886,15 @@ class GlimpseController extends Controller
         }
 
         $user = $request->user();
+        
+        if ($request->has('is_sleeping')) {
+            $isSleeping = filter_var($request->input('is_sleeping'), FILTER_VALIDATE_BOOLEAN);
+            if ($isSleeping) {
+                \Cache::put("user_{$user->id}_is_sleeping", true, 86400);
+            } else {
+                \Cache::forget("user_{$user->id}_is_sleeping");
+            }
+        }
         
         if (array_key_exists('latitude', $data) && $data['latitude'] !== null) $user->latitude = $data['latitude'];
         if (array_key_exists('longitude', $data) && $data['longitude'] !== null) $user->longitude = $data['longitude'];
@@ -975,24 +995,28 @@ class GlimpseController extends Controller
                     
                     // 3. Sleep Detection (ZZZ): 
                     // If at Home, at night (20:00 - 06:00), and stationary for more than 3 hours
-                    if ($hour >= 20 || $hour < 6) {
-                        $homeArrival = \Cache::get("user_{$user->id}_home_arrival_time");
-                        if ($homeArrival === null) {
-                            \Cache::put("user_{$user->id}_home_arrival_time", now()->timestamp, 86400);
-                        } else {
-                            $duration = now()->timestamp - $homeArrival;
-                            if ($duration >= 10800) { // 3 hours
-                                \Cache::put("user_{$user->id}_is_sleeping", true, 86400);
+                    if (!$request->has('is_sleeping')) {
+                        if ($hour >= 20 || $hour < 6) {
+                            $homeArrival = \Cache::get("user_{$user->id}_home_arrival_time");
+                            if ($homeArrival === null) {
+                                \Cache::put("user_{$user->id}_home_arrival_time", now()->timestamp, 86400);
+                            } else {
+                                $duration = now()->timestamp - $homeArrival;
+                                if ($duration >= 10800) { // 3 hours
+                                    \Cache::put("user_{$user->id}_is_sleeping", true, 86400);
+                                }
                             }
+                        } else {
+                            // Reset sleep state during daytime
+                            \Cache::forget("user_{$user->id}_home_arrival_time");
+                            \Cache::forget("user_{$user->id}_is_sleeping");
                         }
-                    } else {
-                        // Reset sleep state during daytime
+                    }
+                } else {
+                    if (!$request->has('is_sleeping')) {
                         \Cache::forget("user_{$user->id}_home_arrival_time");
                         \Cache::forget("user_{$user->id}_is_sleeping");
                     }
-                } else {
-                    \Cache::forget("user_{$user->id}_home_arrival_time");
-                    \Cache::forget("user_{$user->id}_is_sleeping");
                 }
                 
                 // Check Work: 3 consecutive days during 9-17 Mon-Fri
@@ -1303,7 +1327,10 @@ class GlimpseController extends Controller
             return response()->json(['message' => 'No active couple'], 400);
         }
 
-        // Update user's last active timestamp because they are active in the app (removed DB writes for performance)
+        $user->last_active_at = now();
+        $user->save();
+        $this->clearGlimpseCache($user->id);
+
         try {
             broadcast(new \App\Events\PartnerTyping($user->couple_id, $user->id, $request->is_typing, $request->room_id))->toOthers();
         } catch (\Exception $e) {
@@ -1323,6 +1350,23 @@ class GlimpseController extends Controller
             broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed in ping: " . $e->getMessage());
+        }
+
+        return response()->json(['status' => 'ok']);
+    }
+
+    public function goOffline(Request $request)
+    {
+        $user = $request->user();
+        $user->last_active_at = now()->subSeconds(700); // Backdate last_active_at so they appear offline (> 660s threshold)
+        $user->save();
+
+        $this->clearGlimpseCache($user->id);
+
+        try {
+            broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed in goOffline: " . $e->getMessage());
         }
 
         return response()->json(['status' => 'ok']);

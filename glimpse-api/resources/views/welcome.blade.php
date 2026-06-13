@@ -112,17 +112,20 @@
                     </p>
 
                     <div class="flex flex-wrap gap-4 pt-4">
-                        <a href="#docs" class="px-6 py-3.5 rounded-xl border border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/10 text-white font-bold transition-all text-sm flex items-center space-x-2">
-                            <span>Explore API Documentation</span>
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                            </svg>
-                        </a>
                         <a href="/admin" class="px-6 py-3.5 rounded-xl bg-gradient-to-r from-electricPurple to-royalPurple text-white font-bold hover:shadow-[0_0_25px_rgba(191,128,255,0.4)] transition-all text-sm flex items-center space-x-2">
                             <span>Launch Admin Dashboard</span>
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                             </svg>
+                        </a>
+                        <a href="#docs" class="px-6 py-3.5 rounded-xl border border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/10 text-white font-bold transition-all text-sm flex items-center space-x-2">
+                            <span>Explore API Docs</span>
+                        </a>
+                        <a href="/privacy" class="px-5 py-3.5 rounded-xl border border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white transition-all text-sm">
+                            <span>Privacy Policy</span>
+                        </a>
+                        <a href="/terms" class="px-5 py-3.5 rounded-xl border border-white/10 hover:border-white/20 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white transition-all text-sm">
+                            <span>Terms of Service</span>
                         </a>
                     </div>
                 </div>
@@ -782,8 +785,15 @@ public function sendProtobufChat(Request $request) {
         </section>
 
         <!-- Premium Footer -->
-        <footer class="border-t border-white/10 py-8 text-center text-xs text-white/40 mt-auto">
-            &copy; 2026 Glimpse App &bull; Crafted with infinite love by Lovinpeace &bull; Powered by Laravel Octane & SwiftUI
+        <footer class="border-t border-white/10 py-8 text-center text-xs text-white/40 mt-auto space-y-2">
+            <div>
+                &copy; 2026 Glimpse App &bull; Crafted with infinite love by Lovinpeace &bull; Powered by Laravel Octane & SwiftUI
+            </div>
+            <div class="flex justify-center space-x-4">
+                <a href="/privacy" class="hover:text-electricPurple transition-all">Privacy Policy</a>
+                <span>&bull;</span>
+                <a href="/terms" class="hover:text-electricPurple transition-all">Terms of Service</a>
+            </div>
         </footer>
     </div>
 

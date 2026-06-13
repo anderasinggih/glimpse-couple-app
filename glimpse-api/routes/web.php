@@ -172,6 +172,119 @@ Route::get('/privacy', function () {
 ';
 });
 
+Route::get('/terms', function () {
+    return '
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms of Service - Glimpse</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0b071e;
+            color: #ffffff;
+            font-family: "Outfit", sans-serif;
+            margin: 0;
+            padding: 20px 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            width: 96%;
+            max-width: 1400px;
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+            padding: 30px 20px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+        }
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #a855f7 0%, #06b6d4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .subtitle {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+        h2 {
+            font-size: 1.4rem;
+            color: #06b6d4;
+            margin-top: 30px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 8px;
+        }
+        p, li {
+            font-size: 1rem;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.85);
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        .footer {
+            margin-top: 50px;
+            text-align: center;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Glimpse Terms of Service</h1>
+        <p class="subtitle">Effective Date: May 17, 2026</p>
+        
+        <p>Welcome to Glimpse (the "App"). By creating an account or using Glimpse, you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, please do not use the App.</p>
+        
+        <h2>1. Purpose & Core Service</h2>
+        <p>Glimpse is designed as a real-time location-sharing and communication app for couples. Its primary function is to continuously share your live location coordinate details, battery levels, status notes, custom app settings, and active chat indicators with your single connected partner.</p>
+        
+        <h2>2. Consent & Partner Linkage</h2>
+        <p>Location sharing is activated exclusively when you pair with another user using a unique generated connection code. By sharing your invitation code or entering a partner\'s code, you explicitly consent to sharing your continuous background location and real-time updates with that designated partner. You may withdraw your consent and end sharing at any time by requesting to disconnect from your partner inside the Profile settings.</p>
+        
+        <h2>3. Background Location & Battery Use</h2>
+        <p>To ensure location updates work in real-time, the App requests permission to access your location in the background. Continuous use of background location tracking may significantly reduce your device\'s battery life. Glimpse is not responsible for battery drainage, data consumption charges, or network carrier costs associated with background GPS updates.</p>
+        
+        <h2>4. Data Security & Storage</h2>
+        <p>We transmit your coordinates and updates securely over HTTPS to our server at api.galleryfortwo.my.id. Your current location and partner status data are shared strictly with your connected partner and are not sold, distributed, or exposed to third-party advertising companies. We retain status logs, chat messages, and coordinates history solely for presenting you and your partner with timeline features.</p>
+        
+        <h2>5. Account Safety & Prohibited Behavior</h2>
+        <p>You are responsible for keeping your password and account details secure. You agree not to use the App to spy, stalk, or track anyone without their explicit consent. Installing the App on a device owned by someone else without their direct knowledge is strictly prohibited and constitutes a violation of these Terms.</p>
+        
+        <h2>6. Disclaimers & Limitation of Liability</h2>
+        <p>GLIMPSE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND. We do not guarantee that GPS coordinates will always be accurate, that network connectivity to our servers will be uninterrupted, or that push notifications will be delivered instantly. We are not liable for any personal disputes, safety incidents, battery degradation, or loss of privacy resulting from your voluntary setup of partner sharing.</p>
+        
+        <h2>7. Relationship Termination & Data Purge</h2>
+        <p>You can unlink from your partner at any time. Once unlinked, all real-time sharing terminates immediately. If you choose to permanently delete your account, all personal details, location logs, active relation statuses, and chat message history will be purged completely and irreversibly from our database server records.</p>
+        
+        <h2>8. Modifications to Terms</h2>
+        <p>We reserve the right to modify these Terms at any time. Your continued use of the App following any updates constitutes acceptance of the new Terms.</p>
+        
+        <div class="footer">
+            &copy; 2026 Glimpse App. Crafted with infinite love by Lovinpeace.
+        </div>
+    </div>
+</body>
+</html>
+';
+});
+
 Route::get('/debug-storage', function () {
     $avatarsDir = storage_path('app/public/avatars');
     $files = file_exists($avatarsDir) ? scandir($avatarsDir) : [];

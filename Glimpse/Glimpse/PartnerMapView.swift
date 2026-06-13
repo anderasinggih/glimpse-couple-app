@@ -935,7 +935,7 @@ struct PartnerOverlayCard: View {
                         
                         HStack(spacing: 6) {
                             if user.isOffline && user.latest_photo_url == nil {
-                                Text("Offline")
+                                Text(user.location_name == "Logged out" ? "Logged out" : "Offline")
                                     .font(.caption)
                                     .foregroundColor(.white.opacity(0.4))
                                 
@@ -1014,8 +1014,8 @@ struct PartnerOverlayCard: View {
                 }
                 
                 HStack(spacing: 8) {
-                    Image(systemName: "mappin.and.ellipse")
-                        .foregroundColor(.activeCyan)
+                    Image(systemName: user.location_name == "Logged out" ? "door.right.hand.open" : "mappin.and.ellipse")
+                        .foregroundColor(user.location_name == "Logged out" ? .red : .activeCyan)
                         .font(.system(size: 14))
                     
                     Text(displayLocationName)

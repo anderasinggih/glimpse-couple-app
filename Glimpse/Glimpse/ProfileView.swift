@@ -91,15 +91,7 @@ struct ProfileView: View {
                                             .font(.system(size: 22, weight: .bold, design: .rounded))
                                             .foregroundColor(.white)
                                         
-                                        let mySpeed = auth.myAverageSpeedKmH ?? 0.0
-                                        let partnerSpeed = auth.partnerAverageSpeedKmH ?? 0.0
-                                        
-                                        if mySpeed >= 3.0 || partnerSpeed >= 3.0 {
-                                            Text("\(mySpeed >= 3.0 ? "Me: \(Int(mySpeed)) km/h" : "")\(mySpeed >= 3.0 && partnerSpeed >= 3.0 ? "  •  " : "")\(partnerSpeed >= 3.0 ? "\(partner.name): \(Int(partnerSpeed)) km/h" : "")")
-                                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                                .foregroundColor(.activeCyan)
-                                                .padding(.vertical, 2)
-                                        }
+
                                     } else {
                                         Text(user.name)
                                             .font(.system(size: 22, weight: .bold, design: .rounded))

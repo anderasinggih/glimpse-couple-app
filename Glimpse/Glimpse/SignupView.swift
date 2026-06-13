@@ -11,6 +11,7 @@ struct SignupView: View {
     @State private var showDatePicker = false
     @State private var isLoading = false
     @State private var errorMessage = ""
+    @State private var showMockAppleSimulation = false
     
     @FocusState private var focusedField: Field?
     
@@ -198,11 +199,57 @@ struct SignupView: View {
                 .padding(.horizontal)
                 .padding(.top, 8)
                 
+                // Divider "or"
+                HStack {
+                    VStack { Divider().background(Color.white.opacity(0.15)) }
+                    Text("or")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.4))
+                        .padding(.horizontal, 8)
+                    VStack { Divider().background(Color.white.opacity(0.15)) }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 4)
+                
+                // Sign in with Apple button
+                Button {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    showMockAppleSimulation = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "apple.logo")
+                            .font(.system(size: 18))
+                        Text("Sign in with Apple")
+                            .fontWeight(.bold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.white)
+                    .foregroundColor(.black)
+                    .cornerRadius(12)
+                }
+                .padding(.horizontal)
+                
                 Spacer()
             }
             .padding(.top, 40)
         }
         .navigationBarBackButtonHidden(true)
+        .confirmationDialog("Simulate Apple Sign-In", isPresented: $showMockAppleSimulation, titleVisibility: .visible) {
+            Button("Sign In as Bob (Mock Apple)") {
+                Task {
+                    await simulateAppleLogin(id: "apple_mock_bob", email: "bob.apple@glimpse.test", name: "Bob Apple")
+                }
+            }
+            Button("Sign In as Alice (Mock Apple)") {
+                Task {
+                    await simulateAppleLogin(id: "apple_mock_alice", email: "alice.apple@glimpse.test", name: "Alice Apple")
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Since this app is in local development without a Paid Apple Developer Account, you can simulate Apple Sign-In with these test profiles.")
+        }
         .sheet(isPresented: $showDatePicker) {
             ZStack {
                 Color.adaptiveBackground.ignoresSafeArea()
@@ -287,6 +334,22 @@ struct SignupView: View {
                 bornDate: dateStr,
                 gender: gender,
                 password: password
+            )
+        } catch {
+            withAnimation { errorMessage = error.localizedDescription }
+        }
+        isLoading = false
+    }
+    
+    private func simulateAppleLogin(id: String, email: String, name: String) async {
+        isLoading = true
+        errorMessage = ""
+        do {
+            try await AuthManager.shared.loginWithApple(
+                appleUserId: id,
+                email: email,
+                name: name,
+                identityToken: "mock_identity_token_\(id)"
             )
         } catch {
             withAnimation { errorMessage = error.localizedDescription }

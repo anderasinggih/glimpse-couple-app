@@ -270,6 +270,7 @@ struct GlimpsePartnerStateUpdate {
     var gpsTimestamp: TimeInterval?
     var lastSeenMessageId: Int?
     var lastActiveAt: String?
+    var isSleeping: Bool?
     
     static func decodeProtobuf(from base64String: String) -> GlimpsePartnerStateUpdate? {
         guard let data = Data(base64Encoded: base64String) else { return nil }
@@ -282,9 +283,10 @@ struct GlimpsePartnerStateUpdate {
         var statusNote: String? = nil
         var locationName: String? = nil
         var wifiBssid: String?
-    var gpsTimestamp: TimeInterval? = nil
+        var gpsTimestamp: TimeInterval? = nil
         var lastSeenMessageId: Int? = nil
         var lastActiveAt: String? = nil
+        var isSleeping: Bool? = nil
         
         while reader.hasMoreBytes {
             let tag = reader.readVarint()
@@ -314,6 +316,8 @@ struct GlimpsePartnerStateUpdate {
                 lastSeenMessageId = Int(reader.readVarint())
             case 10:
                 lastActiveAt = reader.readString()
+            case 11:
+                isSleeping = reader.readVarint() == 1
             default:
                 reader.skipField(wireType: wireType)
             }
@@ -328,7 +332,8 @@ struct GlimpsePartnerStateUpdate {
             locationName: locationName,
             wifiBssid: wifiBssid,
             lastSeenMessageId: lastSeenMessageId,
-            lastActiveAt: lastActiveAt
+            lastActiveAt: lastActiveAt,
+            isSleeping: isSleeping
         )
     }
 }

@@ -198,10 +198,10 @@ struct ChatDateFormatter {
 
 // Formatter to hide raw payload data in reply previews
 func formatReplyPreview(text: String) -> String {
-    if text.starts(with: "[FLASH_ATTACHMENT]") {
+    if text.contains("[FLASH_ATTACHMENT]") {
         return "📸 Sent a Flash Photo"
     }
-    if text.starts(with: "[VOICE_MESSAGE]") || text.starts(with: "[VOICE_NOTE]") {
+    if text.contains("[VOICE_MESSAGE]") || text.contains("[VOICE_NOTE]") {
         return "🎤 Voice Note"
     }
     return text

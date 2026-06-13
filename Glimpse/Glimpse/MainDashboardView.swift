@@ -135,7 +135,7 @@ struct MainDashboardView: View {
                 // Tab 0: Dashboard
                 dashboardView
                     .tabItem {
-                        Label("Home", systemImage: "house")
+                        Image(systemName: "house.fill")
                     }
                     .tag(0)
                 
@@ -145,7 +145,7 @@ struct MainDashboardView: View {
                         FullPartnerMapView(user: partner)
                     } else {
                         VStack(spacing: 15) {
-                            Image(systemName: "map")
+                            Image(systemName: "map.fill")
                                 .font(.system(size: 50))
                                 .foregroundColor(.white.opacity(0.3))
                             Text("Map is currently empty")
@@ -157,21 +157,21 @@ struct MainDashboardView: View {
                     }
                 }
                 .tabItem {
-                    Label("Map", systemImage: "map")
+                    Image(systemName: "map.fill")
                 }
                 .tag(1)
                 
                 // Tab 2: Flash
                 FlashCameraView()
                     .tabItem {
-                        Label("Flash", systemImage: "camera")
+                        Image(systemName: "camera.fill")
                     }
                     .tag(2)
                 
                 // Tab 3: Chat
                 ChatView()
                     .tabItem {
-                        Label("Chat", systemImage: "bubble.left.and.bubble.right")
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
                     }
                     .badge(auth.unreadMessagesCount > 0 ? Text("\(auth.unreadMessagesCount)") : nil)
                     .tag(3)
@@ -179,7 +179,7 @@ struct MainDashboardView: View {
                 // Tab 4: Profile
                 ProfileView(scrollOffset: $profileScrollOffset)
                     .tabItem {
-                        Label("Profile", systemImage: "person")
+                        Image(systemName: "person.fill")
                     }
                     .tag(4)
             }

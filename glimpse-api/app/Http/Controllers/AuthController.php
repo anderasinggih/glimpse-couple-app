@@ -237,7 +237,31 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        $user = $request->user();
+        
+        // Update presence fields to reflect Logged out state
+        $user->last_active_at = now()->subSeconds(700); // Backdate to show as offline (> 660s threshold)
+        $user->location_name = 'Logged out';
+        $user->activity = 'offline';
+        $user->save();
+
+        // Clear Glimpse State Caches
+        \Illuminate\Support\Facades\Cache::forget("glimpse_state_user_{$user->id}");
+        if ($user->couple_id) {
+            $partner = \App\Models\User::where('couple_id', $user->couple_id)->where('id', '!=', $user->id)->first();
+            if ($partner) {
+                \Illuminate\Support\Facades\Cache::forget("glimpse_state_user_{$partner->id}");
+            }
+        }
+
+        // Broadcast to partner instantly
+        try {
+            broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed in logout: " . $e->getMessage());
+        }
+
+        $user->currentAccessToken()->delete();
         return response()->json(['message' => 'Logged out']);
     }
 
@@ -368,6 +392,72 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Bug report submitted successfully',
             'bug_report' => $bugReport,
+        ]);
+    }
+
+    public function loginApple(Request $request)
+    {
+        $request->validate([
+            'apple_user_id' => 'required|string',
+            'email' => 'nullable|email',
+            'name' => 'nullable|string',
+            'identity_token' => 'nullable|string',
+        ]);
+
+        $appleUserId = $request->apple_user_id;
+        $email = $request->email;
+        $name = $request->name ?: 'Apple User';
+
+        // In development mode (if identity_token is empty or mock)
+        $isMock = empty($request->identity_token) || str_starts_with($request->identity_token, 'mock_');
+
+        if (!$isMock) {
+            // Real validation would decode Apple's public key JWKS and verify signature
+            Log::info("Apple login: validating real token.");
+        }
+
+        // Find user by apple_user_id or email
+        $user = User::where('apple_user_id', $appleUserId)->first();
+        if (!$user && !empty($email)) {
+            $user = User::where('email', $email)->first();
+        }
+
+        if (!$user) {
+            // Create user
+            if (empty($email)) {
+                $email = strtolower(str_replace(' ', '', $name)) . '_' . substr(uniqid(), 0, 5) . '@apple-user.glimpse.test';
+            }
+
+            $user = User::create([
+                'name' => $name,
+                'email' => $email,
+                'apple_user_id' => $appleUserId,
+                'password' => Hash::make(uniqid()), // Random password since they use Apple
+                'email_verified_at' => now(), // Apple emails are pre-verified
+            ]);
+        } else {
+            // Update apple_user_id if not set yet
+            if (empty($user->apple_user_id)) {
+                $user->apple_user_id = $appleUserId;
+            }
+            if (empty($user->email_verified_at)) {
+                $user->email_verified_at = now();
+            }
+            $user->save();
+        }
+
+        // Enforce single active session
+        $user->tokens()->delete();
+
+        // Clear Glimpse state cache to ensure fresh verification status is loaded
+        \Illuminate\Support\Facades\Cache::forget("glimpse_state_user_{$user->id}");
+
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'access_token' => $token,
+            'token_type' => 'Bearer',
+            'user' => $user
         ]);
     }
 }

@@ -7,6 +7,7 @@ import Combine
 import ImageIO
 import UniformTypeIdentifiers
 import SQLite3
+import CoreLocation
 
 enum ActivityMode: String, Codable {
     case unknown, walking, cycling, car
@@ -18,6 +19,8 @@ class AuthManager {
     
     var isAuthenticated = false
     var isInitialStateLoaded = false
+    var isChatSelectMode = false
+    var showArchivedOnly = false
     var currentUser: GlimpseUser?
     var partner: GlimpseUser?
     var partnerSpeedKmH: Double? = nil
@@ -361,6 +364,14 @@ class AuthManager {
         NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
             guard let self = self else { return }
             print("📱 App entered background. Disconnecting WebSockets gracefully...")
+            self.goOffline()
+            self.disconnectWebSocket()
+        }
+        
+        NotificationCenter.default.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self else { return }
+            print("📱 App will terminate. Going offline...")
+            self.goOffline()
             self.disconnectWebSocket()
         }
         
@@ -608,6 +619,30 @@ class AuthManager {
         try await fetchState()
     }
     
+    func goOffline() {
+        guard isAuthenticated else { return }
+        let backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "GoOfflineTask") {
+            // End background task if time runs out
+        }
+        
+        Task {
+            defer {
+                UIApplication.shared.endBackgroundTask(backgroundTaskID)
+            }
+            
+            guard let url = URL(string: "\(baseURL)/glimpse/offline") else { return }
+            guard let token = userToken else { return }
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.addValue("application/json", forHTTPHeaderField: "Accept")
+            
+            _ = try? await URLSession.shared.data(for: request)
+            print("📤 Sent offline status to server.")
+        }
+    }
+    
     func pushCurrentStatus() {
         guard isAuthenticated else { return }
         
@@ -641,7 +676,7 @@ class AuthManager {
         }
     }
     
-    func pushLocationAndStatus(latitude: Double?, longitude: Double?, locationName: String?, gpsTimestamp: TimeInterval? = nil) {
+    func pushLocationAndStatus(latitude: Double?, longitude: Double?, locationName: String?, gpsTimestamp: TimeInterval? = nil, isSleeping: Bool? = nil) {
         guard isAuthenticated else { return }
         
         UIDevice.current.isBatteryMonitoringEnabled = true
@@ -659,11 +694,18 @@ class AuthManager {
                 }
                 self.currentUser?.battery_level = batteryLevel
                 self.currentUser?.is_charging = isCharging
+                if let sleep = isSleeping {
+                    self.currentUser?.is_sleeping = sleep
+                }
             }
         }
         
         Task {
-            guard let url = URL(string: "\(baseURL)/glimpse/status") else { return }
+            var urlString = "\(baseURL)/glimpse/status"
+            if let sleeping = isSleeping {
+                urlString += "?is_sleeping=\(sleeping ? 1 : 0)"
+            }
+            guard let url = URL(string: urlString) else { return }
             guard let token = userToken else { return }
             
             let status = GlimpseUserStatus(
@@ -685,7 +727,30 @@ class AuthManager {
             request.addValue("application/json", forHTTPHeaderField: "Accept")
             request.httpBody = protoData
             
-            _ = try? await URLSession.shared.data(for: request)
+            var success = false
+            var attempts = 0
+            let maxAttempts = 3
+            
+            while !success && attempts < maxAttempts {
+                attempts += 1
+                do {
+                    let (_, response) = try await URLSession.shared.data(for: request)
+                    if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
+                        success = true
+                    } else {
+                        let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                        print("⚠️ pushLocationAndStatus attempt \(attempts) failed with status code: \(code)")
+                    }
+                } catch {
+                    print("⚠️ pushLocationAndStatus attempt \(attempts) encountered error: \(error)")
+                }
+                
+                if !success && attempts < maxAttempts {
+                    // Delay before retry: 3.0s for 2nd attempt, 5.0s for 3rd attempt
+                    let delaySeconds = attempts == 1 ? 3.0 : 5.0
+                    try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+                }
+            }
         }
     }
     
@@ -1409,6 +1474,57 @@ class AuthManager {
         }
     }
     
+    func loginWithApple(appleUserId: String, email: String?, name: String?, identityToken: String?) async throws {
+        guard let url = URL(string: "\(baseURL)/login/apple") else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        var body: [String: Any] = ["apple_user_id": appleUserId]
+        if let email = email { body["email"] = email }
+        if let name = name { body["name"] = name }
+        if let identityToken = identityToken { body["identity_token"] = identityToken }
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let errorMsg: String
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = json["message"] as? String {
+                errorMsg = message
+            } else {
+                errorMsg = "Apple Sign-In failed"
+            }
+            throw NSError(domain: "Auth", code: 401, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+        }
+        
+        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let token = json["access_token"] as? String {
+            UserDefaults.standard.set(token, forKey: "auth_token")
+            UserDefaults(suiteName: "group.glimpse.app")?.set(token, forKey: "auth_token")
+            
+            if let userDict = json["user"] as? [String: Any],
+               let userData = try? JSONSerialization.data(withJSONObject: userDict),
+               let user = try? JSONDecoder().decode(GlimpseUser.self, from: userData) {
+                await MainActor.run {
+                    self.currentUser = user
+                }
+            }
+            
+            withAnimation {
+                self.isAuthenticated = true
+            }
+            Task {
+                try? await self.fetchState()
+                self.connectWebSocket()
+            }
+        }
+    }
+    
     func register(name: String, email: String, bornDate: String?, gender: String?, password: String) async throws {
         guard let url = URL(string: "\(baseURL)/register") else { return }
         
@@ -1938,6 +2054,26 @@ class AuthManager {
     }
     
     private func uploadPhotoInternal(_ photoData: Data, latitude: Double? = nil, longitude: Double? = nil, battery: Int? = nil, note: String? = nil, locationName: String? = nil) async throws {
+        // Resolve location name via reverse geocoding if coordinates are present and name is missing
+        var resolvedLoc = locationName ?? ""
+        if resolvedLoc.isEmpty, let lat = latitude, lat != 0.0, let lon = longitude, lon != 0.0 {
+            let clLoc = CLLocation(latitude: lat, longitude: lon)
+            let geocoder = CLGeocoder()
+            if let placemarks = try? await geocoder.reverseGeocodeLocation(clLoc),
+               let placemark = placemarks.first {
+                let street = placemark.thoroughfare ?? ""
+                let kelurahan = placemark.subLocality ?? ""
+                let kecamatan = placemark.subAdministrativeArea ?? ""
+                
+                var addressParts: [String] = []
+                if !street.isEmpty { addressParts.append(street) }
+                if !kelurahan.isEmpty { addressParts.append(kelurahan) }
+                if !kecamatan.isEmpty { addressParts.append(kecamatan) }
+                
+                resolvedLoc = addressParts.isEmpty ? (placemark.locality ?? "") : addressParts.joined(separator: ", ")
+            }
+        }
+
         // 1. Request Background Task Assertion from iOS to protect upload from screen lock / app minimizes!
         var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
         backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "UploadFlash") {
@@ -2012,10 +2148,10 @@ class AuthManager {
             body.append("\(status)\r\n".data(using: .utf8)!)
         }
         
-        if let loc = locationName {
+        if !resolvedLoc.isEmpty {
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
             body.append("Content-Disposition: form-data; name=\"location_name\"\r\n\r\n".data(using: .utf8)!)
-            body.append("\(loc)\r\n".data(using: .utf8)!)
+            body.append("\(resolvedLoc)\r\n".data(using: .utf8)!)
         }
         
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
@@ -2045,8 +2181,8 @@ class AuthManager {
             photoUrl = pUrl
         }
         
-        let caption = note ?? ""
-        let location = locationName ?? ""
+        let caption = (note ?? "").replacingOccurrences(of: "|", with: " ")
+        let location = resolvedLoc.replacingOccurrences(of: "|", with: " ")
         let messageText = "📷 Sent a Flash! [FLASH_ATTACHMENT]|\(photoUrl)|\(caption)|\(location)"
         
         // Fire off companion requests asynchronously in parallel without blocking the main upload completion
