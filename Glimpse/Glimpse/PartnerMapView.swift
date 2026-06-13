@@ -105,14 +105,35 @@ struct PartnerMapView: View {
                     if !displayFlashes.isEmpty {
                         TabView(selection: $selectedFlashIndex) {
                             ForEach(Array(displayFlashes.enumerated()), id: \.element.id) { index, flash in
-                                CachedImageView(urlString: formatImageUrlString(flash.photo_url))
-                                    .tag(index)
-                                    .onTapGesture {
-                                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                        withAnimation(.easeInOut(duration: 0.5)) {
-                                            isShowingPhoto.toggle()
-                                        }
+                                ZStack {
+                                    CachedImageView(urlString: formatImageUrlString(flash.photo_url))
+                                    
+                                    PartnerOverlayCard(
+                                        user: {
+                                            var tempUser = user
+                                            tempUser.latest_photo_url = flash.photo_url
+                                            tempUser.latest_photo_latitude = flash.latitude
+                                            tempUser.latest_photo_longitude = flash.longitude
+                                            tempUser.latest_photo_location_name = flash.location_name
+                                            tempUser.latest_photo_status_note = flash.status_note
+                                            tempUser.latest_photo_battery_level = flash.battery_level
+                                            tempUser.latest_photo_created_at = flash.created_at
+                                            return tempUser
+                                        }(),
+                                        locationOverride: localAddress,
+                                        isMinimal: true
+                                    )
+                                    .padding(12)
+                                    .frame(maxHeight: .infinity, alignment: .bottom)
+                                    .allowsHitTesting(false)
+                                }
+                                .tag(index)
+                                .onTapGesture {
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    withAnimation(.easeInOut(duration: 0.5)) {
+                                        isShowingPhoto.toggle()
                                     }
+                                }
                             }
                         }
                         .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
@@ -148,13 +169,6 @@ struct PartnerMapView: View {
                                 }
                             }
                     }
-                    
-                    // Minimal mode card overlay fades inside the Photo container
-                    PartnerOverlayCard(user: selectedUser, locationOverride: localAddress, isMinimal: true)
-                        .padding(12)
-                        .frame(maxHeight: .infinity, alignment: .bottom)
-                        // Ignore gestures on overlay card to allow swipe gestures underneath
-                        .allowsHitTesting(false)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .transition(.opacity)
