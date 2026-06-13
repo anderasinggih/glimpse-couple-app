@@ -9,6 +9,8 @@ struct PartnerMapView: View {
     @State private var isShowingPhoto = true
     @State private var localAddress: String? = nil
     @State private var auth = AuthManager.shared
+    @State private var lastGeocodedCoordinate: CLLocationCoordinate2D? = nil
+    @State private var lastGeocodeDate: Date? = nil
 
     @State private var wavePhase = 0.0
     
@@ -476,8 +478,32 @@ struct PartnerMapView: View {
             return
         }
         
+        let coord = targetCoordinate
+        guard coord.latitude != 0.0, coord.longitude != 0.0 else { return }
+        
+        let isMoving = (auth.partnerAverageSpeedKmH ?? 0.0) > 3.0
+        
+        if let lastCoord = lastGeocodedCoordinate, let lastDate = lastGeocodeDate {
+            let lastLoc = CLLocation(latitude: lastCoord.latitude, longitude: lastCoord.longitude)
+            let currentLoc = CLLocation(latitude: coord.latitude, longitude: coord.longitude)
+            let distance = currentLoc.distance(from: lastLoc)
+            let timeElapsed = Date().timeIntervalSince(lastDate)
+            
+            if isMoving {
+                if distance < 150.0 || timeElapsed < 15.0 {
+                    return
+                }
+            } else {
+                if distance < 15.0 {
+                    return
+                }
+            }
+        }
+        
+        self.lastGeocodedCoordinate = coord
+        self.lastGeocodeDate = Date()
+        
         Task {
-            let coord = targetCoordinate
             let location = CLLocation(latitude: coord.latitude, longitude: coord.longitude)
             let geocoder = CLGeocoder()
             if let placemarks = try? await geocoder.reverseGeocodeLocation(location),
