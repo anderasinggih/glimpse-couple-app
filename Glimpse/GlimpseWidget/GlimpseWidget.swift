@@ -50,7 +50,7 @@ struct GlimpseWidgetProvider: TimelineProvider {
             if finalImage == nil {
                 if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
                     let fileURL = groupURL.appendingPathComponent("widget_photo.jpg")
-                    if let data = try? Data(contentsOf: fileURL), let cachedImage = data.downsampledForWidget() {
+                    if let cachedImage = UIImage(contentsOfFile: fileURL.path) {
                         finalImage = cachedImage
                     }
                 }
@@ -120,14 +120,16 @@ struct GlimpseWidgetProvider: TimelineProvider {
             
             var loadedImage: UIImage? = nil
             if let photoURL = URL(string: photoURLString),
-               let (imageData, _) = try? await URLSession.shared.data(from: photoURL) {
+               let (imageData, response) = try? await URLSession.shared.data(from: photoURL),
+               let httpResponse = response as? HTTPURLResponse,
+               httpResponse.statusCode == 200 {
                 loadedImage = imageData.downsampledForWidget()
                 
-                // Persist the downsampled compressed image to App Group container for Widget filesystem access
-                if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+                // Only overwrite widget_photo.jpg if downsampling is successful to prevent cache corruption
+                if let downsampledImage = loadedImage,
+                   let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
                     let fileURL = groupURL.appendingPathComponent("widget_photo.jpg")
-                    if let downsampledImage = loadedImage,
-                       let compressedData = downsampledImage.jpegData(compressionQuality: 0.6) {
+                    if let compressedData = downsampledImage.jpegData(compressionQuality: 0.6) {
                         try? compressedData.write(to: fileURL, options: .atomic)
                     } else {
                         try? imageData.write(to: fileURL, options: .atomic)
