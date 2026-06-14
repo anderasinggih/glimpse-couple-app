@@ -274,7 +274,7 @@ struct ProfileView: View {
                                                         .onTapGesture {
                                                             selectedPreviewFlashId = flash.id
                                                         }
-                                                        .onLongPressGesture(minimumDuration: 0.25) {
+                                                        .onLongPressGesture(minimumDuration: 0.15) {
                                                             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                                                             withAnimation {
                                                                 isSelectMode = true
@@ -792,19 +792,43 @@ struct ProfileView: View {
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundColor(.white.opacity(0.8))
                 
-                VStack(spacing: 10) {
+                VStack(spacing: 12) {
                     let (myCount, partnerCount) = getInteractionStats()
                     let total = Double(myCount + partnerCount)
+                    let myPercentVal = total > 0 ? Int(round((Double(myCount) / total) * 100)) : 50
+                    let partnerPercentVal = 100 - myPercentVal
                     let myPercent = total > 0 ? (Double(myCount) / total) : 0.5
                     
                     HStack {
-                        Text("You (\(myCount))")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.activeCyan)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("You")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.5))
+                            HStack(spacing: 4) {
+                                Text("\(myPercentVal)%")
+                                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                                    .foregroundColor(.activeCyan)
+                                Text("(\(myCount) flashes)")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white.opacity(0.3))
+                            }
+                        }
+                        
                         Spacer()
-                        Text("\(auth.partner?.name ?? "Partner") (\(partnerCount))")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.electricPurple)
+                        
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(auth.partner?.name ?? "Partner")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.5))
+                            HStack(spacing: 4) {
+                                Text("(\(partnerCount) flashes)")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white.opacity(0.3))
+                                Text("\(partnerPercentVal)%")
+                                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                                    .foregroundColor(.electricPurple)
+                            }
+                        }
                     }
                     
                     GeometryReader { barGeo in
@@ -854,11 +878,11 @@ struct ProfileView: View {
                                 HStack(alignment: .center, spacing: 14) {
                                     CachedImageView(urlString: formattedUrl(flash.photo_url))
                                         .aspectRatio(contentMode: .fill)
-                                        .frame(width: 60, height: 60)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.1), lineWidth: 0.8))
+                                        .frame(width: 80, height: 80)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.12), lineWidth: 1))
                                     
-                                    VStack(alignment: .leading, spacing: 5) {
+                                    VStack(alignment: .leading, spacing: 6) {
                                         HStack {
                                             Text(flash.sender_name)
                                                 .font(.system(size: 13, weight: .bold))
@@ -875,25 +899,22 @@ struct ProfileView: View {
                                             Text("\"\(note)\"")
                                                 .font(.system(size: 13, design: .rounded))
                                                 .foregroundColor(.white.opacity(0.85))
-                                                .lineLimit(2)
+                                                .lineLimit(3)
                                                 .italic()
                                                 .multilineTextAlignment(.leading)
                                         }
                                     }
                                 }
-                                .padding(.vertical, 12)
-                                .padding(.horizontal, 16)
+                                .padding(.vertical, 14)
                             }
                             .buttonStyle(PlainButtonStyle())
                             
                             if index < min(10, journalFlashes.count) - 1 {
                                 Divider()
-                                    .background(Color.white.opacity(0.06))
-                                    .padding(.horizontal, 16)
+                                    .background(Color.white.opacity(0.08))
                             }
                         }
                     }
-                    .glassmorphic()
                 }
             }
             .padding(.horizontal)
