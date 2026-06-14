@@ -1406,6 +1406,7 @@ struct ChatView: View {
     
     private func roomRow(_ room: GlimpseChatRoom) -> some View {
         let _ = relativeTimeRefreshTrigger
+        let latestMessage = auth.getLatestMessagePreview(for: room)
         return VStack(spacing: 0) {
             HStack(spacing: 14) {
                 // Room Icon Container
@@ -1424,7 +1425,6 @@ struct ChatView: View {
                 )
                 
                 VStack(alignment: .leading, spacing: 5) {
-                    let latestMessage = auth.getLatestMessagePreview(for: room)
                     HStack {
                         Text(room.name)
                             .font(.system(size: 16, weight: room.unread_count > 0 ? .bold : .semibold))
