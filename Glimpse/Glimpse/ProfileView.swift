@@ -23,6 +23,7 @@ struct ProfileView: View {
     @State private var isSelectMode = false
     @State private var selectedFlashIds: Set<Int> = []
     @State private var isShowingMassDeleteAlert = false
+    @State private var selectedPreviewFlashId: Int? = nil
     
     var body: some View {
         NavigationStack {
@@ -33,6 +34,22 @@ struct ProfileView: View {
                     iOS26Background().opacity(0.4)
                 }
                 .ignoresSafeArea()
+                
+                // Hidden NavigationLink for details preview
+                NavigationLink(
+                    destination: Group {
+                        if let flashId = selectedPreviewFlashId {
+                            FlashGalleryView(auth: auth, initialFlashId: flashId)
+                        }
+                    },
+                    isActive: Binding(
+                        get: { selectedPreviewFlashId != nil },
+                        set: { if !$0 { selectedPreviewFlashId = nil } }
+                    )
+                ) {
+                    EmptyView()
+                }
+                .hidden()
                 
                 // LAYER 2: Scroll Content
                 ScrollViewReader { proxy in
@@ -252,19 +269,18 @@ struct ProfileView: View {
                                                             }
                                                         }
                                                 } else {
-                                                    NavigationLink(destination: FlashGalleryView(auth: auth, initialFlashId: flash.id)) {
-                                                        FlashGridItemView(flash: flash)
-                                                    }
-                                                    .simultaneousGesture(
-                                                        LongPressGesture(minimumDuration: 0.5)
-                                                            .onEnded { _ in
-                                                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                                                withAnimation {
-                                                                    isSelectMode = true
-                                                                    selectedFlashIds.insert(flash.id)
-                                                                }
+                                                    FlashGridItemView(flash: flash)
+                                                        .contentShape(Rectangle())
+                                                        .onTapGesture {
+                                                            selectedPreviewFlashId = flash.id
+                                                        }
+                                                        .onLongPressGesture(minimumDuration: 0.25) {
+                                                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                                            withAnimation {
+                                                                isSelectMode = true
+                                                                selectedFlashIds.insert(flash.id)
                                                             }
-                                                    )
+                                                        }
                                                 }
                                             }
                                         }
@@ -325,20 +341,19 @@ struct ProfileView: View {
                     VStack {
                         Spacer()
                         
-                        HStack(spacing: 20) {
+                        HStack(spacing: 24) {
                             Button {
                                 withAnimation {
                                     isSelectMode = false
                                     selectedFlashIds.removeAll()
                                 }
                             } label: {
-                                Text("Cancel")
-                                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white.opacity(0.6))
-                                    .padding(.horizontal, 24)
-                                    .padding(.vertical, 12)
-                                    .background(Color.white.opacity(0.1))
-                                    .cornerRadius(14)
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .frame(width: 38, height: 38)
+                                    .background(Color.white.opacity(0.12))
+                                    .clipShape(Circle())
                             }
                             
                             Button {
@@ -346,29 +361,37 @@ struct ProfileView: View {
                                     isShowingMassDeleteAlert = true
                                 }
                             } label: {
-                                HStack(spacing: 6) {
+                                ZStack(alignment: .topTrailing) {
                                     Image(systemName: "trash.fill")
-                                    Text("Delete (\(selectedFlashIds.count))")
+                                        .font(.system(size: 15))
+                                        .foregroundColor(.white)
+                                        .frame(width: 38, height: 38)
+                                        .background(selectedFlashIds.isEmpty ? Color.red.opacity(0.35) : Color.red)
+                                        .clipShape(Circle())
+                                    
+                                    if !selectedFlashIds.isEmpty {
+                                        Text("\(selectedFlashIds.count)")
+                                            .font(.system(size: 9, weight: .bold))
+                                            .foregroundColor(.white)
+                                            .frame(width: 16, height: 16)
+                                            .background(Color.activeCyan)
+                                            .clipShape(Circle())
+                                            .offset(x: 4, y: -4)
+                                    }
                                 }
-                                .font(.system(size: 14, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 24)
-                                .padding(.vertical, 12)
-                                .background(selectedFlashIds.isEmpty ? Color.red.opacity(0.4) : Color.red)
-                                .cornerRadius(14)
-                                .shadow(color: selectedFlashIds.isEmpty ? .clear : .red.opacity(0.3), radius: 8)
                             }
                             .disabled(selectedFlashIds.isEmpty)
                         }
-                        .padding(16)
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(24)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16)
+                        .background(Color.black.opacity(0.75))
+                        .clipShape(Capsule())
                         .overlay(
-                            RoundedRectangle(cornerRadius: 24)
-                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                            Capsule()
+                                .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
                         )
-                        .shadow(color: Color.black.opacity(0.35), radius: 15, y: 10)
-                        .padding(.bottom, 30)
+                        .shadow(color: Color.black.opacity(0.4), radius: 10, y: 5)
+                        .padding(.bottom, 24)
                     }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(20)
@@ -823,19 +846,19 @@ struct ProfileView: View {
                     .padding(.vertical, 30)
                     .glassmorphic()
                 } else {
-                    VStack(spacing: 10) {
-                        ForEach(journalFlashes.prefix(10)) { flash in
+                    VStack(spacing: 0) {
+                        ForEach(Array(journalFlashes.prefix(10).enumerated()), id: \.element.id) { index, flash in
                             Button {
                                 selectedJournalEntry = flash
                             } label: {
-                                HStack(alignment: .center, spacing: 12) {
+                                HStack(alignment: .center, spacing: 14) {
                                     CachedImageView(urlString: formattedUrl(flash.photo_url))
                                         .aspectRatio(contentMode: .fill)
-                                        .frame(width: 48, height: 48)
-                                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.08), lineWidth: 0.8))
+                                        .frame(width: 60, height: 60)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.1), lineWidth: 0.8))
                                     
-                                    VStack(alignment: .leading, spacing: 4) {
+                                    VStack(alignment: .leading, spacing: 5) {
                                         HStack {
                                             Text(flash.sender_name)
                                                 .font(.system(size: 13, weight: .bold))
@@ -852,23 +875,25 @@ struct ProfileView: View {
                                             Text("\"\(note)\"")
                                                 .font(.system(size: 13, design: .rounded))
                                                 .foregroundColor(.white.opacity(0.85))
-                                                .lineLimit(1)
+                                                .lineLimit(2)
                                                 .italic()
                                                 .multilineTextAlignment(.leading)
                                         }
                                     }
                                 }
-                                .padding(12)
-                                .background(Color.white.opacity(0.04))
-                                .cornerRadius(10)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(Color.white.opacity(0.06), lineWidth: 0.8)
-                                )
+                                .padding(.vertical, 12)
+                                .padding(.horizontal, 16)
                             }
                             .buttonStyle(PlainButtonStyle())
+                            
+                            if index < min(10, journalFlashes.count) - 1 {
+                                Divider()
+                                    .background(Color.white.opacity(0.06))
+                                    .padding(.horizontal, 16)
+                            }
                         }
                     }
+                    .glassmorphic()
                 }
             }
             .padding(.horizontal)
