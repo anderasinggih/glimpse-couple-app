@@ -56,6 +56,7 @@ class AuthManager {
                 effectiveSpeed = 0.0
             } else {
                 effectiveSpeed = nil
+                partnerSpeedHistory.removeAll()
             }
         } else {
             partnerZeroSpeedStart = nil
@@ -131,6 +132,7 @@ class AuthManager {
                 effectiveSpeed = 0.0
             } else {
                 effectiveSpeed = nil
+                mySpeedHistory.removeAll()
             }
         } else {
             myZeroSpeedStart = nil
@@ -192,11 +194,13 @@ class AuthManager {
     }
     
     var partnerAverageSpeedKmH: Double? {
+        guard partnerSpeedKmH != nil else { return nil }
         guard !partnerSpeedHistory.isEmpty else { return partnerSpeedKmH }
         return partnerSpeedHistory.reduce(0.0, +) / Double(partnerSpeedHistory.count)
     }
     
     var myAverageSpeedKmH: Double? {
+        guard mySpeedKmH != nil else { return nil }
         guard !mySpeedHistory.isEmpty else { return mySpeedKmH }
         return mySpeedHistory.reduce(0.0, +) / Double(mySpeedHistory.count)
     }

@@ -417,6 +417,15 @@ struct PartnerMapView: View {
                 let targetLoc = CLLocation(latitude: target.latitude, longitude: target.longitude)
                 let distance = targetLoc.distance(from: startLoc)
                 
+                if distance > 500.0 {
+                    await MainActor.run {
+                        animatedPartnerLatitude = target.latitude
+                        animatedPartnerLongitude = target.longitude
+                        auth.updatePartnerSpeed(nil)
+                    }
+                    continue
+                }
+                
                 // Segments will take 1.2s if we have a backlog of coordinates, and 2.5s (3-second buffer lag) under normal flow
                 let duration: TimeInterval = partnerCoordinateQueue.count > 1 ? 1.2 : 2.5
                 
