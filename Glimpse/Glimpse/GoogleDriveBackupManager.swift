@@ -1047,10 +1047,7 @@ class GoogleDriveBackupManager {
                 continue
             }
             
-            // Skip binary downloads here since we have Lazy Restore.
-            // CachedImageView will download them on-demand when they are scrolled into view.
-            skipCount += 1
-            continue
+            // Download image from Drive to ensure it is restored locally, as the server copy is ephemeral and deleted after ACK.
             
             // Download image from Drive
             guard let downloadURL = URL(string: "https://www.googleapis.com/drive/v3/files/\(fileId)?alt=media") else { continue }
