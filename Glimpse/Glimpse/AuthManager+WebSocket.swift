@@ -175,6 +175,7 @@ extension AuthManager {
         case loveBurstSent(timestamp: Double, senderId: Int, reaction: String?)
         case loveBumpSent(timestamp: Double, senderId: Int, totalMeetings: Int)
         case partnerTyping(userId: Int, isTyping: Bool, roomId: Int?)
+        case flashDeleted(Int) // flashId
         case unknown
     }
     
@@ -330,6 +331,17 @@ extension AuthManager {
                         return .partnerTyping(userId: state.userId, isTyping: state.isTyping, roomId: state.roomId)
                     }
                 }
+
+            case "App\\Events\\FlashDeleted":
+                if let eventDataString = pusherEvent.data,
+                   let eventData = eventDataString.data(using: .utf8) {
+                    struct FlashDeletedPayload: Codable {
+                        let flash_id: Int
+                    }
+                    if let payload = try? JSONDecoder().decode(FlashDeletedPayload.self, from: eventData) {
+                        return .flashDeleted(payload.flash_id)
+                    }
+                }
                 
             default:
                 break
@@ -426,6 +438,13 @@ extension AuthManager {
             print("💬 New message broadcast received!")
             GlimpseDatabase.shared.saveMessage(finalMsg)
             
+            // Auto-backup to Google Drive on new message arrival/sent
+            if GoogleDriveBackupManager.shared.isConnected && !GoogleDriveBackupManager.shared.isBackingUp {
+                Task {
+                    await GoogleDriveBackupManager.shared.runBackup(flashes: self.flashes)
+                }
+            }
+            
             if finalMsg.sender_id != self.currentUser?.id, var p = self.partner, p.id == finalMsg.sender_id {
                 p.last_active_at = ISO8601DateFormatter().string(from: Date())
                 self.partner = p
@@ -510,6 +529,35 @@ extension AuthManager {
                 if var p = self.partner, p.id == userId {
                     p.last_active_at = ISO8601DateFormatter().string(from: Date())
                     self.partner = p
+                }
+            }
+            
+        case .flashDeleted(let flashId):
+            print("📸 Partner deleted a Flash! Flash ID: \(flashId)")
+            if let index = self.flashes.firstIndex(where: { $0.id == flashId }) {
+                let flash = self.flashes[index]
+                self.flashes.remove(at: index)
+                
+                let cleanName = flash.photo_url.components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
+                let filename = "img_cache_\(cleanName).jpg"
+                
+                if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+                    let fileURL = groupURL.appendingPathComponent(filename)
+                    try? FileManager.default.removeItem(at: fileURL)
+                }
+                if let cachesURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
+                    let fileURL = cachesURL.appendingPathComponent(filename)
+                    try? FileManager.default.removeItem(at: fileURL)
+                }
+            }
+            GlimpseDatabase.shared.deleteFlash(id: flashId)
+            self.saveFlashesCache()
+            
+            if GoogleDriveBackupManager.shared.isConnected {
+                Task {
+                    let filename = "Glimpse_Flash_\(flashId).jpg"
+                    _ = await GoogleDriveBackupManager.shared.deleteFileFromBackupFolder(filename: filename)
+                    await GoogleDriveBackupManager.shared.runBackup(flashes: self.flashes)
                 }
             }
             

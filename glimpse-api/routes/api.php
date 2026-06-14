@@ -18,12 +18,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/user/delete/send-otp', [AuthController::class, 'sendDeleteAccountOtp']);
     Route::post('/user/delete', [AuthController::class, 'deleteAccount']);
     Route::post('/user/report-bug', [AuthController::class, 'reportBug']);
+    Route::put('/user/drive-token', [AuthController::class, 'storeDriveToken']);
+    Route::delete('/user/drive-token', [AuthController::class, 'deleteDriveToken']);
     Route::get('/glimpse/state', [GlimpseController::class, 'getState']);
+
     Route::post('/glimpse/status', [GlimpseController::class, 'updateStatus']);
     Route::post('/glimpse/sync-location', [GlimpseController::class, 'requestSyncLocation']);
     Route::post('/glimpse/photo', [GlimpseController::class, 'uploadPhoto']);
     Route::get('/glimpse/flashes', [GlimpseController::class, 'getFlashes']);
     Route::post('/glimpse/flashes/{id}/ack', [GlimpseController::class, 'acknowledgeFlash']);
+    Route::delete('/glimpse/flashes/{id}', [GlimpseController::class, 'deleteFlash']);
     Route::post('/glimpse/connect', [GlimpseController::class, 'connect']);
     Route::post('/glimpse/connect/accept', [GlimpseController::class, 'acceptConnect']);
     Route::post('/glimpse/connect/decline', [GlimpseController::class, 'declineConnect']);
@@ -60,4 +64,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/glimpse/chat-rooms/{id}/decline-delete', [GlimpseController::class, 'declineDeleteChatRoom']);
     Route::post('/glimpse/chat-rooms/{id}/confirm-delete', [GlimpseController::class, 'confirmDeleteChatRoom']);
     Route::post('/glimpse/chat-rooms/{id}/clear', [GlimpseController::class, 'clearChatRoom']);
+    
+    // Database Sync routes
+    Route::post('/glimpse/sync/request', [GlimpseController::class, 'requestDatabaseSync']);
+    Route::post('/glimpse/sync/upload', [GlimpseController::class, 'uploadDatabaseSync']);
+    Route::post('/glimpse/sync/confirm', [GlimpseController::class, 'confirmDatabaseSync']);
 });

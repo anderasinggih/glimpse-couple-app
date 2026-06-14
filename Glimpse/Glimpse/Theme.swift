@@ -18,9 +18,16 @@ extension Color {
     
     // Adaptive Colors
     static var adaptiveBackground: Color {
-        let suite = UserDefaults(suiteName: "group.glimpse.app")
-        let theme = suite?.string(forKey: "glimpse_background_theme") ?? "default"
-        return theme == "dark" ? Color.black : Color.deepVelvet
+        Color(uiColor: UIColor { traits in
+            let suite = UserDefaults(suiteName: "group.glimpse.app")
+            // Default to "pure_black" on first install!
+            let theme = suite?.string(forKey: "glimpse_background_theme") ?? "pure_black"
+            if theme == "pure_black" || theme == "dark" {
+                return traits.userInterfaceStyle == .dark ? UIColor.black : UIColor(Color.deepVelvet)
+            } else {
+                return UIColor(Color.deepVelvet)
+            }
+        })
     }
     static var adaptiveAccent: Color { Color.activeCyan }
 }
@@ -69,14 +76,16 @@ struct GlassmorphicModifier: ViewModifier {
 
 struct iOS26Background: View {
     @AppStorage("glimpse_dynamic_orbs", store: UserDefaults(suiteName: "group.glimpse.app")) var dynamicOrbsEnabled = true
-    @AppStorage("glimpse_background_theme", store: UserDefaults(suiteName: "group.glimpse.app")) var backgroundTheme = "default"
+    @AppStorage("glimpse_background_theme", store: UserDefaults(suiteName: "group.glimpse.app")) var backgroundTheme = "pure_black"
+    @Environment(\.colorScheme) var colorScheme
     @State private var animateOrbs = false
     
     var body: some View {
-        ZStack {
+        let shouldHideOrbs = (backgroundTheme == "dark") || (backgroundTheme == "pure_black" && colorScheme == .dark)
+        return ZStack {
             Color.adaptiveBackground.ignoresSafeArea()
             
-            if backgroundTheme != "dark" {
+            if !shouldHideOrbs {
                 // Orb 1 (Adapts to Active Theme Accent!)
                 Circle()
                     .fill(Color.activeCyan.opacity(0.12))

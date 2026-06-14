@@ -9,15 +9,14 @@ import SwiftUI
 
 @main
 struct GlimpseApp: App {
-    init() {
-        // Start background location tracking immediately on application launch (including background location wakeups!)
-        LiveLocationManager.shared.startTracking()
-    }
-    
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .preferredColorScheme(.dark)
+                .onAppear {
+                    // Start background location tracking safely after app has fully bootstrapped
+                    LiveLocationManager.shared.startTracking()
+                }
         }
     }
 }

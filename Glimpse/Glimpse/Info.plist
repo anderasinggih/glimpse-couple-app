@@ -6,5 +6,28 @@
 	<array>
 		<string>location</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.glimpse.app.backup</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>glimpse-backup</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.googleusercontent.apps.google-backup</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.302722862393-lmqomnd2h74u33obukankjqnta97grc1</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

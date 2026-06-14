@@ -24,6 +24,8 @@ struct ContentView: View {
                     if auth.isAuthenticated {
                         if let user = auth.currentUser, !user.isEmailVerified {
                             EmailVerificationView(auth: auth)
+                        } else if !GoogleDriveBackupManager.shared.isConnected {
+                            GoogleDriveSetupGateView(auth: auth)
                         } else if permissionManager.hasAllPermissions {
                             MainDashboardView()
                         } else {

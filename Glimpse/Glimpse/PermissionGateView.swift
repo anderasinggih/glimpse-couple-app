@@ -3,6 +3,7 @@ import SwiftUI
 struct PermissionGateView: View {
     @State private var permissionManager = PermissionManager.shared
     @State private var animateItems = false
+    @State private var showAlwaysAlert = false
     
     var body: some View {
         ZStack {
@@ -50,7 +51,13 @@ struct PermissionGateView: View {
                         systemIcon: "location.circle.fill",
                         color: permissionManager.isLocationWhenInUse ? .yellow : .activeCyan,
                         isGranted: permissionManager.isLocationGranted,
-                        requestAction: permissionManager.requestLocation
+                        requestAction: {
+                            if permissionManager.isLocationWhenInUse {
+                                showAlwaysAlert = true
+                            } else {
+                                permissionManager.requestLocation()
+                            }
+                        }
                     )
                     
                     // 2. CoreMotion Activity
@@ -127,11 +134,22 @@ struct PermissionGateView: View {
             .padding(.top, 30)
             .padding(.bottom, 10)
         }
+        .alert("Always Allow Location Required", isPresented: $showAlwaysAlert) {
+            Button("Open Settings") {
+                permissionManager.openSettings()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Glimpse needs 'Always Allow' location permission to keep your partner updated in the background. Please change the setting from 'While Using' to 'Always Allow' in your system settings.")
+        }
         .onAppear {
             withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
                 animateItems = true
             }
             permissionManager.checkAllPermissions()
+            if permissionManager.isLocationWhenInUse {
+                showAlwaysAlert = true
+            }
         }
     }
     

@@ -5,6 +5,8 @@ import MapKit
 
 struct MainDashboardView: View {
     @State private var auth = AuthManager.shared
+    @AppStorage("glimpse_background_theme", store: UserDefaults(suiteName: "group.glimpse.app")) var backgroundTheme = "default"
+    @State private var backupManager = GoogleDriveBackupManager.shared
     @ObservedObject private var audioPlayerManager = AudioPlayManager.shared
     @State private var togetherAnimation = false
     @State private var streakPulse = false
@@ -199,7 +201,7 @@ struct MainDashboardView: View {
             }
             
             // MASTER HEADER (Like app.blade.php)
-            if auth.selectedTab != 3 || auth.selectedChatRoom == nil {
+            if (auth.selectedTab != 3 || auth.selectedChatRoom == nil) && !auth.isHidingBrandingHeader {
                 BrandingHeader(
                     coupleActive: auth.coupleActive,
                     selectedTab: auth.selectedTab,
@@ -437,6 +439,212 @@ struct MainDashboardView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(500)
                 }
+            }
+            
+            // Floating Upload Progress Banner! (Global across all tabs and settings screens)
+            if auth.isUploadingFlash || auth.uploadFailed {
+                VStack {
+                    Spacer()
+                    
+                    HStack(spacing: 12) {
+                        // Progress arc icon
+                        ZStack {
+                            Circle()
+                                .stroke(Color.white.opacity(0.1), lineWidth: 3)
+                                .frame(width: 38, height: 38)
+                            
+                            Circle()
+                                .trim(from: 0.0, to: auth.uploadFailed ? 1.0 : CGFloat(auth.uploadProgress))
+                                .stroke(
+                                    LinearGradient(
+                                        colors: auth.uploadFailed ? [.red, .orange] : (auth.uploadSuccess ? [.vividMint, .green] : [.electricPurple, .activeCyan]),
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                                )
+                                .frame(width: 38, height: 38)
+                                .rotationEffect(Angle(degrees: -90))
+                                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: auth.uploadProgress)
+                            
+                            Image(systemName: auth.uploadFailed ? "exclamationmark" : (auth.uploadSuccess ? "checkmark" : "arrow.up.circle.fill"))
+                                .font(.system(size: auth.uploadFailed ? 16 : (auth.uploadSuccess ? 15 : 18), weight: .bold))
+                                .foregroundColor(auth.uploadFailed ? .red : (auth.uploadSuccess ? .vividMint : .activeCyan))
+                        }
+                        
+                        // Queue badge pill (only when more than 1 in queue)
+                        if auth.uploadQueueTotal > 1 && !auth.uploadFailed && !auth.uploadSuccess {
+                            Text("\(auth.uploadQueueCurrent)/\(auth.uploadQueueTotal)")
+                                .font(.system(size: 10, weight: .black, design: .rounded))
+                                .foregroundColor(.deepVelvet)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(Color.activeCyan)
+                                .clipShape(Capsule())
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(auth.uploadFailed ? "Upload Failed" : (auth.uploadSuccess ? "Flash Shared!" : (auth.uploadQueueTotal > 1 ? "Uploading Flash \(auth.uploadQueueCurrent) of \(auth.uploadQueueTotal)" : "Uploading Flash...")))
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundColor(auth.uploadFailed ? .red : (auth.uploadSuccess ? .vividMint : .white))
+                            
+                            Text(auth.uploadFailed ? "Saved to Outbox — will retry" : (auth.uploadSuccess ? "Sent to your partner" : "\(Int(auth.uploadProgress * 100))% complete • Outbox safe"))
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                        
+                        Spacer()
+                        
+                        // Cancel button (only during active upload, not during failed state or success state)
+                        if auth.isUploadingFlash && !auth.uploadFailed && !auth.uploadSuccess {
+                            Button {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    auth.cancelFlashUpload()
+                                }
+                            } label: {
+                                Text("Cancel")
+                                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.white.opacity(0.1))
+                                    .cornerRadius(10)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                        
+                        // Retry button (only on failed state)
+                        if auth.uploadFailed {
+                            Button {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    auth.uploadFailed = false
+                                    auth.processPendingFlashes()
+                                }
+                            } label: {
+                                Text("Retry")
+                                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                                    .foregroundColor(.red)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.red.opacity(0.12))
+                                    .cornerRadius(10)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .background(Color.black.opacity(0.75))
+                    .cornerRadius(18)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18)
+                            .stroke(
+                                LinearGradient(
+                                    colors: auth.uploadFailed
+                                        ? [.red.opacity(0.4), .clear]
+                                        : [.white.opacity(0.15), .clear],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1.5
+                            )
+                    )
+                    .shadow(color: auth.uploadFailed ? Color.red.opacity(0.25) : Color.black.opacity(0.4), radius: 10, y: 5)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 80)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .zIndex(600)
+            }
+            
+            // Floating Restore Progress Banner! (Global across all tabs and settings screens)
+            if backupManager.isRestoring || backupManager.restoreDone {
+                VStack {
+                    Spacer()
+                    
+                    HStack(spacing: 12) {
+                        // Animated arc progress circle
+                        ZStack {
+                            Circle()
+                                .stroke(Color.white.opacity(0.1), lineWidth: 3)
+                                .frame(width: 38, height: 38)
+                            
+                            if backupManager.restoreDone {
+                                Circle()
+                                    .trim(from: 0, to: 1)
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: [.vividMint, .green],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                                    )
+                                    .frame(width: 38, height: 38)
+                            } else {
+                                Circle()
+                                    .trim(from: 0, to: CGFloat(backupManager.restoreArcTrim))
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: [.electricPurple, .activeCyan],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                                    )
+                                    .frame(width: 38, height: 38)
+                                    .rotationEffect(.degrees(-90))
+                                    .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: backupManager.restoreArcTrim)
+                            }
+                            
+                            Image(systemName: backupManager.restoreDone ? "checkmark" : "arrow.down.circle.fill")
+                                .font(.system(size: backupManager.restoreDone ? 15 : 18, weight: .bold))
+                                .foregroundColor(backupManager.restoreDone ? .vividMint : .activeCyan)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(backupManager.restoreDone ? "Restore Complete!" : "Restoring Database...")
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundColor(backupManager.restoreDone ? .vividMint : .white)
+                            
+                            Text(backupManager.restoreDone ? "Data & photos restored successfully" : "Please do not close the app...")
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .background(Color.black.opacity(0.75))
+                    .cornerRadius(18)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [.white.opacity(0.15), .clear],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1.5
+                            )
+                    )
+                    .shadow(color: Color.black.opacity(0.4), radius: 10, y: 5)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 80)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .zIndex(601)
             }
         }
         .onAppear {
@@ -1487,9 +1695,9 @@ struct MainDashboardView: View {
                             } else {
                                 // Received Request Pending
                                 VStack(spacing: 20) {
-                                    Image(systemName: "heart.badge.plus.fill")
+                                    Image(systemName: "envelope.badge.fill")
                                         .font(.system(size: 60))
-                                        .foregroundColor(.red.opacity(0.8))
+                                        .foregroundColor(.electricPurple.opacity(0.8))
                                     
                                     Text("Connection Request")
                                         .font(.title2.bold())
@@ -1598,132 +1806,6 @@ struct MainDashboardView: View {
                 }
             }
             } // Close ScrollViewReader
-            
-            // Floating Upload Progress Banner!
-            if auth.isUploadingFlash || auth.uploadFailed {
-                VStack {
-                    Spacer()
-                    
-                    HStack(spacing: 12) {
-                        // Progress arc icon
-                        ZStack {
-                            Circle()
-                                .stroke(Color.white.opacity(0.1), lineWidth: 3)
-                                .frame(width: 38, height: 38)
-                            
-                            Circle()
-                                .trim(from: 0.0, to: auth.uploadFailed ? 1.0 : CGFloat(auth.uploadProgress))
-                                .stroke(
-                                    LinearGradient(
-                                        colors: auth.uploadFailed ? [.red, .orange] : (auth.uploadSuccess ? [.vividMint, .green] : [.electricPurple, .activeCyan]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ),
-                                    style: StrokeStyle(lineWidth: 3, lineCap: .round)
-                                )
-                                .frame(width: 38, height: 38)
-                                .rotationEffect(Angle(degrees: -90))
-                                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: auth.uploadProgress)
-                            
-                            Image(systemName: auth.uploadFailed ? "exclamationmark" : (auth.uploadSuccess ? "checkmark" : "arrow.up.circle.fill"))
-                                .font(.system(size: auth.uploadFailed ? 16 : (auth.uploadSuccess ? 15 : 18), weight: .bold))
-                                .foregroundColor(auth.uploadFailed ? .red : (auth.uploadSuccess ? .vividMint : .activeCyan))
-                        }
-                        
-                        // Queue badge pill (only when more than 1 in queue)
-                        if auth.uploadQueueTotal > 1 && !auth.uploadFailed && !auth.uploadSuccess {
-                            Text("\(auth.uploadQueueCurrent)/\(auth.uploadQueueTotal)")
-                                .font(.system(size: 10, weight: .black, design: .rounded))
-                                .foregroundColor(.deepVelvet)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 3)
-                                .background(Color.activeCyan)
-                                .clipShape(Capsule())
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(auth.uploadFailed ? "Upload Failed" : (auth.uploadSuccess ? "Flash Shared!" : (auth.uploadQueueTotal > 1 ? "Uploading Flash \(auth.uploadQueueCurrent) of \(auth.uploadQueueTotal)" : "Uploading Flash...")))
-                                .font(.system(size: 13, weight: .bold, design: .rounded))
-                                .foregroundColor(auth.uploadFailed ? .red : (auth.uploadSuccess ? .vividMint : .white))
-                            
-                            Text(auth.uploadFailed ? "Saved to Outbox — will retry" : (auth.uploadSuccess ? "Sent to your partner" : "\(Int(auth.uploadProgress * 100))% complete • Outbox safe"))
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
-                                .foregroundColor(.white.opacity(0.6))
-                        }
-                        
-                        Spacer()
-                        
-                        // Cancel button (only during active upload, not during failed state or success state)
-                        if auth.isUploadingFlash && !auth.uploadFailed && !auth.uploadSuccess {
-                            Button {
-                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    auth.cancelFlashUpload()
-                                }
-                            } label: {
-                                Text("Cancel")
-                                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(Color.white.opacity(0.1))
-                                    .cornerRadius(10)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                                    )
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
-                        
-                        // Retry button (only on failed state)
-                        if auth.uploadFailed {
-                            Button {
-                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    auth.uploadFailed = false
-                                    auth.processPendingFlashes()
-                                }
-                            } label: {
-                                Text("Retry")
-                                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                                    .foregroundColor(.red)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(Color.red.opacity(0.12))
-                                    .cornerRadius(10)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .stroke(Color.red.opacity(0.3), lineWidth: 1)
-                                    )
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .background(Color.black.opacity(0.75))
-                    .cornerRadius(18)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18)
-                            .stroke(
-                                LinearGradient(
-                                    colors: auth.uploadFailed
-                                        ? [.red.opacity(0.4), .clear]
-                                        : [.white.opacity(0.15), .clear],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1.5
-                            )
-                    )
-                    .shadow(color: auth.uploadFailed ? Color.red.opacity(0.25) : Color.black.opacity(0.4), radius: 10, y: 5)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 20)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-                .zIndex(100)
-            }
         }
     }
     

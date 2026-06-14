@@ -72,6 +72,21 @@ struct SignupView: View {
                         .submitLabel(.done)
                         .onTapGesture { focusedField = .password }
                     
+                    // Real-time Password Validation Feedback
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            let isValid = password.count >= 8 && password.count <= 32
+                            Image(systemName: isValid ? "checkmark.circle.fill" : (password.isEmpty ? "circle" : "xmark.circle.fill"))
+                                .foregroundColor(isValid ? .green : (password.isEmpty ? .white.opacity(0.3) : .red))
+                                .font(.system(size: 13))
+                            Text("Password must be between 8 and 32 characters")
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundColor(isValid ? .white.opacity(0.7) : (password.isEmpty ? .white.opacity(0.4) : .red))
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    
                     // Date of Birth Row
                     Button(action: {
                         focusedField = nil

@@ -42,6 +42,8 @@ struct GlimpseUser: Codable, Identifiable {
     var location_history: [LocationHistoryEntry]?
     var last_active_at: String?
     var email_verified_at: String? = nil
+    var google_drive_refresh_token: String? = nil
+
     
     var isEmailVerified: Bool {
         email_verified_at != nil

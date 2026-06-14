@@ -32,6 +32,40 @@ class GlimpseDatabase {
         }
     }
     
+    func closeAndReplaceDatabase(withTempURL tempURL: URL) -> Bool {
+        return dbQueue.sync {
+            // Close connection
+            if db != nil {
+                sqlite3_close(db)
+                db = nil
+            }
+            
+            let fileManager = FileManager.default
+            guard let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+                return false
+            }
+            let fileURL = documentsDirectory.appendingPathComponent("glimpse_chat.sqlite")
+            
+            do {
+                if fileManager.fileExists(atPath: fileURL.path) {
+                    try fileManager.removeItem(at: fileURL)
+                }
+                try fileManager.copyItem(at: tempURL, to: fileURL)
+                
+                // Reopen connection
+                if sqlite3_open(fileURL.path, &db) != SQLITE_OK {
+                    print("❌ SQLite: Error reopening database after restore")
+                    return false
+                }
+                print("✅ SQLite: Reopened connection to database after restore")
+                return true
+            } catch {
+                print("❌ SQLite: Failed to replace database file: \(error)")
+                return false
+            }
+        }
+    }
+    
     private func createTable() {
         let createTableString = """
         CREATE TABLE IF NOT EXISTS chat_messages (
@@ -52,10 +86,33 @@ class GlimpseDatabase {
             } else {
                 print("❌ SQLite: chat_messages table could not be created.")
             }
-        } else {
-            print("❌ SQLite: CREATE TABLE statement could not be prepared.")
         }
         sqlite3_finalize(createTableStatement)
+        
+        let createFlashesTableString = """
+        CREATE TABLE IF NOT EXISTS flashes (
+            id INTEGER PRIMARY KEY,
+            sender_id INTEGER,
+            sender_name TEXT,
+            photo_url TEXT,
+            latitude REAL,
+            longitude REAL,
+            location_name TEXT,
+            status_note TEXT,
+            battery_level INTEGER,
+            created_at TEXT
+        );
+        """
+        
+        var createFlashesStatement: OpaquePointer?
+        if sqlite3_prepare_v2(db, createFlashesTableString, -1, &createFlashesStatement, nil) == SQLITE_OK {
+            if sqlite3_step(createFlashesStatement) == SQLITE_DONE {
+                print("✅ SQLite: flashes table created or verified.")
+            } else {
+                print("❌ SQLite: flashes table could not be created.")
+            }
+        }
+        sqlite3_finalize(createFlashesStatement)
     }
     
     func saveMessage(_ msg: ChatMessage) {
@@ -129,13 +186,23 @@ class GlimpseDatabase {
         }
     }
     
-    func getMessages(forRoomId roomId: Int?) -> [ChatMessage] {
+    func getMessages(forRoomId roomId: Int?, mainRoomId: Int? = nil) -> [ChatMessage] {
         return dbQueue.sync {
             let queryStatementString: String
+            let mainId = mainRoomId
+            
             if let rId = roomId {
-                queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id = ? ORDER BY id ASC;"
+                if rId == mainId {
+                    queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id = ? OR room_id IS NULL ORDER BY id ASC;"
+                } else {
+                    queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id = ? ORDER BY id ASC;"
+                }
             } else {
-                queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id IS NULL ORDER BY id ASC;"
+                if let _ = mainId {
+                    queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id = ? OR room_id IS NULL ORDER BY id ASC;"
+                } else {
+                    queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id IS NULL ORDER BY id ASC;"
+                }
             }
             
             var queryStatement: OpaquePointer?
@@ -144,6 +211,8 @@ class GlimpseDatabase {
             if sqlite3_prepare_v2(self.db, queryStatementString, -1, &queryStatement, nil) == SQLITE_OK {
                 if let rId = roomId {
                     sqlite3_bind_int(queryStatement, 1, Int32(rId))
+                } else if let mId = mainId {
+                    sqlite3_bind_int(queryStatement, 1, Int32(mId))
                 }
                 
                 while sqlite3_step(queryStatement) == SQLITE_ROW {
@@ -205,6 +274,225 @@ class GlimpseDatabase {
             sqlite3_finalize(deleteStatement)
         }
     }
+    
+    func clearAllFlashes() {
+        dbQueue.async { [weak self] in
+            guard let self = self else { return }
+            let deleteString = "DELETE FROM flashes;"
+            var deleteStatement: OpaquePointer?
+            if sqlite3_prepare_v2(self.db, deleteString, -1, &deleteStatement, nil) == SQLITE_OK {
+                if sqlite3_step(deleteStatement) == SQLITE_DONE {
+                    print("✅ SQLite: All flashes cleared.")
+                }
+            }
+            sqlite3_finalize(deleteStatement)
+        }
+    }
+    
+    func deleteFlash(id: Int) {
+        dbQueue.async { [weak self] in
+            guard let self = self else { return }
+            let deleteString = "DELETE FROM flashes WHERE id = ?;"
+            var deleteStatement: OpaquePointer?
+            if sqlite3_prepare_v2(self.db, deleteString, -1, &deleteStatement, nil) == SQLITE_OK {
+                sqlite3_bind_int(deleteStatement, 1, Int32(id))
+                if sqlite3_step(deleteStatement) == SQLITE_DONE {
+                    print("✅ SQLite: Flash \(id) deleted from DB.")
+                } else {
+                    print("❌ SQLite: Could not delete flash \(id) from DB.")
+                }
+            }
+            sqlite3_finalize(deleteStatement)
+        }
+    }
+    
+    func saveFlashes(_ flashes: [GlimpseFlash]) {
+        dbQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            sqlite3_exec(self.db, "BEGIN TRANSACTION", nil, nil, nil)
+            
+            let insertStatementString = """
+            INSERT OR REPLACE INTO flashes (id, sender_id, sender_name, photo_url, latitude, longitude, location_name, status_note, battery_level, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """
+            
+            var insertStatement: OpaquePointer?
+            if sqlite3_prepare_v2(self.db, insertStatementString, -1, &insertStatement, nil) == SQLITE_OK {
+                for flash in flashes {
+                    sqlite3_bind_int(insertStatement, 1, Int32(flash.id))
+                    sqlite3_bind_int(insertStatement, 2, Int32(flash.sender_id))
+                    sqlite3_bind_text(insertStatement, 3, (flash.sender_name as NSString).utf8String, -1, nil)
+                    sqlite3_bind_text(insertStatement, 4, (flash.photo_url as NSString).utf8String, -1, nil)
+                    
+                    if let lat = flash.latitude {
+                        sqlite3_bind_double(insertStatement, 5, lat)
+                    } else {
+                        sqlite3_bind_null(insertStatement, 5)
+                    }
+                    
+                    if let lon = flash.longitude {
+                        sqlite3_bind_double(insertStatement, 6, lon)
+                    } else {
+                        sqlite3_bind_null(insertStatement, 6)
+                    }
+                    
+                    if let locName = flash.location_name {
+                        sqlite3_bind_text(insertStatement, 7, (locName as NSString).utf8String, -1, nil)
+                    } else {
+                        sqlite3_bind_null(insertStatement, 7)
+                    }
+                    
+                    if let statusNote = flash.status_note {
+                        sqlite3_bind_text(insertStatement, 8, (statusNote as NSString).utf8String, -1, nil)
+                    } else {
+                        sqlite3_bind_null(insertStatement, 8)
+                    }
+                    
+                    if let batt = flash.battery_level {
+                        sqlite3_bind_int(insertStatement, 9, Int32(batt))
+                    } else {
+                        sqlite3_bind_null(insertStatement, 9)
+                    }
+                    
+                    sqlite3_bind_text(insertStatement, 10, (flash.created_at as NSString).utf8String, -1, nil)
+                    
+                    if sqlite3_step(insertStatement) != SQLITE_DONE {
+                        print("❌ SQLite: Error saving flash \(flash.id)")
+                    }
+                    
+                    sqlite3_reset(insertStatement)
+                }
+            }
+            sqlite3_finalize(insertStatement)
+            sqlite3_exec(self.db, "COMMIT", nil, nil, nil)
+        }
+    }
+    
+    func getFlashes() -> [GlimpseFlash] {
+        var loadedFlashes: [GlimpseFlash] = []
+        let queryStatementString = "SELECT id, sender_id, sender_name, photo_url, latitude, longitude, location_name, status_note, battery_level, created_at FROM flashes ORDER BY id DESC;"
+        
+        var queryStatement: OpaquePointer?
+        if sqlite3_prepare_v2(db, queryStatementString, -1, &queryStatement, nil) == SQLITE_OK {
+            while sqlite3_step(queryStatement) == SQLITE_ROW {
+                let id = Int(sqlite3_column_int(queryStatement, 0))
+                let senderId = Int(sqlite3_column_int(queryStatement, 1))
+                
+                let senderName = String(cString: sqlite3_column_text(queryStatement, 2))
+                let photoUrl = String(cString: sqlite3_column_text(queryStatement, 3))
+                
+                let lat = sqlite3_column_double(queryStatement, 4)
+                let lon = sqlite3_column_double(queryStatement, 5)
+                
+                var locName: String? = nil
+                if sqlite3_column_type(queryStatement, 6) != SQLITE_NULL {
+                    locName = String(cString: sqlite3_column_text(queryStatement, 6))
+                }
+                
+                var note: String? = nil
+                if sqlite3_column_type(queryStatement, 7) != SQLITE_NULL {
+                    note = String(cString: sqlite3_column_text(queryStatement, 7))
+                }
+                
+                var battery: Int? = nil
+                if sqlite3_column_type(queryStatement, 8) != SQLITE_NULL {
+                    battery = Int(sqlite3_column_int(queryStatement, 8))
+                }
+                
+                let createdAt = String(cString: sqlite3_column_text(queryStatement, 9))
+                
+                let flash = GlimpseFlash(
+                    id: id,
+                    sender_id: senderId,
+                    sender_name: senderName,
+                    photo_url: photoUrl,
+                    latitude: lat == 0.0 ? nil : lat,
+                    longitude: lon == 0.0 ? nil : lon,
+                    location_name: locName,
+                    status_note: note,
+                    battery_level: battery,
+                    created_at: createdAt
+                )
+                loadedFlashes.append(flash)
+            }
+        }
+        sqlite3_finalize(queryStatement)
+        return loadedFlashes
+    }
+    
+    func getLatestMessage(forRoomId roomId: Int?, mainRoomId: Int? = nil) -> ChatMessage? {
+        return dbQueue.sync {
+            let queryStatementString: String
+            let mainId = mainRoomId
+            
+            if let rId = roomId {
+                if rId == mainId {
+                    queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id = ? OR room_id IS NULL ORDER BY id DESC LIMIT 1;"
+                } else {
+                    queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id = ? ORDER BY id DESC LIMIT 1;"
+                }
+            } else {
+                if let _ = mainId {
+                    queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id = ? OR room_id IS NULL ORDER BY id DESC LIMIT 1;"
+                } else {
+                    queryStatementString = "SELECT id, couple_id, sender_id, message, room_id, created_at, updated_at FROM chat_messages WHERE room_id IS NULL ORDER BY id DESC LIMIT 1;"
+                }
+            }
+            
+            var queryStatement: OpaquePointer?
+            var latestMessage: ChatMessage? = nil
+            
+            if sqlite3_prepare_v2(self.db, queryStatementString, -1, &queryStatement, nil) == SQLITE_OK {
+                if let rId = roomId {
+                    sqlite3_bind_int(queryStatement, 1, Int32(rId))
+                } else if let mId = mainId {
+                    sqlite3_bind_int(queryStatement, 1, Int32(mId))
+                }
+                
+                if sqlite3_step(queryStatement) == SQLITE_ROW {
+                    let id = Int(sqlite3_column_int(queryStatement, 0))
+                    let coupleId = Int(sqlite3_column_int(queryStatement, 1))
+                    let senderId = Int(sqlite3_column_int(queryStatement, 2))
+                    
+                    if let messageTextBytes = sqlite3_column_text(queryStatement, 3) {
+                        let message = String(cString: messageTextBytes)
+                        
+                        var roomIdVal: Int? = nil
+                        if sqlite3_column_type(queryStatement, 4) != SQLITE_NULL {
+                            roomIdVal = Int(sqlite3_column_int(queryStatement, 4))
+                        }
+                        
+                        let createdAt: String?
+                        if let createdAtBytes = sqlite3_column_text(queryStatement, 5) {
+                            createdAt = String(cString: createdAtBytes)
+                        } else {
+                            createdAt = nil
+                        }
+                        
+                        let updatedAt: String?
+                        if let updatedAtBytes = sqlite3_column_text(queryStatement, 6) {
+                            updatedAt = String(cString: updatedAtBytes)
+                        } else {
+                            updatedAt = nil
+                        }
+                        
+                        latestMessage = ChatMessage(
+                            id: id,
+                            couple_id: coupleId,
+                            sender_id: senderId,
+                            message: message,
+                            room_id: roomIdVal,
+                            created_at: createdAt,
+                            updated_at: updatedAt
+                        )
+                    }
+                }
+            }
+            sqlite3_finalize(queryStatement)
+            return latestMessage
+        }
+    }
 }
 
 
@@ -231,7 +519,8 @@ extension AuthManager {
         }
         
         // Load main room messages from native SQLite database
-        self.latestFetchedMessages = GlimpseDatabase.shared.getMessages(forRoomId: nil)
+        let mainId = self.chatRooms.first(where: { $0.is_main })?.id
+        self.latestFetchedMessages = GlimpseDatabase.shared.getMessages(forRoomId: nil, mainRoomId: mainId)
     }
     
     func saveChatRoomsCache() {
@@ -248,31 +537,32 @@ extension AuthManager {
     }
     
     func saveFlashesCache() {
-        if let encoded = try? JSONEncoder().encode(flashes) {
-            UserDefaults.standard.set(encoded, forKey: "glimpse_cached_flashes")
-        }
+        GlimpseDatabase.shared.saveFlashes(self.flashes)
     }
     
     func loadCachedFlashes() {
-        if let data = UserDefaults.standard.data(forKey: "glimpse_cached_flashes"),
-           let decoded = try? JSONDecoder().decode([GlimpseFlash].self, from: data) {
-            self.flashes = decoded
-        }
+        self.flashes = GlimpseDatabase.shared.getFlashes()
     }
     
     func getCachedMessages(for roomId: Int?) -> [ChatMessage] {
-        if let rId = roomId {
+        let mainId = chatRooms.first(where: { $0.is_main })?.id
+        let targetId = (roomId == nil) ? mainId : roomId
+        
+        if let rId = targetId {
             if let inMemory = roomMessagesCache[rId], !inMemory.isEmpty {
                 return inMemory
             }
-            let fromDb = GlimpseDatabase.shared.getMessages(forRoomId: rId)
+            let fromDb = GlimpseDatabase.shared.getMessages(forRoomId: rId, mainRoomId: mainId)
             roomMessagesCache[rId] = fromDb
+            if rId == mainId {
+                latestFetchedMessages = fromDb
+            }
             return fromDb
         } else {
             if !latestFetchedMessages.isEmpty {
                 return latestFetchedMessages
             }
-            let fromDb = GlimpseDatabase.shared.getMessages(forRoomId: nil)
+            let fromDb = GlimpseDatabase.shared.getMessages(forRoomId: nil, mainRoomId: mainId)
             latestFetchedMessages = fromDb
             return fromDb
         }
@@ -307,6 +597,19 @@ extension AuthManager {
         } catch {
             print("❌ Failed to decode cached session: \(error)")
         }
+    }
+    
+    func getLatestMessagePreview(for room: GlimpseChatRoom) -> RoomLatestMessage? {
+        let mainId = chatRooms.first(where: { $0.is_main })?.id
+        if let localLatest = GlimpseDatabase.shared.getLatestMessage(forRoomId: room.is_main ? nil : room.id, mainRoomId: mainId) {
+            return RoomLatestMessage(
+                id: localLatest.id,
+                message: localLatest.message,
+                sender_id: localLatest.sender_id,
+                created_at: localLatest.created_at
+            )
+        }
+        return room.latest_message
     }
     
 

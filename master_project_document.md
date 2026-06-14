@@ -106,3 +106,69 @@ Developers can expand the project with these key suggestions:
    * Create location-tied pins on the map that only unlock and display their hidden notes or photos when the partner physically steps inside their GPS radius.
 4. **Shared Relationship Gamification (Couple Coupon Shop)**:
    * Track points based on couple check-ins and streaks, allowing partners to redeem points for real-life customizable coupons (e.g. "Dinner Date", "Free Massage") created by each other.
+
+---
+
+## 7. Cloud Backup Configuration (Google Drive)
+
+Glimpse supports native cloud backup of photos and SQLite database messages directly to the user's private Google Drive storage.
+
+### A. Google Cloud Console Setup
+To enable Google Sign-In and Google Drive API integration, developers must configure the following in the [Google Cloud Console](https://console.cloud.google.com/):
+1. **Create/Select Project**: Set up a project in Google Cloud Console.
+2. **Enable APIs**: Navigate to **Enabled APIs & Services**, click **+ ENABLE APIS AND SERVICES**, and enable the **Google Drive API**.
+3. **OAuth Consent Screen**: 
+   * Configure the Consent Screen as **External**.
+   * App Name: `Glimpse`
+   * Add the required scopes: `.../auth/drive.file` and `.../auth/userinfo.email`.
+   * Add test user email addresses if the app is still in testing mode.
+4. **Create Credentials**:
+   * Click **Create Credentials** > **OAuth Client ID**.
+   * Application Type: **iOS**.
+   * Name: `Glimpse iOS Client`
+   * **Bundle ID**: Must exactly match the app's Bundle Identifier: `Veracious.Glimpse`.
+   * Leave *App Store ID* and *Team ID* blank (or set them if publishing to App Store).
+5. **Retrieve Client ID**:
+   * Copy the generated **Client ID** (e.g., `302722862393-lmqomnd2h74u33obukankjqnta97grc1.apps.googleusercontent.com`).
+   * The **Reversed Client ID** will be `com.googleusercontent.apps.302722862393-lmqomnd2h74u33obukankjqnta97grc1`.
+
+---
+
+### B. App Code Configuration
+1. **Ensure Client ID in Manager**:
+   Open [GoogleDriveBackupManager.swift](file:///Volumes/LVNPC/Coupleapp/Glimpse/Glimpse/GoogleDriveBackupManager.swift) and confirm that the fallback/default client ID matches the OAuth Client ID:
+   ```swift
+   UserDefaults.standard.string(forKey: "google_drive_client_id") ?? "302722862393-lmqomnd2h74u33obukankjqnta97grc1.apps.googleusercontent.com"
+   ```
+2. **Register Custom URL Scheme in Info.plist**:
+   Google OAuth requires registering the **Reversed Client ID** as a custom URL scheme in the iOS project so the redirect callback returns to Glimpse.
+   * Open the project settings in Xcode.
+   * Under the **Info** tab, expand **URL Types**.
+   * Add a new URL Type:
+     * **Identifier**: `com.googleusercontent.apps.google-backup`
+     * **URL Schemes**: `com.googleusercontent.apps.302722862393-lmqomnd2h74u33obukankjqnta97grc1`
+     * **Role**: Editor
+   * Alternatively, update [Info.plist](file:///Volumes/LVNPC/Coupleapp/Glimpse/Glimpse/Info.plist) directly with the following dictionary under `CFBundleURLTypes`:
+     ```xml
+     <dict>
+         <key>CFBundleTypeRole</key>
+         <string>Editor</string>
+         <key>CFBundleURLName</key>
+         <string>com.googleusercontent.apps.google-backup</string>
+         <key>CFBundleURLSchemes</key>
+         <array>
+             <string>com.googleusercontent.apps.302722862393-lmqomnd2h74u33obukankjqnta97grc1</string>
+         </array>
+     </dict>
+     ```
+
+---
+
+### C. Backup & Restore Mechanism
+* **Folder Structure**: Backups are isolated within the user's private space under a dedicated directory named `Glimpse Memories`.
+* **Sync Strategy**:
+  1. **Photos**: Only pending/new flash photos are uploaded to avoid redundant transfers. Uploaded photos are stored as `Glimpse_Flash_ID.jpg`.
+  2. **Database**: The local SQLite database (`glimpse_chat.sqlite`) containing full message histories is packaged and overwritten inside the Google Drive folder.
+* **Database Swapping/Restore**:
+  * The restore function downloads the backup SQLite database from Google Drive to a temporary location.
+  * It then triggers `GlimpseDatabase.shared.closeAndReplaceDatabase(withTempURL:)` to safely close existing SQLite handles, swap the active database file, and reopen connections without crashing the active UI session.

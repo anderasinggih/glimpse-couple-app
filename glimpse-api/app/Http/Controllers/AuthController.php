@@ -333,7 +333,7 @@ class AuthController extends Controller
             'otp' => 'required_if:method,email|string',
         ]);
 
-        if ($request->method === 'password') {
+        if ($request->input('method') === 'password') {
             if (!Hash::check($request->password, $user->password)) {
                 return response()->json(['message' => 'Incorrect password'], 422);
             }
@@ -460,4 +460,35 @@ class AuthController extends Controller
             'user' => $user
         ]);
     }
+
+    /**
+     * Store Google Drive refresh token for the authenticated user.
+     * Called from iOS app after successful Drive OAuth flow.
+     */
+    public function storeDriveToken(Request $request)
+    {
+        $request->validate([
+            'refresh_token' => 'required|string',
+        ]);
+
+        $user = $request->user();
+        $user->google_drive_refresh_token = $request->refresh_token;
+        $user->save();
+
+        return response()->json(['message' => 'Drive token stored successfully']);
+    }
+
+    /**
+     * Remove Google Drive refresh token for the authenticated user.
+     * Called from iOS app when user disconnects Drive.
+     */
+    public function deleteDriveToken(Request $request)
+    {
+        $user = $request->user();
+        $user->google_drive_refresh_token = null;
+        $user->save();
+
+        return response()->json(['message' => 'Drive token removed successfully']);
+    }
 }
+

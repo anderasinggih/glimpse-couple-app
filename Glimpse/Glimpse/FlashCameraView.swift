@@ -398,8 +398,9 @@ struct FlashCameraView: View {
             model.capturePhoto { image in
                 model.stopSession()
                 
+                let isFront = model.isUsingFrontCamera
                 Task.detached(priority: .userInitiated) {
-                    let processed = await processCapturedImage(image)
+                    let processed = await processCapturedImage(image, isFrontCamera: isFront)
                     await MainActor.run {
                         self.capturedImage = processed
                         self.isProcessing = false
@@ -467,7 +468,7 @@ struct FlashCameraView: View {
     }
     
     // Process on background
-    private func processCapturedImage(_ image: UIImage?) async -> UIImage? {
+    private func processCapturedImage(_ image: UIImage?, isFrontCamera: Bool) async -> UIImage? {
         guard let image = image else { return nil }
         
         // 1. Resize and Fix Orientation in one go using UIGraphicsImageRenderer
@@ -479,7 +480,7 @@ struct FlashCameraView: View {
         let renderer = UIGraphicsImageRenderer(size: newSize)
         let processed = renderer.image { context in
             // If front camera, we need to mirror it manually during drawing
-            if model.isUsingFrontCamera {
+            if isFrontCamera {
                 context.cgContext.translateBy(x: newSize.width, y: 0)
                 context.cgContext.scaleBy(x: -1, y: 1)
             }

@@ -143,8 +143,8 @@ struct ChatView: View {
                 return r1Pinned
             }
             // 3. Sort by latest message or creation time
-            let r1Time = r1.latest_message?.created_at ?? r1.created_at
-            let r2Time = r2.latest_message?.created_at ?? r2.created_at
+            let r1Time = auth.getLatestMessagePreview(for: r1)?.created_at ?? r1.created_at
+            let r2Time = auth.getLatestMessagePreview(for: r2)?.created_at ?? r2.created_at
             return r1Time > r2Time
         }
     }
@@ -1424,6 +1424,7 @@ struct ChatView: View {
                 )
                 
                 VStack(alignment: .leading, spacing: 5) {
+                    let latestMessage = auth.getLatestMessagePreview(for: room)
                     HStack {
                         Text(room.name)
                             .font(.system(size: 16, weight: room.unread_count > 0 ? .bold : .semibold))
@@ -1432,7 +1433,7 @@ struct ChatView: View {
                         
                         Spacer()
                         
-                        if let latest = room.latest_message, let rawTime = latest.created_at {
+                        if let latest = latestMessage, let rawTime = latest.created_at {
                             Text(formatMessageTime(rawTime))
                                 .font(.system(size: 11, weight: room.unread_count > 0 ? .semibold : .regular))
                                 .foregroundColor(room.unread_count > 0 ? .activeCyan : .white.opacity(0.4))
@@ -1440,13 +1441,20 @@ struct ChatView: View {
                     }
                     
                     HStack {
-                        let isTyping: Bool = auth.isPartnerTyping && auth.partnerTypingRoomId == Optional(room.is_main ? 0 : room.id)
+                        let isTyping: Bool = {
+                            guard auth.isPartnerTyping else { return false }
+                            if room.is_main {
+                                return auth.partnerTypingRoomId == nil || auth.partnerTypingRoomId == 0
+                            } else {
+                                return auth.partnerTypingRoomId == room.id
+                            }
+                        }()
                         if isTyping {
                             Text("typing...")
                                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                                 .foregroundColor(Color(hex: "00FF88"))
                                 .lineLimit(1)
-                        } else if let latest = room.latest_message {
+                        } else if let latest = latestMessage {
                             let senderName = latest.sender_id == auth.currentUser?.id ? "You: " : ""
                             Text("\(senderName)\(latest.cleanDisplayContent)")
                                 .font(.system(size: 13, weight: room.unread_count > 0 ? .medium : .regular))
@@ -1456,6 +1464,7 @@ struct ChatView: View {
                             Text("No messages yet")
                                 .font(.system(size: 12.5))
                                 .foregroundColor(.white.opacity(0.35))
+                                .lineLimit(1)
                         }
                         
                         Spacer()
@@ -1639,7 +1648,14 @@ struct ChatView: View {
                                 .foregroundColor(.white)
                                 .lineLimit(1)
                             
-                            let isTyping: Bool = auth.isPartnerTyping && auth.partnerTypingRoomId == Optional(room.is_main ? 0 : room.id)
+                            let isTyping: Bool = {
+                                guard auth.isPartnerTyping else { return false }
+                                if room.is_main {
+                                    return auth.partnerTypingRoomId == nil || auth.partnerTypingRoomId == 0
+                                } else {
+                                    return auth.partnerTypingRoomId == room.id
+                                }
+                            }()
                             let isOnline = !partner.isOffline
                             Circle()
                                 .fill(isTyping ? Color(hex: "00FF88") : (isOnline ? Color.green : Color.gray))
@@ -1647,7 +1663,14 @@ struct ChatView: View {
                         }
                         
                         HStack(spacing: 6) {
-                            let isTyping: Bool = auth.isPartnerTyping && auth.partnerTypingRoomId == Optional(room.is_main ? 0 : room.id)
+                            let isTyping: Bool = {
+                                guard auth.isPartnerTyping else { return false }
+                                if room.is_main {
+                                    return auth.partnerTypingRoomId == nil || auth.partnerTypingRoomId == 0
+                                } else {
+                                    return auth.partnerTypingRoomId == room.id
+                                }
+                            }()
                             let isOnline = !partner.isOffline
                             if isTyping {
                                 Text("typing...")

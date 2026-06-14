@@ -8,10 +8,11 @@ struct OnboardingView: View {
     @State private var showMockAppleSimulation = false
     @State private var isLoading = false
     @State private var errorMessage = ""
+    @State private var isPureBlack = true
     
     var body: some View {
         NavigationStack {
-            ZStack {
+            ZStack(alignment: .topTrailing) {
                 Color.adaptiveBackground.ignoresSafeArea()
                 
                 VStack(spacing: 30) {
@@ -106,6 +107,12 @@ struct OnboardingView: View {
                     .padding(.horizontal, 32)
                     .padding(.bottom, 40)
                 }
+                
+                // Top Right Theme Toggle Switch
+                themeToggleView
+                    .padding(.top, 16)
+                    .padding(.trailing, 20)
+                    .zIndex(10)
             }
             .navigationDestination(isPresented: $navigateToLogin) {
                 LoginView()
@@ -144,6 +151,47 @@ struct OnboardingView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Since this app is in local development without a Paid Apple Developer Account, you can simulate Apple Sign-In with these test profiles.")
+        }
+        .onAppear {
+            let suite = UserDefaults(suiteName: "group.glimpse.app")
+            if suite?.object(forKey: "glimpse_background_theme") == nil {
+                suite?.set("pure_black", forKey: "glimpse_background_theme")
+                isPureBlack = true
+            } else {
+                let current = suite?.string(forKey: "glimpse_background_theme") ?? "pure_black"
+                isPureBlack = (current == "pure_black" || current == "dark")
+            }
+        }
+    }
+    
+    private var themeToggleView: some View {
+        HStack(spacing: 6) {
+            Image(systemName: isPureBlack ? "moon.fill" : "sun.max.fill")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(isPureBlack ? .white : .yellow)
+                .transition(.scale.combined(with: .opacity))
+                .id(isPureBlack)
+            
+            Text(isPureBlack ? "Pure Black" : "Bg Default")
+                .font(.system(size: 10, weight: .black, design: .rounded))
+                .foregroundColor(.white)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+        .cornerRadius(20)
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(Color.white.opacity(0.15), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.2), radius: 5)
+        .onTapGesture {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                isPureBlack.toggle()
+                let suite = UserDefaults(suiteName: "group.glimpse.app")
+                suite?.set(isPureBlack ? "pure_black" : "default", forKey: "glimpse_background_theme")
+            }
         }
     }
     

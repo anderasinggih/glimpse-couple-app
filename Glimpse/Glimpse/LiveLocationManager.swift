@@ -65,8 +65,9 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
         locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters // High accuracy but highly energy efficient!
         locationManager.distanceFilter = 30.0 // Only trigger didUpdateLocations if user moves more than 30 meters!
         
-        // Background Tracking Capabilities
-        locationManager.allowsBackgroundLocationUpdates = true
+        // Background Tracking Capabilities (Dynamic based on permission to prevent startup crashes)
+        let status = locationManager.authorizationStatus
+        locationManager.allowsBackgroundLocationUpdates = (status == .authorizedAlways)
         locationManager.pausesLocationUpdatesAutomatically = false
         locationManager.showsBackgroundLocationIndicator = false
         
@@ -402,6 +403,19 @@ class LiveLocationManager: NSObject, CLLocationManagerDelegate {
     }
     
     // MARK: - CLLocationManagerDelegate
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
+        self.log("ℹ️ Location Authorization Status Changed: \(status.rawValue)")
+        
+        if status == .authorizedAlways {
+            manager.allowsBackgroundLocationUpdates = true
+            self.log("✅ Background location updates enabled because status is Always.")
+        } else {
+            manager.allowsBackgroundLocationUpdates = false
+            self.log("⚠️ Background location updates disabled because status is \(status.rawValue).")
+        }
+    }
+    
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
         

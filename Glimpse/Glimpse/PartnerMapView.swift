@@ -238,40 +238,19 @@ struct PartnerMapView: View {
                                 let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
                                 
                                 let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
+                                let lineCoords = [currentUser.coordinate, targetCoordinate]
                                 
-                                if isInterpolating {
-                                    // STRAIGHT LINE when moving - super light, 0% CPU calculations!
-                                    let lineCoords = [currentUser.coordinate, targetCoordinate]
-                                    
-                                    MapPolyline(coordinates: lineCoords)
-                                        .stroke(
-                                            LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
-                                            style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
-                                        )
-                                    
-                                    MapPolyline(coordinates: lineCoords)
-                                        .stroke(
-                                            LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
-                                            style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
-                                        )
-                                } else {
-                                    // WAVY LINE when static - beautiful dynamic shape!
-                                    let wavyCoords = generateWavyCoordinates(from: currentUser.coordinate, to: targetCoordinate, phase: wavePhase)
-                                    
-                                    // 1. Bottom Layer: Outer Neon Glow
-                                    MapPolyline(coordinates: wavyCoords)
-                                        .stroke(
-                                            LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
-                                            style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
-                                        )
-                                    
-                                    // 2. Top Layer: Core Saturated Line
-                                    MapPolyline(coordinates: wavyCoords)
-                                        .stroke(
-                                            LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
-                                            style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
-                                        )
-                                }
+                                MapPolyline(coordinates: lineCoords)
+                                    .stroke(
+                                        LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
+                                        style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
+                                    )
+                                
+                                MapPolyline(coordinates: lineCoords)
+                                    .stroke(
+                                        LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
+                                        style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+                                    )
                             }
                             
                             if let currentUser = auth.currentUser, let myLat = currentUser.latitude, myLat != 0.0 {
@@ -581,41 +560,15 @@ struct PartnerMapView: View {
     }
     
     private func getShiftingColors(phase: Double, distanceInKm: Double) -> [Color] {
-        let baseHue = phase / (2 * .pi)
-        
         if distanceInKm <= 1.0 {
-            // DEKAT: Warm passion (hues around 0.85 to 0.15 - Magenta, Red, Orange, Yellow)
-            let hue1 = (0.85 + baseHue * 0.3).truncatingRemainder(dividingBy: 1.0)
-            let hue2 = (hue1 + 0.1).truncatingRemainder(dividingBy: 1.0)
-            let hue3 = (hue2 + 0.1).truncatingRemainder(dividingBy: 1.0)
-            return [
-                Color(hue: hue1, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue2, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue3, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue1, saturation: 0.95, brightness: 0.95)
-            ]
+            // DEKAT: Warm passion (Red/Orange)
+            return [Color.red, Color.orange]
         } else if distanceInKm >= 10.0 {
-            // JAUH: Steady aurora (hues around 0.45 to 0.65 - Emerald, Teal, Cyan, Blue)
-            let hue1 = 0.45 + baseHue * 0.2
-            let hue2 = hue1 + 0.07
-            let hue3 = hue2 + 0.07
-            return [
-                Color(hue: hue1, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue2, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue3, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue1, saturation: 0.95, brightness: 0.95)
-            ]
+            // JAUH: Steady aurora (Teal/Cyan)
+            return [Color.teal, Color.cyan]
         } else {
-            // SEDANG: Romantic purple/magenta (hues around 0.65 to 0.85 - Blue, Indigo, Purple, Pink)
-            let hue1 = 0.65 + baseHue * 0.2
-            let hue2 = hue1 + 0.07
-            let hue3 = hue2 + 0.07
-            return [
-                Color(hue: hue1, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue2, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue3, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue1, saturation: 0.95, brightness: 0.95)
-            ]
+            // SEDANG: Romantic purple/magenta (electricPurple/Pink)
+            return [Color.electricPurple, Color.pink]
         }
     }
     
@@ -876,14 +829,14 @@ struct PartnerOverlayCard: View {
     }
     
     private var displayBatteryLevel: Int {
-        if user.latest_photo_url != nil {
+        if isMinimal && user.latest_photo_url != nil {
             return user.latest_photo_battery_level ?? user.battery_level ?? 0
         }
         return user.battery_level ?? 0
     }
     
     private var displayBatteryCharging: Bool {
-        if user.latest_photo_url != nil {
+        if isMinimal && user.latest_photo_url != nil {
             return false // Capture state has static battery
         }
         return user.is_charging ?? false
@@ -1195,16 +1148,13 @@ struct CachedImageView: View {
             } else if isImageDeleted {
                 Color.black.opacity(0.85)
                     .overlay(
-                        VStack(spacing: 8) {
-                            Image(systemName: "photo.badge.arrow.down.fill")
-                                .font(.system(size: 28))
+                        VStack(spacing: 6) {
+                            Image(systemName: "camera.shutter.button")
+                                .font(.system(size: 24))
                                 .foregroundColor(.white.opacity(0.3))
-                            Text("Photo Expired")
-                                .font(.system(size: 14, weight: .semibold))
+                            Text("No Active Flash")
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
                                 .foregroundColor(.white.opacity(0.5))
-                            Text("Flashes are auto-deleted after 24 hours.")
-                                .font(.system(size: 11))
-                                .foregroundColor(.white.opacity(0.3))
                         }
                     )
             } else if let uiImage = uiImage {
@@ -1299,6 +1249,22 @@ struct CachedImageView: View {
             let (data, response) = try await URLSession.shared.data(from: url)
             if let httpResponse = response as? HTTPURLResponse {
                 if httpResponse.statusCode == 404 {
+                    let filename = urlString.components(separatedBy: "/").last ?? ""
+                    if !filename.isEmpty, GoogleDriveBackupManager.shared.isConnected {
+                        if let driveData = await GoogleDriveBackupManager.shared.downloadFileFromBackupFolder(filename: filename),
+                           let fetched = UIImage(data: driveData) {
+                            try? driveData.write(to: fileURL)
+                            if let fallbackURL = localCachesDirectoryURL(for: finalUrlStr) {
+                                try? driveData.write(to: fallbackURL)
+                            }
+                            ImageCacheManager.shared.saveImage(fetched, for: finalUrlStr)
+                            await MainActor.run {
+                                self.uiImage = fetched
+                                self.isImageDeleted = false
+                            }
+                            return
+                        }
+                    }
                     await MainActor.run { self.isImageDeleted = true }
                     return
                 }

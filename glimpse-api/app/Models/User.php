@@ -37,6 +37,7 @@ class User extends Authenticatable
         'last_seen_message_id',
         'location_history',
         'last_active_at',
+        'google_drive_refresh_token',
     ];
 
     protected static function boot()
@@ -61,6 +62,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'google_drive_refresh_token',
     ];
 
     /**

@@ -56,7 +56,7 @@ struct FullPartnerMapView: View {
     @State private var speedAbove70Start: Date? = nil
     @State private var speedBelow70Start: Date? = nil
     @State private var targetCameraSpan: Double = 0.0022
-    private let zoomTimer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
+    private let zoomTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
     
     private var animatedPartnerCoordinate: CLLocationCoordinate2D {
         if let partner = auth.partner {
@@ -439,22 +439,24 @@ struct FullPartnerMapView: View {
             updateZoomLevel(for: activeSpeed)
             
             // Advance the wave phase for a flowing neon signal connection line
-            wavePhase += 0.035
+            wavePhase += 0.35
             if wavePhase >= 2.0 * .pi {
                 wavePhase -= 2.0 * .pi
             }
             
             let spanDiff = targetCameraSpan - currentCameraSpan
             if abs(spanDiff) > 0.00001 {
-                currentCameraSpan += spanDiff * 0.05
-                
-                let isInterpolating = (currentlyFocusedTarget == .me) ? isInterpolatingMy : isInterpolatingPartner
-                if !isInterpolating && isTrackingEnabled && !isFlying {
-                    let center = (currentlyFocusedTarget == .me) ? animatedMyCoordinate : animatedPartnerCoordinate
-                    position = .region(MKCoordinateRegion(
-                        center: center,
-                        span: MKCoordinateSpan(latitudeDelta: currentCameraSpan, longitudeDelta: currentCameraSpan)
-                    ))
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    currentCameraSpan += spanDiff * 0.4
+                    
+                    let isInterpolating = (currentlyFocusedTarget == .me) ? isInterpolatingMy : isInterpolatingPartner
+                    if !isInterpolating && isTrackingEnabled && !isFlying {
+                        let center = (currentlyFocusedTarget == .me) ? animatedMyCoordinate : animatedPartnerCoordinate
+                        position = .region(MKCoordinateRegion(
+                            center: center,
+                            span: MKCoordinateSpan(latitudeDelta: currentCameraSpan, longitudeDelta: currentCameraSpan)
+                        ))
+                    }
                 }
             }
         }
@@ -546,42 +548,21 @@ struct FullPartnerMapView: View {
         let distanceInKm = startLoc.distance(from: endLoc) / 1000.0
         
         let colors = getShiftingColors(phase: wavePhase, distanceInKm: distanceInKm)
+        let lineCoords = [animatedMyCoordinate, animatedPartnerCoordinate]
         
-        if isInterpolatingPartner || isInterpolatingMy {
-            // STRAIGHT LINE when moving - super light, 0% CPU calculations!
-            let lineCoords = [animatedMyCoordinate, animatedPartnerCoordinate]
-            
-            // 1. Bottom Layer: Outer Neon Glow
-            MapPolyline(coordinates: lineCoords)
-                .stroke(
-                    LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
-                    style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
-                )
-            
-            // 2. Top Layer: Core Neon Line
-            MapPolyline(coordinates: lineCoords)
-                .stroke(
-                    LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
-                    style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
-                )
-        } else {
-            // WAVY LINE when static - beautiful dynamic shape!
-            let wavyCoords = generateWavyCoordinates(from: animatedMyCoordinate, to: animatedPartnerCoordinate, distanceInKm: distanceInKm, phase: wavePhase)
-            
-            // 1. Bottom Layer: Outer Neon Glow
-            MapPolyline(coordinates: wavyCoords)
-                .stroke(
-                    LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
-                    style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
-                )
-            
-            // 2. Top Layer: Core Saturated Line
-            MapPolyline(coordinates: wavyCoords)
-                .stroke(
-                    LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
-                    style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
-                )
-        }
+        // 1. Bottom Layer: Outer Neon Glow
+        MapPolyline(coordinates: lineCoords)
+            .stroke(
+                LinearGradient(colors: colors.map { $0.opacity(0.4) }, startPoint: .leading, endPoint: .trailing),
+                style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round)
+            )
+        
+        // 2. Top Layer: Core Neon Line
+        MapPolyline(coordinates: lineCoords)
+            .stroke(
+                LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing),
+                style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+            )
     }
     
     @MapContentBuilder
@@ -707,41 +688,15 @@ struct FullPartnerMapView: View {
     }
 
     private func getShiftingColors(phase: Double, distanceInKm: Double) -> [Color] {
-        let baseHue = phase / (2 * .pi)
-        
         if distanceInKm <= 1.0 {
-            // DEKAT: Warm passion (hues around 0.85 to 0.15 - Magenta, Red, Orange, Yellow)
-            let hue1 = (0.85 + baseHue * 0.3).truncatingRemainder(dividingBy: 1.0)
-            let hue2 = (hue1 + 0.1).truncatingRemainder(dividingBy: 1.0)
-            let hue3 = (hue2 + 0.1).truncatingRemainder(dividingBy: 1.0)
-            return [
-                Color(hue: hue1, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue2, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue3, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue1, saturation: 0.95, brightness: 0.95)
-            ]
+            // DEKAT: Warm passion (Red/Orange)
+            return [Color.red, Color.orange]
         } else if distanceInKm >= 10.0 {
-            // JAUH: Steady aurora (hues around 0.45 to 0.65 - Emerald, Teal, Cyan, Blue)
-            let hue1 = 0.45 + baseHue * 0.2
-            let hue2 = hue1 + 0.07
-            let hue3 = hue2 + 0.07
-            return [
-                Color(hue: hue1, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue2, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue3, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue1, saturation: 0.95, brightness: 0.95)
-            ]
+            // JAUH: Steady aurora (Teal/Cyan)
+            return [Color.teal, Color.cyan]
         } else {
-            // SEDANG: Romantic purple/magenta (hues around 0.65 to 0.85 - Blue, Indigo, Purple, Pink)
-            let hue1 = 0.65 + baseHue * 0.2
-            let hue2 = hue1 + 0.07
-            let hue3 = hue2 + 0.07
-            return [
-                Color(hue: hue1, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue2, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue3, saturation: 0.95, brightness: 0.95),
-                Color(hue: hue1, saturation: 0.95, brightness: 0.95)
-            ]
+            // SEDANG: Romantic purple/magenta (electricPurple/Pink)
+            return [Color.electricPurple, Color.pink]
         }
     }
 

@@ -196,7 +196,9 @@ class GlimpseController extends Controller
                         'last_active_at' => $user->last_active_at ? ($user->last_active_at instanceof \Carbon\Carbon ? $user->last_active_at->toIso8601String() : \Carbon\Carbon::parse($user->last_active_at)->toIso8601String()) : null,
                         'last_seen_message_id' => $user->last_seen_message_id !== null ? (int)$user->last_seen_message_id : null,
                         'location_history' => $this->getFilteredHistory($this->getUserLocationHistory($user)),
+                        'google_drive_refresh_token' => $user->google_drive_refresh_token,
                     ],
+
                     'partner_data' => $partner ? [
                         'id' => (int)$partner->id,
                         'name' => $partner->name,
@@ -841,6 +843,23 @@ class GlimpseController extends Controller
             broadcast(new \App\Events\PartnerStateUpdated($user))->toOthers();
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::warning("Websocket broadcast failed: " . $e->getMessage());
+        }
+
+        // Clean up messages up to message_id that are now read
+        if ($message && $user->couple_id) {
+            $deletedMessages = \App\Models\Message::where('couple_id', $user->couple_id)
+                ->where('room_id', $message->room_id)
+                ->where('id', '<=', $request->message_id)
+                ->get();
+
+            foreach ($deletedMessages as $delMsg) {
+                if ($delMsg->is_audio && $delMsg->audio_path) {
+                    if (\Illuminate\Support\Facades\Storage::disk('public')->exists($delMsg->audio_path)) {
+                        \Illuminate\Support\Facades\Storage::disk('public')->delete($delMsg->audio_path);
+                    }
+                }
+                $delMsg->delete();
+            }
         }
 
         return response()->json([
@@ -2114,5 +2133,85 @@ class GlimpseController extends Controller
         return response($fileContent)
             ->header('Content-Type', $mimeType)
             ->header('Content-Disposition', 'attachment; filename="voice_whisper_' . $id . '.m4a"');
+    }
+
+    public function deleteFlash(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        $flash = \App\Models\Flash::where('couple_id', $user->couple_id)
+            ->where('id', $id)
+            ->first();
+
+        if (!$flash) {
+            return response()->json(['message' => 'Flash not found'], 404);
+        }
+
+        $this->deleteFlashFile($flash->photo_url);
+        $flash->delete();
+
+        // Dispatch the FlashDeleted event so the partner's app gets notified in real-time!
+        event(new \App\Events\FlashDeleted($user->couple_id, $id));
+
+        return response()->json(['message' => 'Flash successfully deleted']);
+    }
+
+    public function requestDatabaseSync(Request $request)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        event(new \App\Events\DatabaseSyncRequested($user->couple_id, $user->id));
+
+        return response()->json(['message' => 'Database sync requested from partner']);
+    }
+
+    public function uploadDatabaseSync(Request $request)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        if (!$request->hasFile('sync_data')) {
+            return response()->json(['message' => 'No sync data file uploaded'], 400);
+        }
+
+        $file = $request->file('sync_data');
+        $filename = 'sync_temp_' . $user->couple_id . '.json';
+        
+        $path = $file->storeAs('sync_temp', $filename, 'public');
+        
+        $baseURL = config('app.url') ?: $request->getSchemeAndHttpHost();
+        $downloadUrl = $baseURL . '/storage/' . $path;
+
+        event(new \App\Events\DatabaseSyncReady($user->couple_id, $user->id, $downloadUrl));
+
+        return response()->json([
+            'message' => 'Sync data uploaded successfully',
+            'download_url' => $downloadUrl
+        ]);
+    }
+
+    public function confirmDatabaseSync(Request $request)
+    {
+        $user = $request->user();
+        if (!$user->couple_id) {
+            return response()->json(['message' => 'No active couple relationship'], 400);
+        }
+
+        $filename = 'sync_temp/' . 'sync_temp_' . $user->couple_id . '.json';
+        
+        if (\Storage::disk('public')->exists($filename)) {
+            \Storage::disk('public')->delete($filename);
+            return response()->json(['message' => 'Temporary sync file deleted successfully']);
+        }
+
+        return response()->json(['message' => 'No temporary sync file found'], 404);
     }
 }

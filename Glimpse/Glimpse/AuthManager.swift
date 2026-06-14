@@ -18,6 +18,7 @@ class AuthManager {
     static let shared = AuthManager()
     
     var isAuthenticated = false
+    var isHidingBrandingHeader = false
     var isInitialStateLoaded = false
     var isChatSelectMode = false
     var showArchivedOnly = false
@@ -288,6 +289,7 @@ class AuthManager {
     var initialLastReadId = 0
     var latestFetchedMessages: [ChatMessage] = []
     var flashes: [GlimpseFlash] = []
+    var shouldPromptAutoRestore = false
     var chatRooms: [GlimpseChatRoom] = [] {
         didSet {
             saveChatRoomsCache()
@@ -422,11 +424,23 @@ class AuthManager {
             self.activeSchedule = responseData.active_schedule
             self.pendingInvitation = responseData.pending_invitation
             
-            if wasPending && isNowDisconnected {
+            if wasPending && isNowDisconnected && !GoogleDriveBackupManager.shared.isRestoring && !GoogleDriveBackupManager.shared.restoreDone {
                 self.showInviteDeclinedAlert = true
             }
             
             self.isInitialStateLoaded = true
+            
+            // Auto-connect Google Drive from server token if not yet connected locally
+            if !GoogleDriveBackupManager.shared.isConnected,
+               let driveToken = responseData.user.google_drive_refresh_token, !driveToken.isEmpty {
+                 Task {
+                     await GoogleDriveBackupManager.shared.connectFromServerToken(driveToken)
+                     await MainActor.run {
+                         // Automatically restore / sync database on login
+                         GoogleDriveBackupManager.shared.performRestoreFlow(auth: self)
+                     }
+                 }
+            }
             
             // SAVE DATA FOR WIDGET
             let sharedDefaults = UserDefaults(suiteName: "group.glimpse.app")
@@ -781,6 +795,13 @@ class AuthManager {
             // Save directly to native SQLite database
             GlimpseDatabase.shared.saveMessages(decoded)
             
+            // Auto-backup to Google Drive after fetching new messages
+            if !decoded.isEmpty && GoogleDriveBackupManager.shared.isConnected && !GoogleDriveBackupManager.shared.isBackingUp {
+                Task {
+                    await GoogleDriveBackupManager.shared.runBackup(flashes: self.flashes)
+                }
+            }
+            
             if let rId = roomId {
                 // Persist room-specific messages in AuthManager-level cache (survives view lifecycle)
                 self.roomMessagesCache[rId] = decoded
@@ -814,7 +835,7 @@ class AuthManager {
         }
         
         let decoded = try JSONDecoder().decode([GlimpseFlash].self, from: data)
-        let currentUserId = currentUser?.id ?? 0
+        let currentUserId = await MainActor.run { currentUser?.id ?? 0 }
         print("🔍 fetchFlashes: Decoded \(decoded.count) flashes. Current User ID: \(currentUserId)")
         
         var newFlashes: [GlimpseFlash] = []
@@ -917,12 +938,13 @@ class AuthManager {
         }
         
         await MainActor.run {
-            var merged = self.flashes
+            // Merge decoded flashes with existing local flashes to preserve local history.
+            // Server deletes flashes after ACK, so the endpoint only returns unacknowledged flashes.
+            var existingMap = Dictionary(uniqueKeysWithValues: self.flashes.map { ($0.id, $0) })
             for flash in decoded {
-                if !merged.contains(where: { $0.id == flash.id }) {
-                    merged.append(flash)
-                }
+                existingMap[flash.id] = flash
             }
+            var merged = Array(existingMap.values)
             merged.sort(by: { $0.createdDate > $1.createdDate })
             self.flashes = merged
             
@@ -937,6 +959,14 @@ class AuthManager {
             
             self.saveFlashesCache()
             print("💾 Merged flashes cache updated. Total count: \(self.flashes.count)")
+            
+            // Auto-backup to Google Drive whenever new flashes arrive
+            if !newFlashes.isEmpty, GoogleDriveBackupManager.shared.isConnected, !GoogleDriveBackupManager.shared.isBackingUp {
+                Task {
+                    print("☁️ Auto-backing up to Drive after \(newFlashes.count) new flash(es)...")
+                    await GoogleDriveBackupManager.shared.runBackup(flashes: self.flashes)
+                }
+            }
         }
         return decoded
     }
@@ -966,6 +996,61 @@ class AuthManager {
             }
         } catch {
             print("❌ Error acknowledging flash \(flashId): \(error)")
+        }
+    }
+    
+    func deleteFlashPermanently(id: Int) async throws {
+        print("🔍 deleteFlashPermanently: Triggering deletion for flash ID \(id)...")
+        guard let url = URL(string: "\(baseURL)/glimpse/flashes/\(id)") else { return }
+        guard let token = userToken else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+            print("👍 Deleted flash \(id) from server.")
+        } else {
+            print("⚠️ Server failed to delete flash \(id) or returned non-200")
+        }
+        
+        // Remove locally from cached flashes array
+        await MainActor.run {
+            if let index = self.flashes.firstIndex(where: { $0.id == id }) {
+                let flash = self.flashes[index]
+                self.flashes.remove(at: index)
+                
+                // Clear local image file from cached images
+                let cleanName = flash.photo_url.components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
+                let filename = "img_cache_\(cleanName).jpg"
+                
+                if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.glimpse.app") {
+                    let fileURL = groupURL.appendingPathComponent(filename)
+                    try? FileManager.default.removeItem(at: fileURL)
+                }
+                if let cachesURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
+                    let fileURL = cachesURL.appendingPathComponent(filename)
+                    try? FileManager.default.removeItem(at: fileURL)
+                }
+            }
+            GlimpseDatabase.shared.deleteFlash(id: id)
+            self.saveFlashesCache()
+        }
+        
+        // Delete from Google Drive in background to prevent blocking UI
+        if GoogleDriveBackupManager.shared.isConnected {
+            Task {
+                let filename = "Glimpse_Flash_\(id).jpg"
+                print("☁️ Attempting to delete file \(filename) from Google Drive in background...")
+                let deleted = await GoogleDriveBackupManager.shared.deleteFileFromBackupFolder(filename: filename)
+                print("☁️ Google Drive delete file \(filename) status: \(deleted)")
+                
+                // Re-run backup to sync the SQLite state to Drive
+                print("☁️ Re-backing up database to Drive after deleting flash in background...")
+                await GoogleDriveBackupManager.shared.runBackup(flashes: self.flashes)
+            }
         }
     }
     
@@ -1784,6 +1869,12 @@ class AuthManager {
             throw NSError(domain: "Auth", code: 400, userInfo: [NSLocalizedDescriptionKey: errorMsg])
         }
         
+        // Delete backups and disconnect Google Drive
+        if GoogleDriveBackupManager.shared.isConnected {
+            _ = await GoogleDriveBackupManager.shared.deleteBackupFolder()
+            GoogleDriveBackupManager.shared.disconnect()
+        }
+        
         logout()
     }
     
@@ -1816,6 +1907,24 @@ class AuthManager {
     }
     
     func logout() {
+        // Notify server of logout in background before deleting credentials
+        if let token = userToken {
+            let backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "LogoutTask") { }
+            Task {
+                defer {
+                    UIApplication.shared.endBackgroundTask(backgroundTaskID)
+                }
+                guard let url = URL(string: "\(baseURL)/logout") else { return }
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                request.addValue("application/json", forHTTPHeaderField: "Accept")
+                
+                _ = try? await URLSession.shared.data(for: request)
+                print("📤 Sent logout request to server.")
+            }
+        }
+        
         self.disconnectWebSocket()
         UserDefaults.standard.removeObject(forKey: "auth_token")
         UserDefaults(suiteName: "group.glimpse.app")?.removeObject(forKey: "auth_token")
@@ -1828,12 +1937,21 @@ class AuthManager {
         }
         WidgetCenter.shared.reloadAllTimelines()
         
+        // Disconnect Google Drive credentials and clean up sync states
+        GoogleDriveBackupManager.shared.disconnect()
+        UserDefaults.standard.removeObject(forKey: "backed_up_flash_ids")
+        UserDefaults.standard.removeObject(forKey: "glimpse_cached_flashes")
+        
         // Clear SQLite database and in-memory caches
         GlimpseDatabase.shared.clearAllMessages()
+        GlimpseDatabase.shared.clearAllFlashes()
+        self.clearImageCache()
+        
         UserDefaults.standard.removeObject(forKey: "glimpse_cached_chat_rooms")
         self.latestFetchedMessages = []
         self.roomMessagesCache = [:]
         self.chatRooms = []
+        self.flashes = []
         
         withAnimation {
             self.isAuthenticated = false
@@ -2025,6 +2143,14 @@ class AuthManager {
                     self.uploadQueueTotal = 0
                     self.uploadQueueCurrent = 0
                     
+                    // Auto-backup to Drive after successful flash upload
+                    if GoogleDriveBackupManager.shared.isConnected && !GoogleDriveBackupManager.shared.isBackingUp {
+                        Task {
+                            print("☁️ Auto-backing up to Drive after flash upload success...")
+                            await GoogleDriveBackupManager.shared.runBackup(flashes: self.flashes)
+                        }
+                    }
+                    
                     // Keep success banner visible for 1.8 seconds showing checkmark/success
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
                         withAnimation(.easeOut(duration: 0.3)) {
@@ -2189,23 +2315,20 @@ class AuthManager {
         let location = resolvedLoc.replacingOccurrences(of: "|", with: " ")
         let messageText = "📷 Sent a Flash! [FLASH_ATTACHMENT]|\(photoUrl)|\(caption)|\(location)"
         
-        // Fire off companion requests asynchronously in parallel without blocking the main upload completion
-        Task {
-            if let sentMsg = try? await sendChatMessage(text: messageText) {
-                // Immediately mark as read from sender's side to prevent self-unread badge
-                await markMessagesAsRead(messageId: sentMsg.id)
-                
-                // Update local unread count to 0 for the main room
-                await MainActor.run {
-                    if let mainRoomIndex = self.chatRooms.firstIndex(where: { $0.is_main }) {
-                        self.chatRooms[mainRoomIndex].unread_count = 0
-                        self.updateUnreadCount()
-                    }
+        if let sentMsg = try? await sendChatMessage(text: messageText) {
+            // Immediately mark as read from sender's side to prevent self-unread badge
+            await markMessagesAsRead(messageId: sentMsg.id)
+            
+            // Update local unread count to 0 for the main room
+            await MainActor.run {
+                if let mainRoomIndex = self.chatRooms.firstIndex(where: { $0.is_main }) {
+                    self.chatRooms[mainRoomIndex].unread_count = 0
+                    self.updateUnreadCount()
                 }
             }
-            try? await fetchState()
-            _ = try? await fetchFlashes()
         }
+        try? await fetchState()
+        _ = try? await fetchFlashes()
         
         await MainActor.run {
             self.uploadProgress = 1.0
